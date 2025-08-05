@@ -49,8 +49,8 @@ MASTER_BOARDS = {
         "type": "html"
     },
     "WorkingNomads": {
-        "url": "https://www.workingnomads.co/remote-development-jobs",
-        "type": "html"
+        "url": "https://www.workingnomads.co/api/exposed_jobs", # <-- Use this new API URL
+        "type": "api"  # <-- Change this to "api"
     },
     "EU Remote Jobs": {
         "url": "https://euremotejobs.com/jobs/remote-full-stack",
@@ -307,81 +307,63 @@ def parse_json_arbeitnow(board, data, debug=False):
 # === HTML PARSERS ===
 
 def parse_html_weworkremotely(html):
+    """
+    A new, updated parser specifically for WeWorkRemotely's current HTML structure.
+    """
     soup = BeautifulSoup(html, "html.parser")
     results = []
     
-    # Try multiple selectors
-    selectors = [
-        'section.jobs li',
-        'article',
-        '.job',
-        'li.feature'
-    ]
+    # This selector correctly finds the container for each job.
+    job_elements = soup.select('section.jobs li')
+    print(f"  Found {len(job_elements)} potential job elements with selector: section.jobs li")
     
-    job_elements = []
-    for selector in selectors:
-        job_elements = soup.select(selector)
-        if job_elements:
-            print(f"  Found {len(job_elements)} elements with selector: {selector}")
-            break
-    
-    for element in job_elements[:50]:  # Limit to first 50
+    for element in job_elements:
+        # We need to skip some empty or ad-related list items.
+        # A real job listing will have a 'company' span.
+        if not element.select_one('span.company'):
+            continue
+            
         try:
-            # Try multiple title selectors
-            title_selectors = [
-                '.title',
-                'h2',
-                '.position',
-                'a[href*="/listings/"]'
-            ]
+            # The title is in a 'title' span.
+            title_elem = element.select_one('span.title')
+            title = clean_text(title_elem)
+
+            # The company is in a 'company' span.
+            company_elem = element.select_one('span.company')
+            company = clean_text(company_elem)
+
+            # The link is in an 'a' tag with a href starting with /remote-jobs/
+            link_elem = element.select_one('a[href^="/remote-jobs/"]')
+            if not link_elem:
+                continue # Skip if it's not a job link
+
+            link = "https://weworkremotely.com" + link_elem['href']
             
-            title = ""
-            link = ""
-            for ts in title_selectors:
-                title_elem = element.select_one(ts)
-                if title_elem:
-                    title = clean_text(title_elem)
-                    if title_elem.name == 'a' and title_elem.get('href'):
-                        link = title_elem['href']
-                    break
-            
-            if not title:
-                continue
-                
-            # Skip if doesn't match our criteria
+            # --- Now, apply your filters ---
             if EXCLUDE_FILTER.search(title):
+                print(f"    - Filtering out (Senior/Lead): '{title}'")
                 continue
-                
+            
             if not re.search(TECH_FILTER, title):
-                continue
-                
-            if not (EXP_FILTER.search(title) or 
-                    any(word in title.lower() for word in ['developer', 'engineer', 'programmer'])):
+                print(f"    - Filtering out (No Tech Match): '{title}'")
                 continue
             
-            # Get other details
-            company = clean_text(element.select_one('.company')) or clean_text(element.select_one('h3'))
-            location = clean_text(element.select_one('.region')) or clean_text(element.select_one('.location'))
-            
-            if not link:
-                link_elem = element.select_one('a[href]')
-                link = link_elem['href'] if link_elem else ""
-            
-            if link and not link.startswith("http"):
-                link = "https://weworkremotely.com" + link
-            
+            # If it passes all checks, add it to the results
+            print(f"    + Found Job: '{title}' at {company}")
             results.append({
                 "job_title": title,
-                "company": company or "Unknown",
-                "salary": "",
+                "company": company,
+                "salary": clean_text(element.select_one('span.salary')), # Adding salary
                 "tech_stack": ", ".join(re.findall(TECH_FILTER, title)[:5]),
-                "timezone": location or "Worldwide",
+                "timezone": clean_text(element.select_one('span.region')),
                 "apply_url": link,
-                "summary": "WeWorkRemotely listing",
+                "summary": f"Full-Time listing from WeWorkRemotely.",
                 "posted_date_iso": datetime.date.today().isoformat()
             })
             
         except Exception as e:
+            # This prevents one bad job listing from crashing the whole parser
+            print(f"    - Error parsing one element: {e}")
             continue
     
     return results
@@ -721,6 +703,46 @@ def parse_html_generic(html, board_name, base_url):
     
     return results
 
+def parse_json_workingnomads(board, data, debug=False):
+    """
+    A new parser for the Working Nomads JSON API endpoint.
+    """
+    results = []
+    if not isinstance(data, list):
+        print(f"  Unexpected data format for {board}, expected a list.")
+        return results
+
+    for j in data:
+        title = j.get("position", "")
+        description = j.get("description", "")
+        tags = j.get("tags", "")
+        combined_text = f"{title} {description} {tags}"
+
+        # Apply your existing filters
+        if EXCLUDE_FILTER.search(title):
+            if debug: print(f"    - Filtering out (Senior/Lead): '{title}'")
+            continue
+            
+        if not re.search(TECH_FILTER, combined_text):
+            if debug: print(f"    - Filtering out (No Tech Match): '{title}'")
+            continue
+            
+        # Add the job to results
+        if debug: print(f"    + Found Job: '{title}'")
+        
+        results.append({
+            "job_title": title,
+            "company": j.get("company_name", ""),
+            "salary": "", # Salary is not provided in this API endpoint
+            "tech_stack": tags,
+            "timezone": "Remote",
+            "apply_url": j.get("url", ""),
+            "summary": description[:250] + "..." if len(description) > 250 else description,
+            "posted_date_iso": j.get("pub_date", "")[:10]
+        })
+    
+    return results
+
 # === MAIN FETCH LOGIC ===
 
 def fetch_jobs_from_board(name, info, debug=False):
@@ -739,6 +761,8 @@ def fetch_jobs_from_board(name, info, debug=False):
                 return parse_json_remoteokapi(name, data, debug)
             elif name == "Arbeitnow":
                 return parse_json_arbeitnow(name, data, debug)
+            elif name == "WorkingNomads":
+                return parse_json_workingnomads(name, data, debug)
             else:
                 print(f"  No specific parser for {name}, skipping")
                 return []

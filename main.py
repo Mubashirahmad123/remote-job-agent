@@ -54,68 +54,71 @@ def scrape_tool() -> str:
     print("🔍 Scraping jobs from multiple boards...")
     jobs = scrape_all(debug=False)
     print(f"✅ Found {len(jobs)} jobs")
+
+    output_filename  = "scraped_jobs.json"
+    with open(output_filename, 'w', encoding='utf-8') as f:
+        json.dump(jobs, f, indent=2)
+
+    return f"Scraped {len(jobs)} jobs. Data saved to {output_filename}."
     
     # Return as JSON string for better CrewAI compatibility
-    return json.dumps(jobs)
 
-@tool("Processes scraped jobs and saves to Google Sheet")
-def process_jobs_tool(scraped_jobs: str) -> str:
+@tool("Processes scraped jobs from a file and saves to Google Sheet")
+def process_jobs_tool(file_path: str) -> str:
     """
-    Processes scraped jobs JSON string, curates them, and saves to Google Sheet.
-    
+    Reads job data from a file, curates them, and saves to Google Sheet.
     Args:
-        scraped_jobs: JSON string of scraped jobs from scrape_tool
+        file_path: The path to the JSON file containing scraped jobs.
     """
-    print(f"📝 Processing jobs...")
-    
+    print(f"📝 Processing jobs from file: {file_path}...")
     try:
-        # Parse jobs from JSON string
-        jobs = json.loads(scraped_jobs) if isinstance(scraped_jobs, str) else scraped_jobs
+        with open(file_path, 'r', encoding='utf-8') as f:
+            jobs = json.load(f)
         
         if not jobs:
-            return "No jobs to process"
+            return "No jobs to process in the file."
         
-        print(f"Processing {len(jobs)} jobs...")
-        
-        # Use curator to process jobs
-        result = curate(jobs)
-        
-        if isinstance(result, dict):
-            return f"Successfully processed jobs: {result.get('message', 'Jobs processed')}"
-        else:
-            return f"Jobs processed: {result}"
+        result = curate(jobs) # Your curator.py function
+        return f"Successfully processed jobs: {result.get('message', 'Jobs processed')}"
             
-    except json.JSONDecodeError as e:
-        error_msg = f"Failed to parse job data: {str(e)}"
-        print(f"❌ {error_msg}")
-        return error_msg
+    except FileNotFoundError:
+        return f"Error: The file '{file_path}' was not found."
     except Exception as e:
-        error_msg = f"Job processing failed: {str(e)}"
-        print(f"❌ {error_msg}")
-        return error_msg
+        return f"Job processing failed: {str(e)}"
 
-@tool("Generates cover letter from job data")
-def generate_cover_letter_tool(job_data: str) -> str:
+@tool("Generates cover letter with PDF save from a file")
+def generate_cover_letter_with_pdf_tool(file_path: str) -> str:
     """
-    Generates a personalized cover letter from job data using Gemini AI.
-    
+    Reads job data from a file, generates a cover letter for the best job,
+    and saves it as a PDF.
     Args:
-        job_data: JSON string containing job information
+        file_path: The path to the JSON file containing scraped jobs.
     """
-    print(f"✍️ Generating cover letter with improved error handling...")
-    
+    print(f"✍️ Generating cover letter from file: {file_path}...")
     try:
-        # Use the new function that handles all the parsing
-        from agents.gemini_tools import generate_cover_letter_from_job_data
+        from agents.gemini_tools import save_cover_letter_pdf, generate_cover_letter
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            jobs = json.load(f)
         
-        result = generate_cover_letter_from_job_data(job_data)
-        print("✅ Cover letter generated successfully!")
-        return result
+        if not jobs:
+            return "No jobs in file to generate cover letter from."
         
+        best_job = jobs[0]
+        job_title = best_job.get('job_title', 'Software Developer')
+        company = best_job.get('company', 'Unknown Company')
+        job_description = best_job.get('summary', 'Exciting opportunity')
+        
+        cover_letter = generate_cover_letter(job_title, company, job_description, "Mubashir")
+        pdf_path = save_cover_letter_pdf(cover_letter, job_title)
+        
+        return f"Cover letter generated and saved as PDF: {pdf_path}"
+        
+    except FileNotFoundError:
+        return f"Error: The file '{file_path}' was not found."
     except Exception as e:
-        error_msg = f"Cover letter tool failed: {str(e)}"
-        print(f"❌ {error_msg}")
-        return error_msg
+        return f"Cover letter generation failed: {str(e)}"
+
 
         # Fallback cover letter
         fallback = f"""
@@ -133,48 +136,6 @@ Mubashir
         
         return fallback
 
-# --- Enhanced Tool for PDF Generation ---
-@tool("Generates cover letter with PDF save")
-def generate_cover_letter_with_pdf_tool(job_data: str) -> str:
-    """
-    Generates a personalized cover letter and saves it as PDF.
-    
-    Args:
-        job_data: JSON string containing job information
-    """
-    print(f"✍️ Generating cover letter with PDF save...")
-    
-    try:
-        from agents.gemini_tools import save_cover_letter_pdf
-        
-        # Parse job data
-        jobs = json.loads(job_data) if isinstance(job_data, str) else job_data
-        
-        if not jobs or len(jobs) == 0:
-            return "No jobs available to generate cover letter"
-        
-        best_job = jobs[0]
-        job_title = best_job.get('job_title', 'Software Developer')
-        company = best_job.get('company', 'Unknown Company')
-        job_description = best_job.get('summary', 'Exciting opportunity in software development')
-        applicant_name = "Mubashir"
-        
-        print(f"Generating cover letter for: {job_title} at {company}")
-        
-        # Generate cover letter
-        cover_letter = generate_cover_letter(job_title, company, job_description, applicant_name)
-        
-        # Save as PDF
-        pdf_path = save_cover_letter_pdf(cover_letter, job_title)
-        
-        result = f"Cover letter generated and saved as PDF: {pdf_path}\n\n{cover_letter}"
-        print("✅ Cover letter generated and saved as PDF!")
-        return result
-        
-    except Exception as e:
-        error_msg = f"Cover letter with PDF generation failed: {str(e)}"
-        print(f"❌ {error_msg}")
-        return error_msg
 
 # --- Agents ---
 scraper_agent = Agent(
@@ -183,7 +144,8 @@ scraper_agent = Agent(
     backstory="You are an expert web scraper who knows how to find the best remote developer jobs from various job boards. You're thorough, efficient, and always find the most relevant opportunities.",
     tools=[scrape_tool],
     llm=llm,
-    verbose=True
+    verbose=True,
+    max_retries=3
 )
 
 curator_agent = Agent(
@@ -192,7 +154,8 @@ curator_agent = Agent(
     backstory="You are a meticulous job curator who ensures only high-quality, relevant jobs make it to the final list. You remove duplicates, filter out irrelevant positions, and organize everything perfectly in Google Sheets.",
     tools=[process_jobs_tool],
     llm=llm,
-    verbose=True
+    verbose=True,
+    max_retries=3
 )
 
 cover_letter_agent = Agent(
@@ -201,14 +164,16 @@ cover_letter_agent = Agent(
     backstory="You are a professional writer who specializes in creating tailored cover letters that help developers stand out. You use advanced AI to craft compelling, personalized applications and can save them as professional PDF documents.",
     tools=[generate_cover_letter_with_pdf_tool],  # Using PDF version
     llm=llm,
-    verbose=True
+    verbose=True,
+    max_retries=3
 )
 
 # --- Tasks ---
 scrape_task = Task(
-    description="Scrape all available remote developer jobs from multiple job boards. Focus on entry-level to mid-level positions that match our tech stack filters (Node.js, Django, React, etc). Return the results as a JSON string.",
+    description="Scrape all available remote developer jobs from multiple job boards. The tool will save the results to a file named 'scraped_jobs.json'.",
     agent=scraper_agent,
-    expected_output="A JSON string containing comprehensive list of remote job postings with details like title, company, salary, tech stack, and application URLs."
+    expected_output="A confirmation message stating the number of jobs found and that they have been saved to 'scraped_jobs.json'.",
+    output_file="scraped_jobs.json"
 )
 
 curate_task = Task(
@@ -298,25 +263,31 @@ def run_simple_scraper():
         print("❌ No jobs found")
 
 def test_tools():
-    """Test individual tools"""
+    """Test individual tools with the new file-based workflow"""
     print("🧪 Testing individual tools...")
     
-    # Test scraper tool
+    # 1. Test scraper tool - it will now create the file
     print("\n1. Testing scraper tool...")
-    jobs_json = scrape_tool()
-    jobs = json.loads(jobs_json)
-    print(f"   Found {len(jobs)} jobs")
-    
-    if jobs:
-        # Test processing tool
+    scrape_result = scrape_tool()
+    print(f"   Scraper tool output: {scrape_result}")
+
+    # Define the filename we expect the scraper to create
+    jobs_filename = "scraped_jobs.json"
+
+    # Check if the file was actually created before proceeding
+    if os.path.exists(jobs_filename):
+        # 2. Test processing tool using the file path
         print("\n2. Testing processing tool...")
-        result = process_jobs_tool(jobs_json)
-        print(f"   Result: {result}")
+        result = process_jobs_tool(jobs_filename)
+        print(f"   Processing tool result: {result}")
         
-        # Test cover letter tool with PDF
+        # 3. Test cover letter tool with PDF using the file path
         print("\n3. Testing cover letter tool with PDF...")
-        cover_letter = generate_cover_letter_with_pdf_tool(jobs_json)
-        print(f"   Cover letter generated with PDF save")
+        cover_letter_result = generate_cover_letter_with_pdf_tool(jobs_filename)
+        print(f"   Cover letter tool result: {cover_letter_result}")
+    else:
+        print(f"❌ ERROR in test: The file '{jobs_filename}' was not created by scrape_tool().")
+
 
 if __name__ == "__main__":
     print("Starting job...")

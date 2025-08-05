@@ -1,0 +1,73 @@
+{
+    "configurations": [
+        {
+            "name": "Debug Main Script",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Debug Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Debug Scraper",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/agents/scrapper.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": []
+        },
+        {
+            "name": "Test Individual Scraper",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/agents/scrapper.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": ["--test", "NoDesk"]
+        },
+        {
+            "name": "Debug Curator",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/agents/curator.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            }
+        },
+        {
+            "name": "Debug Curator with Sample Data",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/agents/curator.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "TEST_MODE": "true"
+            }
+        }
+    ]
+}
