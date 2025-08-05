@@ -743,6 +743,59 @@ def parse_json_workingnomads(board, data, debug=False):
     
     return results
 
+# In scrapper.py, add this new function alongside your other parsers
+
+def parse_html_justremote(html, base_url):
+    """
+    A new, dedicated parser for JustRemote's current HTML structure.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    results = []
+    
+    # The new main selector for each job posting
+    job_elements = soup.select('div.job-card__container')
+    print(f"  Found {len(job_elements)} potential job elements with selector: div.job-card__container")
+
+    for element in job_elements:
+        try:
+            # The title and link are in the same element
+            title_elem = element.select_one('a.job-card__title')
+            if not title_elem:
+                continue
+
+            title = clean_text(title_elem)
+            link = title_elem.get('href', '')
+            if link and not link.startswith('http'):
+                link = base_url + link
+
+            # Get the company name
+            company_elem = element.select_one('div.job-card__company-name')
+            company = clean_text(company_elem)
+            
+            # --- Apply your filters ---
+            if EXCLUDE_FILTER.search(title):
+                continue
+            if not re.search(TECH_FILTER, title):
+                continue
+            
+            print(f"    + Found Job: '{title}' at {company}")
+            results.append({
+                "job_title": title,
+                "company": company,
+                "salary": "", # Salary info is not easily accessible on the main page
+                "tech_stack": ", ".join(re.findall(TECH_FILTER, title)[:5]),
+                "timezone": "Remote",
+                "apply_url": link,
+                "summary": f"Full-Time listing from JustRemote.",
+                "posted_date_iso": datetime.date.today().isoformat()
+            })
+        except Exception as e:
+            print(f"    - Error parsing one element: {e}")
+            continue
+            
+    return results
+
+
 # === MAIN FETCH LOGIC ===
 
 def fetch_jobs_from_board(name, info, debug=False):
@@ -787,6 +840,8 @@ def fetch_jobs_from_board(name, info, debug=False):
             elif name == "RemoteTech" or name == "GoRemote":
                 # Use generic parser for RemoteTech and GoRemote
                 return parse_html_generic(html, name, base_url)
+            elif name == "JustRemote":
+               return parse_html_justremote(html, base_url)
             else:
                 # Use generic parser for other HTML sites
                 return parse_html_generic(html, name, base_url)
