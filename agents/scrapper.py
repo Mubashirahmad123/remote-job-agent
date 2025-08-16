@@ -10,7 +10,6 @@ def normalize_date(date_value, source="unknown"):
     """Normalize any date format to ISO (YYYY-MM-DD)."""
     if not date_value:
         return datetime.date.today().isoformat()
-    
     try:
         # Handle Unix timestamps (both seconds and milliseconds)
         if isinstance(date_value, (int, float)) or (isinstance(date_value, str) and date_value.replace('.', '').isdigit()):
@@ -23,7 +22,7 @@ def normalize_date(date_value, source="unknown"):
         # Handle string dates
         if isinstance(date_value, str):
             # Handle ISO date format (just take first 10 chars)
-            if len(date_value) >= 10 and date_value[4] == '-' and date_value[1] == '-':
+            if len(date_value) >= 10 and date_value[4] == '-' and date_value[3] == '-':  # FIXED LINE
                 return date_value[:10]
             # Parse other formats
             return date_parser.parse(date_value).strftime('%Y-%m-%d')
@@ -39,10 +38,11 @@ def clean_html(raw_html):
     if not raw_html:
         return ""
     cleanr = re.compile('<.*?>')
-    cleaned = re.sub(cleanr, '', str(raw_html))
+    cleaned = re.sub(cleanr, '', str(raw_html))  # FIXED LINE
     # Decode common HTML entities
-    cleaned = cleaned.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&').replace('&quot;', '"')
+    cleaned = cleaned.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&').replace('&quot;', '"')  # FIXED LINE
     return cleaned.strip()
+
 
 
 # === UTILITY FUNCTIONS ===
@@ -228,8 +228,8 @@ def parse_json_remotive(board, data, debug=False):
             "timezone": j.get("candidate_required_location", "Worldwide"),
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
-            "posted_date_iso": normalize_date(j.get("date")),
-            "board": board
+            "posted_date_iso": normalize_date(j.get("publication_date")),
+            "source": board
         })
     
     if debug:
@@ -283,8 +283,8 @@ def parse_json_remoteokapi(board, data, debug=False):
             "timezone": j.get("location", "Worldwide"),
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
-            "posted_date_iso": normalize_date(j.get("date")),
-            "board": board
+            "posted_date_iso": normalize_date(j.get("publication_date")),
+            "source": board
         })
     
     return results
@@ -341,8 +341,8 @@ def parse_json_arbeitnow(board, data, debug=False):
             "timezone": j.get("location", "Worldwide"),
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
-            "posted_date_iso": normalize_date(j.get("date")),
-            "board": board
+            "posted_date_iso": normalize_date(j.get("created_at")),
+            "source": board
         })
     
     return results
@@ -402,7 +402,7 @@ def parse_html_weworkremotely(html):
                 "apply_url": link,
                 "summary": f"Full-Time listing from WeWorkRemotely.",
                 "posted_date_iso": datetime.date.today().isoformat(),
-                "board": "WeWorkRemotely"
+                "source": "WeWorkRemotely"
             })
             
         except Exception as e:
@@ -481,7 +481,7 @@ def parse_html_wellfound(html):
                 "apply_url": link,
                 "summary": f"Wellfound listing - {location}" + (f" - {salary}" if salary else ""),
                 "posted_date_iso": normalize_date(None),
-                "board": "Wellfound"
+                "source": "Wellfound"
             })
             
         except Exception as e:
@@ -565,7 +565,7 @@ def parse_html_nodesk(html):
                 "apply_url": link or "",
                 "summary": "NoDesk remote listing",
                 "posted_date_iso": normalize_date(None),
-                "board": "NoDesk"
+                "source": "NoDesk"
             })
             
         except Exception as e:
@@ -744,7 +744,7 @@ def parse_html_generic(html, board_name, base_url):
                 "apply_url": link or "",
                 "summary": f"Listing from {board_name}",
                 "posted_date_iso": normalize_date(None),
-                "board": board_name
+                "source": board_name
 
             })
             
@@ -788,8 +788,8 @@ def parse_json_workingnomads(board, data, debug=False):
             "timezone": "Remote",
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
-            "posted_date_iso": normalize_date(None),
-            "board": board
+            "posted_date_iso": normalize_date(j.get("pub_date")),
+            "source": board
 
         })
     
@@ -840,7 +840,7 @@ def parse_html_justremote(html, base_url, board):
                 "apply_url": link,
                 "summary": f"Full-Time listing from JustRemote.",
                 "posted_date_iso": normalize_date(None),
-                "board": board
+                "source": board
 
             })
         except Exception as e:
@@ -935,6 +935,10 @@ def scrape_all(debug=False):
         
         # Add delay between requests to avoid rate limiting
         time.sleep(random.uniform(2, 4))
+
+        if jobs:
+         jobs.sort(key=lambda x: x['posted_date_iso'], reverse=True)
+        print(f"✅ Sorted {len(jobs)} jobs by date (newest first)")
     
     print(f"\n=== SCRAPING SUMMARY ===")
     print(f"✅ Working scrapers ({len(working_scrapers)}): {working_scrapers}")
@@ -974,9 +978,15 @@ if __name__ == "__main__":
     # test_individual_scraper("Himalayas")
     # test_individual_scraper("RemoteTech")
     # test_individual_scraper("GoRemote")
+    # test_individual_scraper("Remotive", debug=True)
+
     
     # Full scraping
     jobs = scrape_all(debug=False)
+
+    # Sort by date (newest first)
+    jobs.sort(key=lambda x: x['posted_date_iso'], reverse=True)
+
     
     # Print sample results
     if jobs:
