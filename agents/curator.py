@@ -13,7 +13,8 @@ def curate(raw_jobs):
         return {
             "status": "error",
             "message": "No jobs to curate",
-            "stats": {"original_jobs": 0, "unique_jobs_added": 0}
+            "stats": {"original_jobs": 0, "unique_jobs_added": 0},
+            "top_jobs": None
         }
 
     # Get all existing rows from Google Sheet
@@ -87,7 +88,8 @@ def curate(raw_jobs):
                 "original_jobs": len(raw_jobs),
                 "duplicates_removed": duplicates_count,
                 "unique_jobs_added": 0
-            }
+            },
+            "top_jobs": None
         }
 
     # Rank jobs by quality factors
@@ -122,6 +124,8 @@ def curate(raw_jobs):
     
     # Sort by score (highest first)
     ranked_jobs = sorted(unique_jobs, key=job_score, reverse=True)
+    top_jobs = ranked_jobs[0]
+
     
     # Show ranking results
     print(f"🏆 Top 3 ranked jobs:")
@@ -148,7 +152,8 @@ def curate(raw_jobs):
                 "duplicates_removed": duplicates_count,
                 "unique_jobs_added": len(ranked_jobs),
                 "existing_jobs_in_sheet": len(existing_urls)
-            }
+            },
+            "top_jobs": top_jobs
         }
         
     except Exception as e:

@@ -1,1 +1,2212 @@
-Scraped 207 jobs. Data saved to scraped_jobs.json.
+[
+  {
+    "job_title": "Full-Stack Software Engineer",
+    "company": "Opendorse",
+    "salary": "",
+    "tech_stack": "Full-Stack, Software, Engineer, Software, Engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-software-engineer-2048268",
+    "summary": "<p><span style=\"color: rgb(0, 0, 0); font-family: Inter, sans-serif\"><span style=\"font-weight: bold\"><span style=\"font-size: 15px\"><span style=\"  font-weight: bold\">Software Engineer (Full-Stack, .NET...",
+    "posted_date_iso": "2025-08-14"
+  },
+  {
+    "job_title": "Solutions Engineer",
+    "company": "Prefect",
+    "salary": "base salary ranges: $128,000-$165,000",
+    "tech_stack": "Engineer, python, developer, developer, Engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/solutions-engineer-2046512",
+    "summary": "<div class=\"h1\"><a href=\"https://www.prefect.io/\" rel=\"nofollow\" target=\"_blank\"><strong><u>Prefect</u></strong></a><strong> is focused on making complex systems easy to trust, and has emerged as the ...",
+    "posted_date_iso": "2025-08-14"
+  },
+  {
+    "job_title": "Application Developer IV",
+    "company": "GSS Geisinger System Services",
+    "salary": "",
+    "tech_stack": "Developer, software, developer, API, Web",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/application-developer-iv-2046601",
+    "summary": "<i>\n This description is a summary of our understanding of the job description. Click on 'Apply' button to find out more.\n</i>\n<br>\n<br>\n<p class=\"h2 tw-mt-4 remotive-text-bigger\">\n Role Description\n<...",
+    "posted_date_iso": "2025-08-14"
+  },
+  {
+    "job_title": "Full Stack Engineer",
+    "company": "Webicient",
+    "salary": "$70k - $90k",
+    "tech_stack": "Full Stack, Engineer, Full-Stack, Engineer, Web",
+    "timezone": "Worldwide",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-engineer-2047140",
+    "summary": "<p>We’re seeking a <strong>Senior Full-Stack Engineer</strong> to build and enhance our AI-powered contract management and financial analytics platform. You’ll work on complex technical challenges, im...",
+    "posted_date_iso": "2025-08-14"
+  },
+  {
+    "job_title": "Software Development Engineer in Test",
+    "company": "Campspot",
+    "salary": "usd 22 per hour",
+    "tech_stack": "Software, Engineer, Software, Engineer, software",
+    "timezone": "Brazil",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-development-engineer-in-test-2046732",
+    "summary": "<p dir=\"ltr\" style=\"font-style:normal;font-weight:400;line-height:1.38;margin-right:0px;padding:0px;margin-top:0px;margin-bottom:0px;\"><span style=\"color:rgb(0,0,0);white-space:pre-wrap;\">We are seeki...",
+    "posted_date_iso": "2025-08-13"
+  },
+  {
+    "job_title": "Full-stack Developer",
+    "company": "Smart Working Solutions",
+    "salary": "",
+    "tech_stack": "Full-stack, Developer, Full-stack, Developer, backend",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-developer-2046733",
+    "summary": "<div><b>About Smart Working</b></div><div>At Smart Working, we believe your job should not only look right on paper but also feel right every day. This isn’t just another remote opportunity - it’s abo...",
+    "posted_date_iso": "2025-08-13"
+  },
+  {
+    "job_title": "System Architect",
+    "company": "Ushur",
+    "salary": "",
+    "tech_stack": "git, api, api, engineer, backend",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/system-architect-2046735",
+    "summary": "<p> </p>\n<div class=\"h2\"><strong>System Architect</strong></div>\n<div class=\"h2\">Job Description</div>\n<div class=\"h1\"><strong>About Us</strong></div>\n<p>Ushur delivers the world’s first Customer Expe...",
+    "posted_date_iso": "2025-08-13"
+  },
+  {
+    "job_title": "Data Engineer",
+    "company": "saas.group",
+    "salary": "",
+    "tech_stack": "Engineer, git, web, Engineer, SQL",
+    "timezone": "Germany",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/data-engineer-2046737",
+    "summary": "<p>This role is part of our <a href=\"%22https://www.infonline.de/en/%22\" rel=\"nofollow\"><em>INFOnline</em></a><em> </em>team, one of our growing brands at saas.group.</p>\n<p>INFOnline, headquartered i...",
+    "posted_date_iso": "2025-08-13"
+  },
+  {
+    "job_title": "Fullstack Engineer, Generative AI (Backend Focus)",
+    "company": "Crackenagi",
+    "salary": "",
+    "tech_stack": "Fullstack, Engineer, Backend, software, engineer",
+    "timezone": "Europe",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/fullstack-engineer-generative-ai-backend-focus-2046738",
+    "summary": "<div class=\"h2\"><strong>About Company</strong></div>\n<p style=\"min-height: 1.5em;\">Cracken is a fast-growing Silicon Valley-based startup built by elite nation-state and commercial operators who defen...",
+    "posted_date_iso": "2025-08-12"
+  },
+  {
+    "job_title": "Full Stack Engineer",
+    "company": "OpenFX",
+    "salary": "competitive salary and benefits package.",
+    "tech_stack": "Full Stack, Engineer, rest, Full Stack, Engineer",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-engineer-2046740",
+    "summary": "<p><strong>About Us</strong></p>\n<p>OpenFX is on a mission to <strong>move money as freely as data, unrestricted by time zones, banking hours, or legacy systems.</strong> We are building the infrastru...",
+    "posted_date_iso": "2025-08-12"
+  },
+  {
+    "job_title": "ML Infrastructure Engineer",
+    "company": "Augmodo",
+    "salary": "$155,000 - $210,000 usd + equity",
+    "tech_stack": "Engineer, git, Engineer, engineer, API",
+    "timezone": "USA, UK",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/ml-infrastructure-engineer-2046800",
+    "summary": "<p style=\"min-height: 1.5em;\">Augmodo is at the forefront of spatial computing, where mapping connects the digital and physical worlds. As a ML Infrastructure Engineer, you will play a key role in our...",
+    "posted_date_iso": "2025-08-12"
+  },
+  {
+    "job_title": "Sr. IBM Developer - Senior Associate",
+    "company": "Cognizant",
+    "salary": "usd 90,000 - 102,500 per year",
+    "tech_stack": "Developer, Developer, REST, API, software",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/sr-ibm-developer-senior-associate-2045303",
+    "summary": "<p class=\"MsoNormal\" style=\"line-height:normal;margin-bottom:0in;\"><span style=\"\"><span lang=\"EN-CA\" style=\"mso-ansi-language:EN-CA;mso-fareast-\"><strong>About the role:<p></p></strong></span></span><...",
+    "posted_date_iso": "2025-08-11"
+  },
+  {
+    "job_title": "AI Engineer, Enterprise Solutions",
+    "company": "You.com",
+    "salary": "$165,000 - $200,000 usd",
+    "tech_stack": "Engineer, api, Engineer, api, Python",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/ai-engineer-enterprise-solutions-2045367",
+    "summary": "<div class='\"content-intro\"'><p><span class='\"AnswerParser_TextContainer__z_Iiv\"'><strong>you.com is an AI-powered search and productivity platform designed to empower users with personalized, efficie...",
+    "posted_date_iso": "2025-08-10"
+  },
+  {
+    "job_title": "Sr. Unity Engineer",
+    "company": "Red Games Co.",
+    "salary": "",
+    "tech_stack": "Engineer, Developer, developer, developer, api",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/sr-unity-engineer-2045449",
+    "summary": "<p style=\"line-height:1.38;margin-top:16px;margin-bottom:16px;\"><span style=\"font-variant:normal;white-space:pre-wrap;\"><span style=\"\"><span style=\"color:#000000;\"><span style=\"font-weight:700;\"><span...",
+    "posted_date_iso": "2025-08-10"
+  },
+  {
+    "job_title": "Python Software Engineer",
+    "company": "Ciklum",
+    "salary": "",
+    "tech_stack": "Python, Software, Engineer, Python, Software",
+    "timezone": "Ukraine",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/python-software-engineer-2045452",
+    "summary": "<p><strong>Ciklum</strong> is looking for a <strong>Middle Python Software Engineer</strong> to join our team full-time in Ukraine.</p>\n<p>We are a custom product engineering company that supports bot...",
+    "posted_date_iso": "2025-08-10"
+  },
+  {
+    "job_title": "JavaScript Developer",
+    "company": "Ciklum",
+    "salary": "",
+    "tech_stack": "JavaScript, Developer, web, JavaScript, Developer",
+    "timezone": "Ukraine",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/javascript-developer-2045453",
+    "summary": "<p style=\"margin: 0px 0px 12px; color: #000000; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; ...",
+    "posted_date_iso": "2025-08-10"
+  },
+  {
+    "job_title": "Cloud Systems Engineer",
+    "company": "caixamagica",
+    "salary": "",
+    "tech_stack": "Engineer, Software, Engineer, Engineer, AWS",
+    "timezone": "Portugal",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/cloud-systems-engineer-2045454",
+    "summary": "<p><strong>Overview:</strong></p>\n<p><span lang=\"EN-US\" style=\"mso-ansi-language: EN-US;\">We are a global energy company based in Portugal, known for its strong commitment to sustainability and innova...",
+    "posted_date_iso": "2025-08-09"
+  },
+  {
+    "job_title": "iOS Developer",
+    "company": "nooro",
+    "salary": "$60k-$130k (depending on experience)",
+    "tech_stack": "Developer, web, backend, API, REST",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/ios-developer-1956455",
+    "summary": "<p style=\"box-sizing: inherit; margin: var(--artdeco-reset-base-margin-zero); padding: var(--artdeco-reset-base-padding-zero); border: var(--artdeco-reset-base-border-zero); vertical-align: var(--artd...",
+    "posted_date_iso": "2025-08-09"
+  },
+  {
+    "job_title": "Full Stack Developer",
+    "company": "ciandt",
+    "salary": "",
+    "tech_stack": "Full Stack, Developer, Full Stack, Developer, software",
+    "timezone": "Brazil",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-developer-2045458",
+    "summary": "<div><span style=\"\">We are <strong>tech transformation </strong>specialists, uniting human expertise with AI to create scalable tech solutions.</span></div>\n<div><span style=\"\">With over <a href=\"http...",
+    "posted_date_iso": "2025-08-09"
+  },
+  {
+    "job_title": "Full Stack Engineer",
+    "company": "NTD software",
+    "salary": "",
+    "tech_stack": "Full Stack, Engineer, Full Stack, Developer, frontend",
+    "timezone": "Mexico",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-engineer-2045541",
+    "summary": "<div>We are seeking a versatile Full Stack Developer with hands-on experience across both frontend and backend technologies to design, develop, and maintain dynamic web and mobile applications. The id...",
+    "posted_date_iso": "2025-08-09"
+  },
+  {
+    "job_title": "Software Engineer/Data Integration",
+    "company": "Capio Group",
+    "salary": "$120,000 - $135,000",
+    "tech_stack": "Software, Engineer, api, Software, Engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-data-integration-2044857",
+    "summary": "<p><span style=\"font-variant:normal;white-space:pre-wrap;\"><span style=\"\"><span style=\"color:#000000;\"><span style=\"font-weight:400;\"><span style=\"font-style:normal;\"><span style=\"text-decoration:none...",
+    "posted_date_iso": "2025-08-08"
+  },
+  {
+    "job_title": "Web APP/SDK Developer",
+    "company": "Digitap.ai",
+    "salary": "",
+    "tech_stack": "Web, Developer, GIT, git, Web",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/web-app-sdk-developer-2044859",
+    "summary": "<div class=\"h3\" dir='\"ltr\"' style='\"line-height:1.38;margin-top:12pt;margin-bottom:12pt;\"'><span style='\"color:#000000;background-color:transparent;font-weight:700;font-style:normal;font-variant:norma...",
+    "posted_date_iso": "2025-08-08"
+  },
+  {
+    "job_title": "Software Engineer, UI",
+    "company": "Oak Engage",
+    "salary": "",
+    "tech_stack": "Software, Engineer, Engineer, Front-End, Engineer",
+    "timezone": "UK",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-ui-2044265",
+    "summary": "<p>Location: Hybrid, Newcastle or Remote (UK Based)<br>Reports to: Engineering Manager<br>Type: Full-time</p><div class=\"h3\">Join Oak Engage – Where Communication Meets Connection</div><p>At Oak Engag...",
+    "posted_date_iso": "2025-08-07"
+  },
+  {
+    "job_title": "Technical Intern: AI + Web App Development",
+    "company": "Wavess",
+    "salary": "unpaid internship",
+    "tech_stack": "Web, API, web, api, api",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/technical-intern-ai-web-app-development-2044266",
+    "summary": "<p>Wavess is a predictive AI platform on a mission to bring clarity to modern marketing.</p>\n<p>We're early-stage, fast-moving, and unapologetically focused on building tools that marketers actually n...",
+    "posted_date_iso": "2025-08-07"
+  },
+  {
+    "job_title": "Full Stack - Flutter Developer",
+    "company": "Info Resume Edge",
+    "salary": "",
+    "tech_stack": "Full Stack, Developer, full-stack, developer, Front-End",
+    "timezone": "France",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-flutter-developer-2044270",
+    "summary": "<div class=\"h6\">Description</div> <p>As our full-stack developer, you will work across:</p> <p><strong>1. Front-End</strong></p> <p><strong>Flutter</strong> (mobile-first, cross-platform) using <stron...",
+    "posted_date_iso": "2025-08-07"
+  },
+  {
+    "job_title": "Software Engineer",
+    "company": "Parity",
+    "salary": "",
+    "tech_stack": "Software, Engineer, web, web, developer",
+    "timezone": "UK, Germany, Portugal, Switzerland",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-2044372",
+    "summary": "<p style=\"min-height:1.5em\">As stewards of the Polkadot and Substrate ecosystem, Parity is laying the foundation for a better web. We believe in a decentralised web that respects the freedom and data ...",
+    "posted_date_iso": "2025-08-06"
+  },
+  {
+    "job_title": "Head of AI",
+    "company": "Paired",
+    "salary": "competitive salary in usd",
+    "tech_stack": "backend, api, engineer, engineer, api",
+    "timezone": "Mexico",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/head-of-ai-2043573",
+    "summary": "<p>Paired is a global staffing and recruiting agency that specializes in pairing remote work with top-tier talent. We help individuals from around the world connect with great companies that are looki...",
+    "posted_date_iso": "2025-08-06"
+  },
+  {
+    "job_title": "Drupal Architect / Team Lead",
+    "company": "Evolving Web",
+    "salary": "",
+    "tech_stack": "Web, git, Web, web, web",
+    "timezone": "Canada",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/drupal-architect-team-lead-2043662",
+    "summary": "<p>Be our in-house technical expert! Evolving Web, a Montreal-based digital agency with a team of over 100 technologists, designers, and strategists, has an immediate opening for a Drupal Architect/Te...",
+    "posted_date_iso": "2025-08-06"
+  },
+  {
+    "job_title": "AI/ML Engineer II",
+    "company": "Precisionaq",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, engineer, software, engineer",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/ai-ml-engineer-ii-2043987",
+    "summary": "<p></p>\n<p><strong>Position Summary<br><br></strong>As an AI/ML Engineer, you will be at the forefront of designing, developing, and deploying AI and ML solutions that drive business value and innovat...",
+    "posted_date_iso": "2025-08-05"
+  },
+  {
+    "job_title": "Frontend Engineer",
+    "company": "MadHive",
+    "salary": "$140,000-$180,000",
+    "tech_stack": "Frontend, Engineer, Frontend, Engineer, software",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/frontend-engineer-2043744",
+    "summary": "<p style=\"min-height:1.5em\">Madhive is the leading independent and fully customizable operating system built to help local media professionals build profitable, differentiated, and efficient businesse...",
+    "posted_date_iso": "2025-08-05"
+  },
+  {
+    "job_title": "Full Stack Developer",
+    "company": "BigStep Technologies Pvt Ltd",
+    "salary": "",
+    "tech_stack": "Full Stack, Developer, Fullstack, Developer, React",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-developer-2043823",
+    "summary": "<p dir='\"ltr\"' style='\"line-height:1.38;text-align:'><span style='\"color:#000000;background-color:transparent;font-weight:700;font-style:normal;font-variant:normal;text-decoration:none;vertical-align:...",
+    "posted_date_iso": "2025-08-05"
+  },
+  {
+    "job_title": "Sr. Backend Fullstack Engineer",
+    "company": "Ant-Tech",
+    "salary": "negotiable",
+    "tech_stack": "Backend, Fullstack, Engineer, Fullstack, Engineer",
+    "timezone": "LATAM",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/sr-backend-fullstack-engineer-2043826",
+    "summary": "<p><strong>Salary:</strong> Negotiable<br>\n<strong>Level:</strong> Senior (5–10 years of experience), Expert (10+ years of experience)<br>\n<strong>Skills:</strong> Fullstack Engineering, ReactJS, Node...",
+    "posted_date_iso": "2025-08-04"
+  },
+  {
+    "job_title": "Software Engineer II",
+    "company": "Imaginepediatrics",
+    "salary": "$120,000 - $150,000 base + bonus",
+    "tech_stack": "Software, Engineer, Software, Engineer, git",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-ii-2042619",
+    "summary": "<div class='\"content-intro\"'><p><span style='\"font-family:'><strong><span>Who We Are</span></strong></span></p>\n<p><span style='\"font-family:'>Imagine Pediatrics is a tech enabled, pediatrician led me...",
+    "posted_date_iso": "2025-08-04"
+  },
+  {
+    "job_title": "Healthcare Specialist - AI Trainer",
+    "company": "Invisible Agency",
+    "salary": "$8 to $65 per hour",
+    "tech_stack": "engineer, api",
+    "timezone": "Worldwide",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/healthcare-specialist-ai-trainer-2042691",
+    "summary": "<p>Are you a master of healthcare fluent in French eager to shape the future of AI? Large‑scale language models are evolving from clever chatbots into powerful engines of clinical support, patient edu...",
+    "posted_date_iso": "2025-08-03"
+  },
+  {
+    "job_title": "Full Stack Software Engineer",
+    "company": "OneImaging",
+    "salary": "competitive salary and comprehensive benefits",
+    "tech_stack": "Full Stack, Software, Engineer, Full Stack, Software",
+    "timezone": "USA, Canada",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-software-engineer-2042770",
+    "summary": "<p><strong>Job Title:</strong> Full Stack Software Engineer (TypeScript/React)</p>\n<p><strong>Location:</strong> Remote</p>\n<p><strong>Company:</strong> OneImaging</p>\n<p><strong>About Us:</strong> On...",
+    "posted_date_iso": "2025-08-03"
+  },
+  {
+    "job_title": "Software Engineering - Team Lead",
+    "company": "PartnerStack",
+    "salary": "competitive salary",
+    "tech_stack": "Software, Engineer, software, software, rest",
+    "timezone": "Canada",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineering-team-lead-2042772",
+    "summary": "<div class='\"content-intro\"'><p><strong>About PartnerStack</strong><strong><br></strong><strong><br></strong>At PartnerStack, we’re passionate about software and the partnership space — and we’re not ...",
+    "posted_date_iso": "2025-08-03"
+  },
+  {
+    "job_title": "Forward Deployed Engineer",
+    "company": "Chestnut",
+    "salary": "competitive salary and equity",
+    "tech_stack": "Engineer, api, Engineer, API, Software",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/forward-deployed-engineer-2042774",
+    "summary": "<div class=\"h2\"><strong>About Chestnut</strong></div>\n<p style=\"min-height: 1.5em;\">Chestnut is building the first AI-native operating system for insurance distribution by transforming how the $1T+ in...",
+    "posted_date_iso": "2025-08-02"
+  },
+  {
+    "job_title": "Data Engineer",
+    "company": "Revive Health",
+    "salary": "$100,000-$125,000",
+    "tech_stack": "Engineer, Engineer, developer, API, developer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/data-engineer-2042778",
+    "summary": "<div class=\"mobile-apply-btn\">\n<a class=\"apply-link-marker button apply-button model-full-width branding-button-color\" href=\"/Recruiting/Jobs/Apply/3454706\" rel=\"nofollow\" style=\"width: 100%;\">Apply</...",
+    "posted_date_iso": "2025-08-02"
+  },
+  {
+    "job_title": "3D Pipeline Developer",
+    "company": "Pixomondo",
+    "salary": "",
+    "tech_stack": "Developer, Developer, Python, git, Software",
+    "timezone": "UK, Canada, Germany",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/3d-pipeline-developer-2042374",
+    "summary": "<p>Pixomondo (PXO) is an award-winning, solutions-oriented visual effects company that solves creative challenges for its clients and partners, crafting high-level visual effects for feature films, te...",
+    "posted_date_iso": "2025-08-01"
+  },
+  {
+    "job_title": "Full Stack Developer",
+    "company": "Lago",
+    "salary": "$10 - $15 hourly",
+    "tech_stack": "Full Stack, Developer, Full Stack, Developer, Full Stack",
+    "timezone": "Philippines",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-developer-2042376",
+    "summary": "<p>Role: Full Stack Developer<br>Hours: 8am - 5pm Mountain Standard Time<br>Hourly Wage: $10 - $15 <br><br>Lago is looking for a highly skilled and detail-oriented Full Stack Developer with demonstrat...",
+    "posted_date_iso": "2025-08-01"
+  },
+  {
+    "job_title": "Manager, Software Engineer Frontend",
+    "company": "Agiloft, Inc",
+    "salary": "",
+    "tech_stack": "Software, Engineer, Frontend, software, rest",
+    "timezone": "Northern America",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/manager-software-engineer-frontend-2042378",
+    "summary": "<div>As the most trusted global leader in data-first contract lifecycle management (CLM) software, Agiloft helps organizations manage the end-to-end process of proposing, negotiating, signing, and lev...",
+    "posted_date_iso": "2025-08-01"
+  },
+  {
+    "job_title": "Full Stack Engineer",
+    "company": "Deepgram",
+    "salary": "",
+    "tech_stack": "Full Stack, Engineer, developer, developer, API",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-engineer-2041886",
+    "summary": "<div class=\"h1\"><strong>Company Overview</strong></div><p style=\"min-height:1.5em\">Deepgram is the leading voice AI platform for developers building speech-to-text (STT), text-to-speech (TTS) and full...",
+    "posted_date_iso": "2025-07-31"
+  },
+  {
+    "job_title": "Fullstack Engineer",
+    "company": "CompanyCam",
+    "salary": "$126,000 - $141,000 per year",
+    "tech_stack": "Fullstack, Engineer, Fullstack, Engineer, engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/fullstack-engineer-2041964",
+    "summary": "<div class='\"content-intro\"'><div class=\"h2\">Hi, we’re CompanyCam.</div>\n<p>We’re a simple-to-use photo documentation and productivity app for contractors of all commercial and home services industrie...",
+    "posted_date_iso": "2025-07-31"
+  },
+  {
+    "job_title": "Founding Full Stack - LLM, AI (no prior AI experience required)",
+    "company": "Berry AI",
+    "salary": "$50K - $85K",
+    "tech_stack": "Full Stack, engineer, api",
+    "timezone": "Worldwide",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/founding-full-stack-llm-ai-no-prior-ai-experience-required-2042062",
+    "summary": "<p>We’re a YC-backed startup, looking for a founding engineer to join our experienced, hard-working, and humble team.</p>\n<p> </p>\n<p>Our team members have previously worked at both big tech and start...",
+    "posted_date_iso": "2025-07-30"
+  },
+  {
+    "job_title": "Member of Engineering (Full-Stack, IntelliJ)",
+    "company": "Poolside",
+    "salary": "",
+    "tech_stack": "Engineer, Full-Stack, engineer, api, software",
+    "timezone": "EMEA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/member-of-engineering-full-stack-intellij-2041488",
+    "summary": "<div class=\"h2\"><strong>ABOUT POOLSIDE</strong></div>\n<p style=\"min-height: 1.5em;\">In this decade, the world will create artificial intelligence that reaches human level intelligence (and beyond) by ...",
+    "posted_date_iso": "2025-07-30"
+  },
+  {
+    "job_title": "Member of Engineering (Full-Stack, Visual Studio)",
+    "company": "Poolside",
+    "salary": "",
+    "tech_stack": "Engineer, Full-Stack, engineer, api, software",
+    "timezone": "Europe",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/member-of-engineering-full-stack-visual-studio-2041493",
+    "summary": "<div class=\"h2\"><strong>ABOUT POOLSIDE</strong></div><p style=\"min-height:1.5em\">In this decade, the world will create artificial intelligence that reaches human level intelligence (and beyond) by com...",
+    "posted_date_iso": "2025-07-30"
+  },
+  {
+    "job_title": "Software Engineer II, Backend",
+    "company": "Affirm",
+    "salary": "$160,000 - $210,000",
+    "tech_stack": "Software, Engineer, Backend, rest, api",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-ii-backend-2039824",
+    "summary": "<div class='\"content-intro\"'><p>Affirm is reinventing credit to make it more honest and friendly, giving consumers the flexibility to buy now and pay later without any hidden fees or compounding inter...",
+    "posted_date_iso": "2025-07-29"
+  },
+  {
+    "job_title": "Data Engineer",
+    "company": "OneSix - External",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, Engineer, AWS, Engineer",
+    "timezone": "LATAM",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/data-engineer-2039912",
+    "summary": "<div class='\"content-intro\"'><p><strong>About OneSix </strong></p>\n<div class='\"page\"'>\n<div class='\"section\"'>\n<div class='\"layoutArea\"'>\n<div class='\"column\"'>\n<p>OneSix is a leading data and artifi...",
+    "posted_date_iso": "2025-07-29"
+  },
+  {
+    "job_title": "Sr. Database Architect",
+    "company": "BTI",
+    "salary": "",
+    "tech_stack": "software, Engineer, SQL, PostgreSQL, AWS",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/sr-database-architect-2040651",
+    "summary": "<div class=\"h3\"><span style=\"\"><span style=\"line-height:115%;\"><span style=\"\">Business Technology Integrators (BTI), A Service -Disable Veteran Owned Small Business with over 25 years of experience de...",
+    "posted_date_iso": "2025-07-28"
+  },
+  {
+    "job_title": "Data Engineer",
+    "company": "Kastech Software Solutions Group.",
+    "salary": "",
+    "tech_stack": "Engineer, Python, API, API, engineer",
+    "timezone": "Mexico",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/data-engineer-2040657",
+    "summary": "<p><strong>Job Description</strong> </p>\n<p><strong>Must Have</strong> </p>\n<ul style=\"\"><li style=\"\">Python programming (Advance) </li></ul>\n<ul style=\"\"><li style=\"\">Various Data Matching Algorithms...",
+    "posted_date_iso": "2025-07-28"
+  },
+  {
+    "job_title": "Ensemble Developer",
+    "company": "VetsEZ",
+    "salary": "",
+    "tech_stack": "Developer, Developer, SQL, developer, engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/ensemble-developer-2040760",
+    "summary": "<p>VetsEZ is seeking an experienced <strong>Ensemble / Caché Developer</strong> to support enterprise health data integration and processing for the Department of Veterans Affairs (VA). This role is r...",
+    "posted_date_iso": "2025-07-28"
+  },
+  {
+    "job_title": "Head of AI",
+    "company": "Artisan",
+    "salary": "competitive salary, generous equity, and full benefits",
+    "tech_stack": "software, api, software, engineer, engineer",
+    "timezone": "USA, Canada, India, Brazil, Colombia, Argentina",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/head-of-ai-2038441",
+    "summary": "<div class=\"h2\"><strong>About Us</strong></div><p style=\"min-height:1.5em\">At Artisan, we're creating AI Employees, called Artisans, and software which is sleek, easy to use, and replaces the endless ...",
+    "posted_date_iso": "2025-07-27"
+  },
+  {
+    "job_title": "SQL Scripter",
+    "company": "Cayuse Holdings",
+    "salary": "usd 25 - 30 per hour",
+    "tech_stack": "SQL, SQL, SQL, SQL, SQL",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/sql-scripter-2038662",
+    "summary": "<div class=\"h2\">Overview</div>\n<p><strong>Job Title:</strong> SQL Scripter - Flexera Database<strong>Location:</strong> Remote - India <strong>Type:</strong> Corp to Corp<strong>Start Date:</strong> A...",
+    "posted_date_iso": "2025-07-27"
+  },
+  {
+    "job_title": "Backend Engineer II",
+    "company": "Ordaos Bio",
+    "salary": "$30-$50 per hour",
+    "tech_stack": "Backend, Engineer, Backend, Engineer, Backend",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/backend-engineer-ii-2038811",
+    "summary": "<p>Ordaos is seeking an experienced Backend Engineer to be a part of our ongoing mission to create bespoke mini-proteins to enable ground-breaking therapeutics. This Senior Backend Engineer will work ...",
+    "posted_date_iso": "2025-07-27"
+  },
+  {
+    "job_title": "Middle Data Engineer",
+    "company": "Sigma Software",
+    "salary": "",
+    "tech_stack": "Engineer, Software, Engineer, engineer, Engineer",
+    "timezone": "Poland",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/middle-data-engineer-2038818",
+    "summary": "<br><br><div class=\"h3\">Company Description</div><p>Sigma Software is looking for a motivated Data Engineer to join our expanding engineering team. If you want to work in a close-knit team of Data Eng...",
+    "posted_date_iso": "2025-07-26"
+  },
+  {
+    "job_title": "Senior Microsoft Dynamics GP Consultant",
+    "company": "Enavate",
+    "salary": "",
+    "tech_stack": "Web, rest, WeB, express, api",
+    "timezone": "USA, Canada",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/senior-microsoft-dynamics-gp-consultant-2038926",
+    "summary": "<div class=\"h3\">About the Role</div>\n<p>We’re a fast-growing, US-based IT company and proud Microsoft Gold Partner, known for delivering tailored business solutions that disrupt the SMB space. As we c...",
+    "posted_date_iso": "2025-07-25"
+  },
+  {
+    "job_title": "Software Engineer",
+    "company": "Intergo Telecom Ltd",
+    "salary": "competitive salary and performance-based bonuses",
+    "tech_stack": "Software, Engineer, Software, Engineer, API",
+    "timezone": "Cyprus",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-2038928",
+    "summary": "<p>Are you a talented and innovative <strong>Software Engineer</strong> with a passion for building robust, scalable, and high-performance applications? Do you thrive in a collaborative environment wh...",
+    "posted_date_iso": "2025-07-25"
+  },
+  {
+    "job_title": "Full Stack Engineer",
+    "company": "Sierra Studio",
+    "salary": "",
+    "tech_stack": "Full Stack, Engineer, Docker, engineer, engineer",
+    "timezone": "Brazil",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-engineer-2038931",
+    "summary": "<p style=\"min-height: 1.5em;\"><strong>About Sierra Studio</strong></p>\n<p style=\"min-height: 1.5em;\">Studio When you apply to Sierra, you join an ecosystem. We specialize in connecting talented Brazil...",
+    "posted_date_iso": "2025-07-25"
+  },
+  {
+    "job_title": "AI Engineer",
+    "company": "Orioninnovation",
+    "salary": "",
+    "tech_stack": "Engineer, git, engineer, Engineer, Fullstack",
+    "timezone": "Mexico",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/ai-engineer-2037063",
+    "summary": "<div class='\"content-intro\"'><p>Orion Innovation is a premier, award-winning, global business and technology services firm.  Orion delivers game-changing business transformation and product developmen...",
+    "posted_date_iso": "2025-07-23"
+  },
+  {
+    "job_title": "Implementation Engineer",
+    "company": "Harbor",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, Engineer, Engineer, REST",
+    "timezone": "USA, UK, Canada, Australia",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/implementation-engineer-2037141",
+    "summary": "<p><span><strong>Harbor</strong> is seeking an <strong>Implementation Engineer</strong> to join our Legal Technology + Operations practice. The Implementation Engineer ensures client satisfaction thro...",
+    "posted_date_iso": "2025-07-23"
+  },
+  {
+    "job_title": "React Native Engineer",
+    "company": "Oneapp",
+    "salary": "competitive compensation including base salary and stock options.",
+    "tech_stack": "React, Engineer, git, api, React",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/react-native-engineer-2037323",
+    "summary": "<div class=\"h1\">About OnePay</div><p style=\"min-height:1.5em\">OnePay is a consumer financial services app with an exceedingly simple mission: to help people achieve financial progress.</p><p style=\"mi...",
+    "posted_date_iso": "2025-07-23"
+  },
+  {
+    "job_title": "Software Engineer, Data Infrastructure & Acquisition",
+    "company": "Speechify, Inc.",
+    "salary": "$140k -$200K ",
+    "tech_stack": "Software, Engineer, engineer, Software, Engineer",
+    "timezone": "Worldwide",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-data-infrastructure-acquisition-2038175",
+    "summary": "<ul style=\"\"><li style=\"\"><p><strong>Overview</strong></p><p>We're looking to hire for our Data side of our AI team at Speechify. This role is responsible for all aspects of data collection to support...",
+    "posted_date_iso": "2025-07-23"
+  },
+  {
+    "job_title": "Full Stack Software Engineer",
+    "company": "Helios",
+    "salary": "",
+    "tech_stack": "Full Stack, Software, Engineer, Full Stack, Software",
+    "timezone": "Mauritius",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-software-engineer-2037325",
+    "summary": "<p>We’re hiring a Full Stack Software Engineer to join our growing global team at Helios, an early-stage HR tech SaaS startup revolutionizing how businesses manage global payroll, HCM, and workforce o...",
+    "posted_date_iso": "2025-07-22"
+  },
+  {
+    "job_title": "Data Engineer",
+    "company": "TransfrVR",
+    "salary": "$120,000 - $132,000",
+    "tech_stack": "Engineer, Engineer, engineer, engineer, engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/data-engineer-2037324",
+    "summary": "<div>Transfr is on a mission to help create pathways to career success. Our immersive career exploration and training simulations empower learners and job seekers of all ages find the right job for th...",
+    "posted_date_iso": "2025-07-22"
+  },
+  {
+    "job_title": "Software Engineer",
+    "company": "BEELINE",
+    "salary": "",
+    "tech_stack": "Software, Engineer, Software, Engineer, Software",
+    "timezone": "Ireland",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-2037648",
+    "summary": "<div>\n<div class=\"h4\">Job Details</div>\n<div><strong>Job Location</strong>:    Remote, FL</div>\n<div><strong>Salary Range</strong>:    Undisclosed</div>\n</div>\n<div class=\"h4\">Software Engineer, Joine...",
+    "posted_date_iso": "2025-07-22"
+  },
+  {
+    "job_title": "Full-Stack Developer",
+    "company": "Workleap",
+    "salary": "",
+    "tech_stack": "Full-Stack, Developer, software, Full Stack, Developer",
+    "timezone": "Canada",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-developer-2034576",
+    "summary": "<div class='\"content-intro\"'><div>\n<div class=\"h2\">Company Description</div>\n</div>\n<div class='\"wysiwyg\"'>\n<p>Workleap builds practical employee experience software that makes work simpler.</p>\n<p>Ou...",
+    "posted_date_iso": "2025-07-19"
+  },
+  {
+    "job_title": "Applied ML Research Engineer",
+    "company": "VERSES",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, software, api, Engineer",
+    "timezone": "UK",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/applied-ml-research-engineer-2034644",
+    "summary": "<div class=\"h3\">Applied ML Research Engineer </div><div class=\"h3\">Remote: EU or UK </div><p></p><p>🎉 <strong>About us:</strong></p><p>VERSES is a cognitive computing company building next-generation ...",
+    "posted_date_iso": "2025-07-18"
+  },
+  {
+    "job_title": "JavaScript Engineer",
+    "company": "Constructor",
+    "salary": "$80k - $120k usd",
+    "tech_stack": "JavaScript, Engineer, Engineer, software, engineer",
+    "timezone": "Americas",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/javascript-engineer-2035608",
+    "summary": "<div class=\"h3\">About Us</div><p>Constructor is the next-generation platform for search and discovery in ecommerce, built to explicitly optimize for metrics like revenue, conversion rate, and profit. ...",
+    "posted_date_iso": "2025-07-17"
+  },
+  {
+    "job_title": "Backend Engineer II",
+    "company": "Keyme Locksmiths",
+    "salary": "compensation package that includes base pay",
+    "tech_stack": "Backend, Engineer, backend, backend, backend",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/backend-engineer-ii-2034731",
+    "summary": "<div class=\"mobile-apply-btn\">\n<a class=\"apply-link-marker button apply-button model-full-width branding-button-color\" href=\"/Recruiting/Jobs/Apply/3412587\" rel=\"nofollow\" style=\"width: 100%;\">Apply</...",
+    "posted_date_iso": "2025-07-16"
+  },
+  {
+    "job_title": "AI Machine Learning Engineer",
+    "company": "Constructor",
+    "salary": "$80k - $120k usd",
+    "tech_stack": "Engineer, Engineer, Engineer, api, engineer",
+    "timezone": "Worldwide",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/ai-machine-learning-engineer-2034159",
+    "summary": "<div class=\"h3\">About Us</div>\n<p>Constructor is the next-generation platform for search and discovery in ecommerce, built to explicitly optimize for metrics like revenue, conversion rate, and profit....",
+    "posted_date_iso": "2025-07-15"
+  },
+  {
+    "job_title": "Software Engineer, Backend - Blockchain Platform",
+    "company": "Coinbase Careers Page",
+    "salary": "$154,000 cad",
+    "tech_stack": "Software, Engineer, Backend, Node, web",
+    "timezone": "Canada",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-backend-blockchain-platform-2034094",
+    "summary": "<div class='\"content-intro\"'><p>Ready to be pushed beyond what you think you’re capable of?</p>\n<p>At Coinbase, our mission is to increase economic freedom in the world. It’s a massive, ambitious oppo...",
+    "posted_date_iso": "2025-07-15"
+  },
+  {
+    "job_title": "Software Engineer",
+    "company": "Protolabs",
+    "salary": "",
+    "tech_stack": "Software, Engineer, git, Software, Engineer",
+    "timezone": "Mexico",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-2033146",
+    "summary": "<div><b style=\"\">Be yourself at Protolabs</b><span style=\"\"> </span></div><div><span style=\"\">Studies have shown that women and people of color are less likely to apply to jobs unless they meet every ...",
+    "posted_date_iso": "2025-07-14"
+  },
+  {
+    "job_title": "Developer for Dealer Services",
+    "company": "DATAMAXIS",
+    "salary": "",
+    "tech_stack": "Developer, Developer, developer, developer, Java",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/developer-for-dealer-services-2033148",
+    "summary": "<p><strong>Job Title: Developer for Dealer Services</strong></p><p><strong></strong><strong>Job Type: Full-time</strong></p><p><strong></strong><strong>Years of exp: 7+</strong></p><p><strong></strong...",
+    "posted_date_iso": "2025-07-13"
+  },
+  {
+    "job_title": "Infrastructure Security Engineer",
+    "company": "Descript",
+    "salary": "$187,000- $227,000/year",
+    "tech_stack": "Engineer, engineer, Engineer, engineer, software",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/infrastructure-security-engineer-2033296",
+    "summary": "<div class=\"h1\">About Us</div>\n<p>We are looking for a talented infrastructure security engineer to join our team and help protect our platform, systems, and user data. As a Security Engineer, you wil...",
+    "posted_date_iso": "2025-07-13"
+  },
+  {
+    "job_title": "Full Stack Developer",
+    "company": "Canadian Bank Note Company",
+    "salary": "",
+    "tech_stack": "Full Stack, Developer, Full Stack, Developer, Full Stack",
+    "timezone": "Canada",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-developer-2033297",
+    "summary": "<br><br><div class=\"h3\">Company Description</div><p>BUMP provides secure charitable lottery and fundraising platform solutions to most recognizable professional sports foundations and well-known and d...",
+    "posted_date_iso": "2025-07-13"
+  },
+  {
+    "job_title": "Forward Deployed Engineer",
+    "company": "WithClutch",
+    "salary": "",
+    "tech_stack": "Engineer, engineer, Engineer, engineer, engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/forward-deployed-engineer-2033412",
+    "summary": "<p style=\"min-height:1.5em\"><strong>About the Role</strong></p><p style=\"min-height:1.5em\">Are you an engineer with a founder’s mindset? As a <strong>Forward Deployed Engineer (FDE)</strong> at <stron...",
+    "posted_date_iso": "2025-07-12"
+  },
+  {
+    "job_title": "Managed File Transfer Engineer",
+    "company": "Zotec Partners",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, Engineer, SQL, SQL",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/managed-file-transfer-engineer-2033413",
+    "summary": "<strong>At Zotec Partners, our People make it happen.</strong><br><br>Transforming the healthcare industry isn’t easy. But when you build a team like the one we have, that goal can become a reality. O...",
+    "posted_date_iso": "2025-07-12"
+  },
+  {
+    "job_title": "Data Science Intern",
+    "company": "SkillsecureX",
+    "salary": "inr 12,000 - 18,000 per month",
+    "tech_stack": "Python, SQL, api",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/data-science-intern-2031667",
+    "summary": "<p><strong>Job Description:</strong></p>\n<p><br>As a Data Science Intern, you will collaborate with our data science and analytics teams to work on meaningful projects involving data analysis, predict...",
+    "posted_date_iso": "2025-07-10"
+  },
+  {
+    "job_title": "Full Stack Developer",
+    "company": "Freelance Latin America",
+    "salary": "competitive pay in us dollars.",
+    "tech_stack": "Full Stack, Developer, Full Stack, Developer, backend",
+    "timezone": "Venezuela",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-developer-2031867",
+    "summary": "<p>We are seeking a proactive Full Stack Developer to support both backend and frontend development, as well as internal tools. You will have the opportunity to take ownership of your projects, contri...",
+    "posted_date_iso": "2025-07-09"
+  },
+  {
+    "job_title": "software developer",
+    "company": "Iron River",
+    "salary": "usd 21999.00 - 128999.00 per year",
+    "tech_stack": "software, developer, software, developer, software",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-developer-2031869",
+    "summary": "<p>A qualified software developer is needed by our organization to assist in the advancement of our ongoing projects. Writing code to create software and modifying it to correct bugs, adapt it to new ...",
+    "posted_date_iso": "2025-07-09"
+  },
+  {
+    "job_title": "Solution Architect",
+    "company": "EDB",
+    "salary": "",
+    "tech_stack": "PostgreSQL, engineer, Python, engineer, PostgreSQL",
+    "timezone": "Europe, UK",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/solution-architect-2030874",
+    "summary": "<div class='\"content-intro\"'><p style='\"text-align:'><span style='\"font-family:'><strong>A Little About Us</strong></span></p>\n<p style='\"text-align:'><span style='\"font-family:'>EDB provides a data a...",
+    "posted_date_iso": "2025-07-08"
+  },
+  {
+    "job_title": "Software Engineer",
+    "company": "Voyage Privé",
+    "salary": "",
+    "tech_stack": "Software, Engineer, git, engineer, Software",
+    "timezone": "France",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-2030514",
+    "summary": "<br><br><div class=\"h3\">Description de l'entreprise</div><p>The Opportunity </p><p>Voyage Privé is a leader in the travel industry, entering a defining moment of digital transformation. Our ambition i...",
+    "posted_date_iso": "2025-07-08"
+  },
+  {
+    "job_title": "Platform Software Infrastructure Engineer",
+    "company": "Arista Networks",
+    "salary": "",
+    "tech_stack": "Software, Engineer, rest, Engineer, software",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/platform-software-infrastructure-engineer-2030599",
+    "summary": "<p><br><br></p>\n<div class=\"h3\">Company Description</div>\n<p><strong>Arista Networks</strong> is an industry leader in data-driven, client-to-cloud networking for large data center, campus and routing...",
+    "posted_date_iso": "2025-07-07"
+  },
+  {
+    "job_title": "Open Source Infrastructure Engineer",
+    "company": "Arize AI",
+    "salary": "$125,000 - $225,000 plus equity",
+    "tech_stack": "Engineer, api, software, developer, software",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/open-source-infrastructure-engineer-2030601",
+    "summary": "<div class=\"h3\"><strong>The Opportunity</strong></div>\n<p>AI is rapidly transforming the world. Whether it’s developing the next generation of human-level intelligence, enhancing voice assistants, or ...",
+    "posted_date_iso": "2025-07-07"
+  },
+  {
+    "job_title": "Sr AEM Developer",
+    "company": "Sutherland",
+    "salary": "",
+    "tech_stack": "Developer, engineer, git, api, git",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/sr-aem-developer-2029913",
+    "summary": "<br><br><div class=\"h3\">Company Description</div><p><strong><u>About Sutherland</u></strong></p><p>Artificial Intelligence. Automation. Cloud engineering. Advanced analytics. For business leaders, the...",
+    "posted_date_iso": "2025-07-07"
+  },
+  {
+    "job_title": "Backend Software Engineer",
+    "company": "nexttech",
+    "salary": "",
+    "tech_stack": "Backend, Software, Engineer, Software, software",
+    "timezone": "Romania",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/backend-software-engineer-2028989",
+    "summary": "<p style='\"text-align:'><strong>About Nexttech</strong></p><p style='\"text-align:'>Founded in <strong>2015</strong>, Nexttech has built a solid foundation in delivering comprehensive IT solutions tail...",
+    "posted_date_iso": "2025-07-04"
+  },
+  {
+    "job_title": "Integrations Engineer / Java Developer",
+    "company": "Omilia",
+    "salary": "",
+    "tech_stack": "Engineer, Java, Developer, Engineer, web",
+    "timezone": "Greece",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/integrations-engineer-java-developer-2028991",
+    "summary": "<p>An Integrations Engineer contributes to the design and development of production-grade conversational AI systems. As part of the Solution Delivery - Integrations team, you will work closely with cu...",
+    "posted_date_iso": "2025-07-03"
+  },
+  {
+    "job_title": "API Developer Evangelist",
+    "company": "Public",
+    "salary": "",
+    "tech_stack": "API, Developer, Developer, API, API",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/api-developer-evangelist-2029070",
+    "summary": "<p><strong>About us</strong></p>\n<p>Public is the long-term investing platform. Investors use AI and a vast variety of asset classes, from stocks and bonds to crypto and options, to build portfolios f...",
+    "posted_date_iso": "2025-07-03"
+  },
+  {
+    "job_title": "Machine Learning Engineer",
+    "company": "Nordsec",
+    "salary": "17600 - 29900 pln/month",
+    "tech_stack": "Engineer, Engineer, Engineer, Engineer, Software",
+    "timezone": "Poland",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/machine-learning-engineer-2027035",
+    "summary": "<div><span style=\"\"><b>The world’s most advanced VPN, and a whole lot more. </b></span></div><div><br></div><div><span style=\"\">If you’re a curious problem-solver who carves their own path, join the t...",
+    "posted_date_iso": "2025-07-02"
+  },
+  {
+    "job_title": "Mid-Fullstack Engineer",
+    "company": "Vista Group",
+    "salary": "",
+    "tech_stack": "Fullstack, Engineer, git, web, FullStack",
+    "timezone": "Mexico",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/mid-fullstack-engineer-2027130",
+    "summary": "<p>Powster is a Creative Studio based in London and Los Angeles. We specialize in creating world-class interactive digital experiences and marketing campaigns for major movie studios, broadcasters, mu...",
+    "posted_date_iso": "2025-07-01"
+  },
+  {
+    "job_title": "Sr Engineer - Data Platform & AI",
+    "company": "PointClickCare",
+    "salary": "",
+    "tech_stack": "Engineer, software, software, software, Java",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/sr-engineer-data-platform-ai-2027328",
+    "summary": "<div>At PointClickCare our mission is simple: to help providers deliver exceptional care. And that starts with our people. As a leading health tech company that’s founder-led and privately held, we em...",
+    "posted_date_iso": "2025-06-30"
+  },
+  {
+    "job_title": "Backend Engineer",
+    "company": "deltacapita",
+    "salary": "",
+    "tech_stack": "Backend, Engineer, backend, Python, API",
+    "timezone": "Ireland",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/backend-engineer-2027417",
+    "summary": "<p>You will be responsible for designing and implementing scalable, secure backend services for a SaaS platform, focusing on performance, reliability, and security.</p><p style=\"min-height: 1.7em;\"></...",
+    "posted_date_iso": "2025-06-30"
+  },
+  {
+    "job_title": "Full Stack DeFi Web Developer",
+    "company": "Re7 Capital",
+    "salary": "",
+    "tech_stack": "Full Stack, Web, Developer, api, Full Stack",
+    "timezone": "UK, France, Portugal, Switzerland, Spain",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-defi-web-developer-2026736",
+    "summary": "<p><strong>About Us</strong></p>\n<p> </p>\n<p>Re7 Capital is a London-based cryptoasset investment firm, leveraging our deep crypto network and proprietary data infrastructure to drive investment decis...",
+    "posted_date_iso": "2025-06-28"
+  },
+  {
+    "job_title": ".Net Software Developer",
+    "company": "J.D. Power",
+    "salary": "",
+    "tech_stack": "Software, Developer, Software, Developer, Software",
+    "timezone": "Canada",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/net-software-developer-2025003",
+    "summary": "<p><span><strong>Title</strong>: DDR Intermediate .NET Software Developer - P3<br></span></p>\n<p><span><strong>Location</strong>: Canada - Remote</span></p>\n<p><span><strong>Reports to</strong>: Funct...",
+    "posted_date_iso": "2025-06-27"
+  },
+  {
+    "job_title": "Software Engineer",
+    "company": "Dremio",
+    "salary": "",
+    "tech_stack": "Software, Engineer, developer, AWS, software",
+    "timezone": "Portugal",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-2025432",
+    "summary": "<div class='\"content-intro\"'>\n<div class=\"h2\"><strong>Be Part of Building the Future</strong></div>\n<p>Dremio is the unified lakehouse platform for self-service analytics and AI, serving hundreds of g...",
+    "posted_date_iso": "2025-06-27"
+  },
+  {
+    "job_title": "PostgreSQL Database Administrator",
+    "company": "BAE Systems",
+    "salary": "usd 77,814 - 132,283 per year",
+    "tech_stack": "PostgreSQL, PostgreSQL, PostgreSQL, PostgreSQL, PostgreSQL",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/postgresql-database-administrator-2025436",
+    "summary": "<p>&lt;/br&gt;&lt;b&gt;Job Description &lt;/b&gt;&lt;/br&gt;&lt;em&gt;This is a remote position&lt;/em&gt;&lt;br&gt;&lt;br&gt;We are seeking a highly skilled and experienced &lt;strong&gt;PostgreSQL D...",
+    "posted_date_iso": "2025-06-27"
+  },
+  {
+    "job_title": "Fullstack Software Engineer",
+    "company": "Tellescope",
+    "salary": "$90,000 - $120,000 (equity 0.10% - 0.15%)",
+    "tech_stack": "Fullstack, Software, Engineer, git, git",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/fullstack-software-engineer-2025615",
+    "summary": "<p><strong>** Note that you can be located ANYWHERE in the United States - this role is fully remote (with potentially a couple of in-person meetings a year) **</strong></p><p></p><div class=\"h3\">Abou...",
+    "posted_date_iso": "2025-06-26"
+  },
+  {
+    "job_title": "Staff Data Scientist",
+    "company": "Ravelin",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, Engineer, Engineer, engineer",
+    "timezone": "UK",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/staff-data-scientist-2024375",
+    "summary": "<p><strong>Who are we?</strong></p>\n<p>Hi! 👋 We are Ravelin! We're a fraud detection company using advanced machine learning and network analysis technology to solve big problems. Our goal is to make ...",
+    "posted_date_iso": "2025-06-25"
+  },
+  {
+    "job_title": "Solution Software Engineer",
+    "company": "Trustonic",
+    "salary": "",
+    "tech_stack": "Software, Engineer, Software, Engineer, Engineer",
+    "timezone": "China",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/solution-software-engineer-2024167",
+    "summary": "<br><br><div class=\"h3\">Company Description</div><p>We’re looking for a <strong>Solution Software Engineer</strong> to join our Solution Engineering team. You will be part of a team directly impacting...",
+    "posted_date_iso": "2025-06-24"
+  },
+  {
+    "job_title": "IT Solution Architect",
+    "company": "Full Service Careers",
+    "salary": "usd 143,666 per year",
+    "tech_stack": "software, software, Engineer, Engineer, Engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/it-solution-architect-2024648",
+    "summary": "<p style=\"margin-bottom:0in;\"><span style=\"\"><span style=\"line-height:115%;\"><strong>#LI-DNI</strong></span></span></p><p style=\"margin-bottom:0in;\"><span style=\"\"><span style=\"line-height:115%;\">EMPL...",
+    "posted_date_iso": "2025-06-23"
+  },
+  {
+    "job_title": "Middle FullStack .NET Engineer",
+    "company": "Gr8tech",
+    "salary": "",
+    "tech_stack": "FullStack, Engineer, frontend, software, JavaScript",
+    "timezone": "Worldwide",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/middle-fullstack-net-engineer-2023150",
+    "summary": "<div class='\"content-intro\"'><p><strong>GR8 Tech is a global product company that provides innovative, scalable platforms and business solutions for the iGaming industry.</strong></p>\n<p>We have а gre...",
+    "posted_date_iso": "2025-06-22"
+  },
+  {
+    "job_title": "Engineer",
+    "company": "Braze",
+    "salary": "competitive compensation that may include equity",
+    "tech_stack": "Engineer, api, Engineer, software, engineer",
+    "timezone": "Canada",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/engineer-2023304",
+    "summary": "<div class='\"content-intro\"'>\n<p>At Braze, we have found our people. We’re a genuinely approachable, exceptionally kind, and intensely passionate crew.</p>\n<p>We seek to ignite that passion by setting...",
+    "posted_date_iso": "2025-06-22"
+  },
+  {
+    "job_title": "macOS Agent Engineer",
+    "company": "Halcyon",
+    "salary": "$180k - $240k",
+    "tech_stack": "Engineer, rest, engineer, software, SQL",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/macos-agent-engineer-2022149",
+    "summary": "<div class='\"content-intro\"'>\n<p><strong>What we do:</strong><br>Halcyon is the industry’s first dedicated, adaptive security platform that combines multiple proprietary advanced prevention engines al...",
+    "posted_date_iso": "2025-06-21"
+  },
+  {
+    "job_title": "Full Stack Developer",
+    "company": "Alcumus",
+    "salary": "",
+    "tech_stack": "Full Stack, Developer, rest, full stack, developer",
+    "timezone": "Worldwide",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/full-stack-developer-2022325",
+    "summary": "<div><!--block--><strong>Who We Are </strong><br>Alcumus/Veriforce is the fastest-growing SaaS-technology and services company in the global supply chain risk management market. We help industry-leadi...",
+    "posted_date_iso": "2025-06-21"
+  },
+  {
+    "job_title": "Intern/Junior Full Stack Developer",
+    "company": "Syteca",
+    "salary": "",
+    "tech_stack": "Full Stack, Developer, software, Full Stack, Developer",
+    "timezone": "Ukraine",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/intern-junior-full-stack-developer-2019475",
+    "summary": "<p>Syteca Inc. is a recognized software vendor delivering a cybersecurity platform dedicated to inside perimeter security. The Syteca platform provides advanced user activity monitoring (UAM) and robu...",
+    "posted_date_iso": "2025-06-15"
+  },
+  {
+    "job_title": "AIX Developer",
+    "company": "RE/SPEC Inc.",
+    "salary": "",
+    "tech_stack": "Developer, git, Developer, Python, api",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/aix-developer-2019479",
+    "summary": "<br><br><div class=\"h3\">Company Description</div><p><strong>Big challenges need bold thinkers.</strong></p><p>If you’re someone who sees problems as opportunities, you’ll thrive here. <strong>RESPEC i...",
+    "posted_date_iso": "2025-06-15"
+  },
+  {
+    "job_title": "Backend Developer",
+    "company": "Scorp Inc.",
+    "salary": "usd indexed salary",
+    "tech_stack": "Backend, Developer, engineer, Engineer, backend",
+    "timezone": "Turkey",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/backend-developer-2019481",
+    "summary": "<p><strong>*This is a fully REMOTE position*</strong></p>\n<p><strong>**Only full-time position is available.**</strong></p>\n<p><strong>**USD indexed salary.**</strong></p>\n<p><strong><br></strong></p>...",
+    "posted_date_iso": "2025-06-15"
+  },
+  {
+    "job_title": "AI Automation Engineer",
+    "company": "Quora",
+    "salary": "$155,656 - $225,160 usd + equity + benefits",
+    "tech_stack": "Engineer, api, Engineer, engineer, software",
+    "timezone": "Northern America, Europe, Ireland",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/ai-automation-engineer-2019545",
+    "summary": "<p style=\"min-height: 1.5em;\"><em>[</em><a href=\"https://www.quora.com/q/quora/Remote-First-at-Quora\" rel=\"nofollow\" target=\"_blank\"><em><strong>Quora is a privately held, \"remote-first\" company</stro...",
+    "posted_date_iso": "2025-06-14"
+  },
+  {
+    "job_title": "Software Engineer II",
+    "company": "Qualia",
+    "salary": "$140,000-$170,000 plus equity",
+    "tech_stack": "Software, Engineer, git, engineer, rest",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-ii-2019631",
+    "summary": "<p>At Qualia, we've built the leading B2B real estate technology that transforms the home buying and selling experience into a simple, secure, and enjoyable process. Our SMB and Enterprise products br...",
+    "posted_date_iso": "2025-06-14"
+  },
+  {
+    "job_title": "Sr. Integration Solutions Engineer",
+    "company": "Built Technologies",
+    "salary": "$125,000-$170,000 usd per year",
+    "tech_stack": "Engineer, developer, web, Engineer, Engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/sr-integration-solutions-engineer-2019732",
+    "summary": "<div class='\"content-intro\"'><div class=\"h2\"><strong>COMPANY OVERVIEW </strong></div>\n<p>Built is a growth-stage company at the intersection of FinTech and PropTech. We are on a mission to change the ...",
+    "posted_date_iso": "2025-06-13"
+  },
+  {
+    "job_title": "API Developer",
+    "company": "BizForce",
+    "salary": "highly competitive salary",
+    "tech_stack": "API, Developer, API, Developer, software",
+    "timezone": "Philippines",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/api-developer-2018209",
+    "summary": "<p>We’re looking for a talented <strong>API Developer</strong> who knows their way around ERP systems and is ready to jump in and build rock-solid integrations. You’ll be working with our team at Camp...",
+    "posted_date_iso": "2025-06-11"
+  },
+  {
+    "job_title": "AI Engineer Specialist",
+    "company": "Digibee Inc.",
+    "salary": "",
+    "tech_stack": "Engineer, developer, Engineer, Engineer, Python",
+    "timezone": "Brazil",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/ai-engineer-specialist-2018414",
+    "summary": "<p><strong>About Digibee</strong></p>\n<p> </p>\n<p>Digibee is an iPaaS that scales integration workflows while reducing cost and technical debt. Rather than require specialized integration experts, Dig...",
+    "posted_date_iso": "2025-06-10"
+  },
+  {
+    "job_title": "Machine Learning Engineer",
+    "company": "Branch International",
+    "salary": "competitive salary and equity package",
+    "tech_stack": "Engineer, api, api, api, api",
+    "timezone": "India",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/machine-learning-engineer-2016308",
+    "summary": "<p><strong>Branch Overview</strong></p>\n<p>Branch delivers world-class financial services to the mobile generation. With offices in the United States, Nigeria, Kenya, and India, Branch is a for-profit...",
+    "posted_date_iso": "2025-06-05"
+  },
+  {
+    "job_title": "Junior Data Engineer",
+    "company": "tires-easy.com",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, engineer, SQL, engineer",
+    "timezone": "Argentina",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/junior-data-engineer-2015573",
+    "summary": "<p><strong>Junior Data Engineer</strong></p>\n<p><br><br></p>\n<p><strong>A bit about us: </strong></p>\n<p>We’re on a mission to change the tire industry — how it’s delivered and how it’s experienced.  ...",
+    "posted_date_iso": "2025-06-04"
+  },
+  {
+    "job_title": "Application Engineer",
+    "company": "ARHS",
+    "salary": "",
+    "tech_stack": "Engineer, software, software, Software, Engineer",
+    "timezone": "Netherlands",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/application-engineer-2015574",
+    "summary": "<br><br><div class=\"h3\">Company Description</div><p>Arηs is a fully <strong>independent</strong> group of companies specialized in managing complex <strong>IT projects and systems</strong> for <strong...",
+    "posted_date_iso": "2025-06-04"
+  },
+  {
+    "job_title": "C# /.NET Developer",
+    "company": "Nitka",
+    "salary": "attractive usd compensation",
+    "tech_stack": "Developer, software, Developer, API, Angular",
+    "timezone": "Worldwide",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/c-net-developer-2015737",
+    "summary": "<p><strong>Nitka Technologies</strong> develops software for customers in the US and Europe and brings together professionals from Eastern Europe, North and South America, Armenia, Georgia and Kazakhs...",
+    "posted_date_iso": "2025-06-04"
+  },
+  {
+    "job_title": "Software Engineer II",
+    "company": "Omada Health",
+    "salary": "$147,200 - $184,000 base salary plus bonuses",
+    "tech_stack": "Software, Engineer, git, software, engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-ii-2014543",
+    "summary": "<p><span style='\"font-weight:'>Omada Health is on a mission to inspire and engage people in lifelong health, one step at a time.  </span></p>\n<p><strong>Job overview:</strong></p>\n<p>Omada Health is a...",
+    "posted_date_iso": "2025-06-03"
+  },
+  {
+    "job_title": "Mobile App Developer",
+    "company": "Popl",
+    "salary": "competitive salary with meaningful equity",
+    "tech_stack": "Developer, git, engineer, React, engineer",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/mobile-app-developer-2014893",
+    "summary": "<p style=\"min-height:1.5em\"></p><div class=\"h1\"><strong>Who We Are</strong></div><p style=\"min-height:1.5em\">The mission of Popl is simple: We connect companies with their future customers. Popl is de...",
+    "posted_date_iso": "2025-06-02"
+  },
+  {
+    "job_title": "Junior JS/Python developer",
+    "company": "TechBiz Global GmbH",
+    "salary": "",
+    "tech_stack": "Python, developer, Python, developer, web",
+    "timezone": "Germany",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/junior-js-python-developer-2012726",
+    "summary": "<p><span style=\"color:#121317\">At TechBiz Global, we are providing recruitment service to our TOP clients from our portfolio. We are currently seeking a Junior JS/Python developer to join one of our c...",
+    "posted_date_iso": "2025-05-31"
+  },
+  {
+    "job_title": "Research Engineer",
+    "company": "Helm AI",
+    "salary": "$150,000 to $250,000",
+    "tech_stack": "Engineer, software, api, software, software",
+    "timezone": "USA",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/research-engineer-2012794",
+    "summary": "<div class='\"content-intro\"'><p><strong>We help make autonomous technologies more efficient, safer, and accessible. </strong></p>\n<p><a href=\"%22https://www.helm.ai/%22\" rel=\"nofollow\">Helm.ai</a> bui...",
+    "posted_date_iso": "2025-05-30"
+  },
+  {
+    "job_title": "Splunk Professional Services Engineer",
+    "company": "Ascera",
+    "salary": "competitive salary and ote",
+    "tech_stack": "Engineer, engineer, software, software, api",
+    "timezone": "Northern America",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/splunk-professional-services-engineer-2013771",
+    "summary": "<p><u><strong>Own The Role:</strong></u></p><p>SP6 is seeking a full-time consultant to join our professional services team in North America. This position involves helping customers with the architec...",
+    "posted_date_iso": "2025-05-29"
+  },
+  {
+    "job_title": "Solutions Architect Lead",
+    "company": "Upstage",
+    "salary": "",
+    "tech_stack": "API, API, API, engineer, engineer",
+    "timezone": "Japan",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/solutions-architect-lead-2013602",
+    "summary": "<p dir=\"ltr\">Upstage focuses on solving business problems using AI technology. With the mission of “Building intelligence for the future of work,” the company goes beyond simple task automation to dev...",
+    "posted_date_iso": "2025-05-26"
+  },
+  {
+    "job_title": "Software Engineer, Customer Infrastructure",
+    "company": "MinIO",
+    "salary": "",
+    "tech_stack": "Software, Engineer, Software, Engineer, Software",
+    "timezone": "Europe",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-customer-infrastructure-2012378",
+    "summary": "<section>\n<p>MinIO is the leader in high-performance, hyper-scale object storage. The company’s commercial offering, AIStor, is built for the exascale data infrastructure challenges presented by moder...",
+    "posted_date_iso": "2025-05-25"
+  },
+  {
+    "job_title": "Software Engineer",
+    "company": "Zencore",
+    "salary": "",
+    "tech_stack": "Software, Engineer, engineer, Engineer, Software",
+    "timezone": "LATAM",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/software-engineer-2011915",
+    "summary": "<div><span style=\"\">Zencore is a fast-growing company founded by former Google Cloud leaders, architects, and engineers. We are seeking candidates with significant experience in Google Cloud to join o...",
+    "posted_date_iso": "2025-05-22"
+  },
+  {
+    "job_title": "Sr. Data Engineer II",
+    "company": "Trueml",
+    "salary": "",
+    "tech_stack": "Engineer, software, git, git, Engineer",
+    "timezone": "Argentina, Mexico, Dominican Republic",
+    "apply_url": "https://remotive.com/remote-jobs/software-dev/sr-data-engineer-ii-2010901",
+    "summary": "<div><em><strong>Why TrueML?</strong></em></div>\n<div> </div>\n<div>TrueML is a mission-driven financial software company that aims to create better customer experiences for distressed borrowers. Consu...",
+    "posted_date_iso": "2025-05-21"
+  },
+  {
+    "job_title": "Public Training Associate",
+    "company": "The Trevor Project",
+    "salary": "",
+    "tech_stack": "git, express, aws, web",
+    "timezone": "Remote - United States",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-public-training-associate-the-trevor-project-1093803",
+    "summary": "<p>About Trevor:</p><p><br></p><p>The Trevor Project is the leading suicide prevention and crisis intervention organization for LGBTQ+ young people. Trevor offers 24/7 crisis services, connecting high...",
+    "posted_date_iso": "2025-08-13"
+  },
+  {
+    "job_title": "FullStack Engineer",
+    "company": "NTD software",
+    "salary": "",
+    "tech_stack": "FullStack, Engineer, Full Stack, Developer, frontend",
+    "timezone": "Latin America",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-fullstack-engineer-ntd-software-1093802",
+    "summary": "<p>We are seeking a versatile Full Stack Developer with hands-on experience across both frontend and backend technologies to design, develop, and maintain dynamic web and mobile applications. The idea...",
+    "posted_date_iso": "2025-08-12"
+  },
+  {
+    "job_title": "Mobile Developer",
+    "company": "The Biz Conquest",
+    "salary": "",
+    "tech_stack": "Developer, React, TypeScript, React, API",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-mobile-developer-the-biz-conquest-1093795",
+    "summary": "<h2 dir=\"ltr\">About Us</h2><p dir=\"ltr\">Weâre an exciting early-stage startup dedicated to empowering small business owners through innovative AI-driven tools. Our flagship product, a simple but use...",
+    "posted_date_iso": "2025-08-10"
+  },
+  {
+    "job_title": "Backend Software Engineer Client Group",
+    "company": "Virta Health",
+    "salary": "",
+    "tech_stack": "Backend, Software, Engineer, Backend, Software",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-backend-software-engineer-client-group-virta-health-1093794",
+    "summary": "<h1><strong>Backend Software Engineer â Client Group</strong></h1><p style=\"min-height:1.5em\">Virta Health is on a mission to transform type 2 diabetes and weight-loss care. Current treatment approa...",
+    "posted_date_iso": "2025-08-10"
+  },
+  {
+    "job_title": "Automation Engineer UI Quality Assurance",
+    "company": "Machinify",
+    "salary": "",
+    "tech_stack": "Engineer, software, Engineer, frontend, front-end",
+    "timezone": "Palo Alto",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-automation-engineer-ui-quality-assurance-machinify-1093789",
+    "summary": "<p style=\"min-height:1.5em\">Machinify is the leading provider of AI-powered software products that transform healthcare claims and payment operations. Each year, the healthcare industry generates over...",
+    "posted_date_iso": "2025-08-09"
+  },
+  {
+    "job_title": "Developer Relations Engineer",
+    "company": "Arbitrum Foundation",
+    "salary": "",
+    "tech_stack": "Developer, Engineer, developer, Web, api",
+    "timezone": "Europe",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-developer-relations-engineer-arbitrum-foundation-1093781",
+    "summary": "<p><span style=\"font-size: 18px\"><b>About Arbitrum Foundation</b></span></p><p><br></p><p>The <b>Arbitrum Foundation</b> is dedicated to scaling Ethereum through cutting-edge <b>Layer 2</b> solutions....",
+    "posted_date_iso": "2025-08-08"
+  },
+  {
+    "job_title": "Customer Experience Associate",
+    "company": "Koala Health",
+    "salary": "",
+    "tech_stack": "web, web, express, web",
+    "timezone": "Remote",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-customer-experience-associate-koala-health-1093780",
+    "summary": "<p>Koala Health is on a mission to simplify pet healthcare and create joyful experiences for pet owners and veterinarians alike. Weâre a fast-growing veterinary pharmacy that delivers medications an...",
+    "posted_date_iso": "2025-08-08"
+  },
+  {
+    "job_title": "Human Resources Associate Mid level",
+    "company": "CoinGecko",
+    "salary": "",
+    "tech_stack": "aws, Web, rest, rest, web",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-human-resources-associate-mid-level-coingecko-1093779",
+    "summary": "<p>CoinGecko is a global leader in tracking cryptocurrency data. Operating since 2014, CoinGecko has built the world's largest cryptocurrency data platform, tracking over 10,000 tokens across more tha...",
+    "posted_date_iso": "2025-08-08"
+  },
+  {
+    "job_title": "Backend Software Engineer",
+    "company": "Prophet Security",
+    "salary": "",
+    "tech_stack": "Backend, Software, Engineer, Backend, Software",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-backend-software-engineer-prophet-security-1093777",
+    "summary": "Remote - Prophet Security is a VC-backed start-up building technologies that leverage generative AI technology to streamline the triage and investigation of security alerts in enterprises.  We are loo...",
+    "posted_date_iso": "2025-08-07"
+  },
+  {
+    "job_title": "Product Engineer",
+    "company": "Tolt",
+    "salary": "",
+    "tech_stack": "Engineer, engineer, Engineer, React, Node",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-product-engineer-tolt-1093775",
+    "summary": "<p><strong><span class=\"notion-enable-hover\">This isn't your typical 9-5 job. We're building the V2 of our entire company from scratch. We need a builder obsessed with solving complex problems at scal...",
+    "posted_date_iso": "2025-08-07"
+  },
+  {
+    "job_title": "Customer Care Advisor",
+    "company": "GoodLeap",
+    "salary": "",
+    "tech_stack": "software, developer, developer, software, git",
+    "timezone": "Remote",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-customer-care-advisor-goodleap-1093771",
+    "summary": "<p><span style=\"font-size: 24px;\">About GoodLeap:</span></p><p>GoodLeap is a technology company delivering best-in-class financing and software products for sustainable solutions, from solar panels an...",
+    "posted_date_iso": "2025-08-06"
+  },
+  {
+    "job_title": "DevOps Engineer",
+    "company": "InfStones",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, developer, node, API",
+    "timezone": "Texas",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-devops-engineer-infstones-1093766",
+    "summary": "<p><b>Job Position: DevOps Engineer</b></p><p><b>Location: Texas, California, Georgia, USA (Remote Acceptable - USA Applicants Only)</b></p><p><b>Company: <a class=\"postings-link\" href=\"https://infsto...",
+    "posted_date_iso": "2025-08-06"
+  },
+  {
+    "job_title": "Technical Writer",
+    "company": "Peach Finance",
+    "salary": "",
+    "tech_stack": "API, developer, developer, api, developer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-technical-writer-peach-finance-1093765",
+    "summary": "<p><span style=\"font-size: 11pt;\">Peach is a modern and configurable lending technology platform that helps lenders launch new lending products. Our product is API-based, which means our developer res...",
+    "posted_date_iso": "2025-08-06"
+  },
+  {
+    "job_title": "Customer Support Engineer I Intern",
+    "company": "CloudWalk",
+    "salary": "",
+    "tech_stack": "Engineer, engineer, SQL, Python, engineer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-customer-support-engineer-i-intern-cloudwalk-1093763",
+    "summary": "<p><b style=\"font-size: 11.5pt\">About CloudWalk:</b></p><p><span style=\"font-size: 16px\">We are not just another fintech unicorn. We are a pack of dreamers, makers, and tech enthusiasts building the f...",
+    "posted_date_iso": "2025-08-05"
+  },
+  {
+    "job_title": "Account Executive",
+    "company": "CoinGecko",
+    "salary": "",
+    "tech_stack": "API, API, API, API, API",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-account-executive-coingecko-1093761",
+    "summary": "<p>CoinGecko is a global leader in tracking cryptocurrency data. Operating since 2014, CoinGecko has built the world's largest cryptocurrency data platform, tracking over 10,000 tokens across more tha...",
+    "posted_date_iso": "2025-08-04"
+  },
+  {
+    "job_title": "Data Engineer",
+    "company": "Nomi Health",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, engineer, SQL, SQL",
+    "timezone": "Austin, Texas",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-data-engineer-nomi-health-1093750",
+    "summary": "<p><span style=\"font-size: 16px;\">We are looking for a talented Data Engineer to join our team in Austin, Texas. You will be responsible for the design, implementation, maintenance of our data pipelin...",
+    "posted_date_iso": "2025-07-31"
+  },
+  {
+    "job_title": "Associate Director Clinical Monitoring",
+    "company": "WEP Clinical ",
+    "salary": "",
+    "tech_stack": "api, express",
+    "timezone": "Remote, US",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-associate-director-clinical-monitoring-wep-clinical-1093749",
+    "summary": "<p><span style=\"font-size: 16px\">Are you passionate about driving the successful delivery of clinical trials and leading teams that contribute to the development of life-changing therapies? At WEP Cli...",
+    "posted_date_iso": "2025-07-30"
+  },
+  {
+    "job_title": "Software engineer",
+    "company": "Sticker Mule",
+    "salary": "",
+    "tech_stack": "Software, engineer, TypeScript, GraphQL, Docker",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-software-engineer-sticker-mule-1093738",
+    "summary": "<p><strong>About Sticker Mule</strong></p><p>Sticker Mule, the Internet's favorite custom printer, is building the Internet's best commerce platform. We are privately-owned, which means no meddlesome ...",
+    "posted_date_iso": "2025-07-28"
+  },
+  {
+    "job_title": "Associate Data Engineer",
+    "company": "Sayari",
+    "salary": "",
+    "tech_stack": "Engineer, Software, Engineer, Python, Java",
+    "timezone": "United States",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-associate-data-engineer-sayari-1093725",
+    "summary": "<p><b>About Sayari:&nbsp;</b></p><p>Sayari is the transparency company providing the public and private sectors with immediate&nbsp;visibility into complex commercial relationships by delivering the l...",
+    "posted_date_iso": "2025-07-25"
+  },
+  {
+    "job_title": "Web Developer",
+    "company": "MailerLite",
+    "salary": "",
+    "tech_stack": "Web, Developer, Web, Developer, web",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-web-developer-mailerlite-1093712",
+    "summary": "<div class=\"container\"><div class=\"lg:px-20 grid lg:grid-cols-2 gap-6 lg:gap-20 xl:gap-32 items-start\"><div><div class=\"text text-xl leading-relaxed space-y-10 lg:mt-2.5\"><p><a href=\"https://www.maile...",
+    "posted_date_iso": "2025-07-25"
+  },
+  {
+    "job_title": "Associate Customer Success Manager",
+    "company": "COMPLY",
+    "salary": "",
+    "tech_stack": "software, software, software",
+    "timezone": "United States",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-associate-customer-success-manager-comply-1093707",
+    "summary": "<p><u><b>Who Are We:</b></u></p><p>&nbsp;</p><p>We are&nbsp;<b>COMPLY</b>.&nbsp;&nbsp;</p><p>For compliance people.&nbsp;</p><p><br></p><p><b>COMPLY</b> is the leading global provider of comprehensive...",
+    "posted_date_iso": "2025-07-24"
+  },
+  {
+    "job_title": "Infrastructure",
+    "company": "Backpack ",
+    "salary": "",
+    "tech_stack": "engineer, developer, engineer, AWS, Docker",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-infrastructure-backpack-1093700",
+    "summary": "<h2>You will:</h2><ul style=\"min-height:1.5em\"><li><p style=\"min-height:1.5em\">Design, implement, and maintain infrastructure tools and services in Rust</p></li><li><p style=\"min-height:1.5em\">Own CI/...",
+    "posted_date_iso": "2025-07-23"
+  },
+  {
+    "job_title": "Software Engineer Data Infrastructure & Acquisition",
+    "company": "Speechify",
+    "salary": "",
+    "tech_stack": "Software, Engineer, web, Web, frontend",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-software-engineer-data-infrastructure-acquisition-speechify-1093699",
+    "summary": "<p>The mission of Speechify is to make sure that reading is never a barrier to learning.</p><p>Over 50 million people use Speechifyâs text-to-speech products to turn whatever theyâre reading â P...",
+    "posted_date_iso": "2025-07-23"
+  },
+  {
+    "job_title": "Software Engineer II Full Stack",
+    "company": "Greenlight Financial Technology",
+    "salary": "",
+    "tech_stack": "Software, Engineer, Full Stack, Full-Stack, Software",
+    "timezone": "Atlanta (Remote Friendly)",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-software-engineer-ii-full-stack-greenlight-financial-technology-1093698",
+    "summary": "<p>Greenlight is the leading family fintech company on a mission to help parents raise financially smart kids. We proudly serve more than 6 million parents and kids with our award-winning banking app ...",
+    "posted_date_iso": "2025-07-23"
+  },
+  {
+    "job_title": "Associate Creative Director",
+    "company": "Right Side Up",
+    "salary": "",
+    "tech_stack": "git",
+    "timezone": "Austin, TX",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-associate-creative-director-right-side-up-1093697",
+    "summary": "<p><b>About the Job</b></p><p><br></p><p><b>Right Side Up</b> is a collective of premium marketing talentâwith all of the marketing chops and none of the agency fluff. Weâre trusted by the most bu...",
+    "posted_date_iso": "2025-07-23"
+  },
+  {
+    "job_title": "Fullstack Golang Engineer",
+    "company": "Discern",
+    "salary": "",
+    "tech_stack": "Fullstack, Engineer, software, software, engineer",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-fullstack-golang-engineer-discern-1093694",
+    "summary": "Stamford, United States - Discern is a modern registered agent and venture backed software provider. We build technology to automate entity compliance by monitoring status/standing, foreign nexus, aut...",
+    "posted_date_iso": "2025-07-22"
+  },
+  {
+    "job_title": "C C++ Linux developer",
+    "company": "Tempesta Technologies",
+    "salary": "",
+    "tech_stack": "developer, developer, software, MySQL, Python",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-c-c-linux-developer-tempesta-technologies-1093692",
+    "summary": "<p>Weâre looking for talented and experienced C/C++ Linux developers, who can do a lot and want to learn even more. As a part of our team youâll be developing the fastest open source software, inv...",
+    "posted_date_iso": "2025-07-22"
+  },
+  {
+    "job_title": "Content led Marketer",
+    "company": "Melapress",
+    "salary": "",
+    "tech_stack": "front-end, developer, developer, software",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-content-led-marketer-melapress-1093691",
+    "summary": "<p><strong>Location:</strong>Â Remote (Europe &amp; UK)</p><p><strong>Hours:</strong>Â Full-time</p><p><strong>Salary:</strong>Â â¬20.000 - â¬37.500 depending on experience</p><p class=\"is-style-rou...",
+    "posted_date_iso": "2025-07-22"
+  },
+  {
+    "job_title": "WordPress Plugins & Themes developer",
+    "company": "Melapress",
+    "salary": "",
+    "tech_stack": "developer, web, engineer, web, Developer",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-wordpress-plugins-themes-developer-melapress-1093690",
+    "summary": "<p><strong>Launch your WordPress career at Melapress and help us build secure, high-impact products and a great web presence.</strong></p><p>Would you like to turn your love for WordPress into product...",
+    "posted_date_iso": "2025-07-22"
+  },
+  {
+    "job_title": "Software Engineer II Full Stack",
+    "company": "Greenlight Financial Technology",
+    "salary": "",
+    "tech_stack": "Software, Engineer, Full Stack, Full-Stack, Software",
+    "timezone": "Atlanta (Remote Friendly)",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-software-engineer-ii-full-stack-greenlight-financial-technology-1093682",
+    "summary": "<p>Greenlight is the leading family fintech company on a mission to help parents raise financially smart kids. We proudly serve more than 6 million parents and kids with our award-winning banking app ...",
+    "posted_date_iso": "2025-07-21"
+  },
+  {
+    "job_title": "Admin and Support Specialist With Love for Writing",
+    "company": "Interaction Design Foundation",
+    "salary": "",
+    "tech_stack": "rest",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-admin-and-support-specialist-with-love-for-writing-interaction-design-foundation-1093680",
+    "summary": "<p>Imagine waking up each day excited for work, knowing your words and support help shape the futures of learners across the globe. If youâre aÂ <strong>passionate communicator</strong>Â who thrives...",
+    "posted_date_iso": "2025-07-21"
+  },
+  {
+    "job_title": "Content Producer Technical Content Engineer Junior Dev",
+    "company": "Private.Ki",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, Developer, engineer, engineer",
+    "timezone": "",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-content-producer-technical-content-engineer-junior-dev-private-ki-1093677",
+    "summary": "<p></p><p>Private.Ki is searching for a <strong>Content Producer /</strong> <strong>Technical Content Engineer</strong> <strong>/ Junior Developer</strong> who can turn cryptography tech into clear, c...",
+    "posted_date_iso": "2025-07-21"
+  },
+  {
+    "job_title": "Underwriter",
+    "company": "Gravie",
+    "salary": "",
+    "tech_stack": "api, git, git",
+    "timezone": "Remote",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-underwriter-gravie-1093665",
+    "summary": "<p><span style=\"font-size: 16px;\">Hi, weâre Gravie. Our mission is to improve the way people purchase and access healthcare through innovative, consumer-centric health benefit solutions that people ...",
+    "posted_date_iso": "2025-07-18"
+  },
+  {
+    "job_title": "Full Stack Engineer",
+    "company": "Sensor Tower",
+    "salary": "",
+    "tech_stack": "Full Stack, Engineer, git, web, full stack",
+    "timezone": "Istanbul",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-full-stack-engineer-sensor-tower-1093661",
+    "summary": "<p><b>Fraud warning: </b></p><p>It's common for scammers to create positions that look legitimate on other sites.&nbsp; To ensure your submission is considered, only apply for positions at Sensor Towe...",
+    "posted_date_iso": "2025-07-18"
+  },
+  {
+    "job_title": "Investment Research Associate",
+    "company": "Seaport Global Holdings LLC",
+    "salary": "",
+    "tech_stack": "api, api, api, engineer, Python",
+    "timezone": "Flexible",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-investment-research-associate-seaport-global-holdings-llc-1093645",
+    "summary": "<p><b><u style=\"font-size: 11pt;\">Seaport Research Partners Overview</u></b></p><p><span style=\"font-size: 11pt;\">Seaport Research Partners (âSRPâ) is a rapidly expanding, innovative sell -side re...",
+    "posted_date_iso": "2025-07-17"
+  },
+  {
+    "job_title": "Solution Engineer Development & Observability",
+    "company": "",
+    "salary": "",
+    "tech_stack": "Engineer, Software, Engineer, Software, Backend",
+    "timezone": "Langenselbold",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/rudl-it-solutions-gmbh/solution-engineer-development-observability-langenselbold-237055",
+    "summary": "<p>Ich bin Michael, Gründer und Geschäftsführer der Rudl IT Solutions GmbH – und bisher auch einziger Mitarbeiter. Seit drei Jahren bin ich erfolgreich als Solo-Unternehmer in Projekten unterwegs und ...",
+    "posted_date_iso": "1755309542"
+  },
+  {
+    "job_title": "Junior SEO Consultant (m/w/d) bei lunapark Köln, Deutschland (hybrid)",
+    "company": "",
+    "salary": "",
+    "tech_stack": "git, git, git, Web, Web",
+    "timezone": "Cologne",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/luna-park-gmbh-digital-marketing-agentur/junior-seo-consultant-bei-lunapark-koln-deutschland-hybrid-cologne-148055",
+    "summary": "<p><strong>Über uns</strong></p>\n<p>Wir sind lunapark, eine führende Digital Marketing Agentur mit Schwerpunkt auf datengetriebene Strategien in SEO, SEA, Social Ads, Analytics und Martech. Seit über ...",
+    "posted_date_iso": "1755268743"
+  },
+  {
+    "job_title": "Junior Investment Analyst (m/w/d)",
+    "company": "",
+    "salary": "",
+    "tech_stack": "api, api, software, git, git",
+    "timezone": "Berlin",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/finment-gmbh/junior-investment-analyst-berlin-42430",
+    "summary": "<p><strong>Unsere Mission: “Lass Dein Geld noch effizienter für Dich arbeiten!”</strong></p>\n<p>Wir sind FinMent - ein schnell wachsendes, zweifach staatlich zertifiziertes FinTech Startup in Berlin. ...",
+    "posted_date_iso": "1755266943"
+  },
+  {
+    "job_title": "Duales Studium Wirtschaftsinformatik - Web Developer (m/w/d)",
+    "company": "",
+    "salary": "",
+    "tech_stack": "Web, Developer, api, Software, Frontend",
+    "timezone": "Berlin",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/finment-gmbh/duales-studium-wirtschaftsinformatik-web-developer-berlin-398290",
+    "summary": "<p><strong>Unsere Mission: “Lass Dein Geld noch effizienter für Dich arbeiten!”</strong></p>\n<p>Wir sind FinMent - ein schnell wachsendes, zweifach staatlich zertifiziertes FinTech Startup in Berlin. ...",
+    "posted_date_iso": "1755266943"
+  },
+  {
+    "job_title": "Kotlin/PHP Backend Engineer (m/f/d)",
+    "company": "",
+    "salary": "",
+    "tech_stack": "PHP, Backend, Engineer, Backend, Engineer",
+    "timezone": "München, Bayern, Germany",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/flix/kotlin-php-backend-engineer-munchen-302966",
+    "summary": "<p data-renderer-start-pos=\"1\">&nbsp;</p>\n<p data-start=\"328\" data-end=\"701\">At Flix, we offer a tech-driven environment where innovation meets real-world impact, with competitive pay, strong growth o...",
+    "posted_date_iso": "1755265512"
+  },
+  {
+    "job_title": "Kotlin/Java Backend Engineer (m/f/d)",
+    "company": "",
+    "salary": "",
+    "tech_stack": "Java, Backend, Engineer, Backend, Engineer",
+    "timezone": "München, Bayern, Germany",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/flix/kotlin-java-backend-engineer-munchen-322609",
+    "summary": "<p data-renderer-start-pos=\"1\">&nbsp;</p>\n<p data-start=\"328\" data-end=\"701\">At Flix, we offer a tech-driven environment where innovation meets real-world impact, with competitive pay, strong growth o...",
+    "posted_date_iso": "1755265512"
+  },
+  {
+    "job_title": "Grocery Shift Lead",
+    "company": "",
+    "salary": "",
+    "tech_stack": "rest",
+    "timezone": "Munich, Bavaria, Germany",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/wolt-english/grocery-shift-lead-munich-294290",
+    "summary": "<div class=\"content-intro\"><h2><span data-sheets-root=\"1\">About Wolt</span></h2>\n<p><span data-sheets-root=\"1\">At Wolt, we create technology that brings joy, simplicity and earnings to the neighborhoo...",
+    "posted_date_iso": "1755265511"
+  },
+  {
+    "job_title": "Junior Social Media Manager",
+    "company": "",
+    "salary": "",
+    "tech_stack": "react, rest, aws",
+    "timezone": "Hamburg",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/pulse-advertising-gmbh/junior-social-media-manager-hamburg-477711",
+    "summary": "<p>As a Junior Social Media Manager at PULSE advertising, you take ownership of content, community, and performance across platforms like Instagram, TikTok &#x26; more. You connect strategy with creat...",
+    "posted_date_iso": "1755261543"
+  },
+  {
+    "job_title": "SEO Trainee mit Schwerpunkt Generative Engine Optimization (GEO), OnPage und Content (m/w/d) bei lunapark Köln, Deutschland (hybrid)",
+    "company": "",
+    "salary": "",
+    "tech_stack": "git, Web, Web, Developer, HTML",
+    "timezone": "Cologne",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/luna-park-gmbh-digital-marketing-agentur/seo-trainee-mit-schwerpunkt-generative-engine-optimization-geo-onpage-und-content-bei-lunapark-koln-deutschland-hybrid-cologne-59728",
+    "summary": "<p>Wir sind lunapark, eine führende Digital Marketing Agentur mit Schwerpunkt auf datengetriebene Strategien in SEO, SEA, Social Ads, Analytics und Martech. Seit über 25 Jahren unterstützen wir mittel...",
+    "posted_date_iso": "1755275343"
+  },
+  {
+    "job_title": "System-Engineer (w/m/d)",
+    "company": "",
+    "salary": "",
+    "tech_stack": "Engineer, Engineer, Engineer",
+    "timezone": "Hamburg",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/forty-five-personalberatung-wiesbaden-gmbh-co-kg/system-engineer-hamburg-465410",
+    "summary": "<p><strong>Unser Kunde ist ein innovatives Systemhaus mit ca. 400 Mitarbeitern. Es gehört zu den am schnellsten wachsenden und besten Technology-Unternehmen Deutschlands seiner Branche mit mehreren St...",
+    "posted_date_iso": "1755257942"
+  },
+  {
+    "job_title": "FullStack Engineer",
+    "company": "FullStack EngineerNTD software💃 Latin America💰 $60k - $125k*",
+    "salary": "",
+    "tech_stack": "FullStack, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteok.com/remote-jobs/remote-fullstack-engineer-ntd-software-1093802",
+    "summary": "Listing from RemoteOK",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Mobile Developer",
+    "company": "Mobile DeveloperverifiedThe Biz Conquest💃 Latin America💰 $20k - $40k",
+    "salary": "",
+    "tech_stack": "Developer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteok.com/remote-jobs/remote-mobile-developer-the-biz-conquest-1093795",
+    "summary": "Listing from RemoteOK",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Javascript Fullstack Engineer Senior",
+    "company": "Javascript Fullstack Engineer Senior🎈Lumenalta🌏 Worldwide🇪🇺 Europe💰 $50k - $90k",
+    "salary": "",
+    "tech_stack": "Javascript, Fullstack, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteok.com/remote-jobs/remote-javascript-fullstack-engineer-senior-lumenalta-1092919",
+    "summary": "Listing from RemoteOK",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "WordPress Plugins & Themes developer",
+    "company": "WordPress Plugins & Themes developerverifiedMelapress🇪🇺 Europe🇬🇧 United Kingdom🇹🇷 Turkey💰 $20k - $40k",
+    "salary": "",
+    "tech_stack": "developer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteok.com/remote-jobs/remote-wordpress-plugins-themes-developer-melapress-1093690",
+    "summary": "Listing from RemoteOK",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Software engineer",
+    "company": "Software engineerSticker Mule💰 $140k - $180k",
+    "salary": "",
+    "tech_stack": "Software, engineer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteok.com/remote-jobs/remote-software-engineer-sticker-mule-1093738",
+    "summary": "Listing from RemoteOK",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Web Developer",
+    "company": "Web DeveloperverifiedMailerLite🌏 Worldwide💰 $40k - $60k",
+    "salary": "",
+    "tech_stack": "Web, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteok.com/remote-jobs/remote-web-developer-mailerlite-1093712",
+    "summary": "Listing from RemoteOK",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Software Engineer Data Infrastructure & Acquisition",
+    "company": "Software Engineer Data Infrastructure & AcquisitionverifiedSpeechify🌏 Worldwide💰 $140k - $200k",
+    "salary": "",
+    "tech_stack": "Software, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteok.com/remote-jobs/remote-software-engineer-data-infrastructure-acquisition-speechify-1093699",
+    "summary": "Listing from RemoteOK",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Content Producer Technical Content Engineer Junior Dev",
+    "company": "Content Producer Technical Content Engineer Junior DevPrivate.Ki🌏 Worldwide💰 $20k - $40k",
+    "salary": "",
+    "tech_stack": "Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteok.com/remote-jobs/remote-content-producer-technical-content-engineer-junior-dev-private-ki-1093677",
+    "summary": "Listing from RemoteOK",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Spanish Speaking Software Support Engineer",
+    "company": "Spanish Speaking Software Support EngineerverifiedPayara🌏 Worldwide💃 Latin America🇪🇸 Spain🇷🇴 Romania💰 $10k - $30k",
+    "salary": "",
+    "tech_stack": "Software, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://remoteok.com/remote-jobs/remote-spanish-speaking-software-support-engineer-payara-1093246",
+    "summary": "Listing from RemoteOK",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Full Stack Software Engineer",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Full Stack, Software, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://jobspresso.co/author/jobspresso/",
+    "summary": "Listing from Jobspresso",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Software Engineer, Full Stack, People Innovation",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Software, Engineer, Full Stack",
+    "timezone": "Remote",
+    "apply_url": "https://jobspresso.co/author/jobspresso/",
+    "summary": "Listing from Jobspresso",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Full Stack Engineer, Typescript, Messaging Team",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Full Stack, Engineer, Typescript",
+    "timezone": "Remote",
+    "apply_url": "https://jobspresso.co/author/jobspresso/",
+    "summary": "Listing from Jobspresso",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Full Stack Software Engineer",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Full Stack, Software, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://jobspresso.co/author/jobspresso/",
+    "summary": "Listing from Jobspresso",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Full Stack Software Engineer, Catering",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Full Stack, Software, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://jobspresso.co/author/jobspresso/",
+    "summary": "Listing from Jobspresso",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Intermediate Full Stack Developer",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Full Stack, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://jobspresso.co/author/jobspresso/",
+    "summary": "Listing from Jobspresso",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "",
+    "company": "WN Capital Partners",
+    "salary": "",
+    "tech_stack": "chief of staff,executive assistant,communication,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1073352/",
+    "summary": "<h2>About WN Capital Partners</h2><p>WN Capital Partners is a micro family office that operates like a high-growth startup. We&#39;re AI-first, globally distributed, and built for scale. Unlike traditional corporations, we function as a lean operatio...",
+    "posted_date_iso": "2025-08-14"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "social media,communication,german",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1072458/",
+    "summary": "<p>Suchen Sie eine freiberufliche T&auml;tigkeit, bei der Sie bequem von zu Hause aus Technologie mitgestalten k&ouml;nnen? Wenn Sie dynamisch, technisch versiert und st&auml;ndig online sind, um sich weiterzubilden, ist dieses flexible Teilzeitproje...",
+    "posted_date_iso": "2025-08-14"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "english,czech,communication,social media",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1072452/",
+    "summary": "<p>Seeking a freelance project that will allow you to work from home while making a difference in the world of technology? If you are someone who is passionate and enjoys staying ahead of the tech curve this part-time remote project with flexible wor...",
+    "posted_date_iso": "2025-08-14"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "english,german,communication",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1072442/",
+    "summary": "<p>Seeking a freelance project that will allow you to work from home while making a difference in the world of technology? If you are someone who is passionate and enjoys staying ahead of the tech curve this part-time remote project with flexible wor...",
+    "posted_date_iso": "2025-08-14"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "analyst,communication,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1072402/",
+    "summary": "<p>Ready to say goodbye to the boring, traditional 9-5 routine and embrace a dynamic and exciting work environment that puts you in control? This position offers you the flexibility to set your own schedule and complete exciting tasks using an innova...",
+    "posted_date_iso": "2025-08-14"
+  },
+  {
+    "job_title": "",
+    "company": "Peroptyx",
+    "salary": "",
+    "tech_stack": "data analyst,japanese,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1068449/",
+    "summary": "<p>For thousands of years, maps have provided humans with the knowledge they need to make decisions. As a Maps Evaluator, you will have the opportunity to provide ground truth for your town, city or country.</p><p>&nbsp;</p><p>At Peroptyx, we are loo...",
+    "posted_date_iso": "2025-08-12"
+  },
+  {
+    "job_title": "",
+    "company": "OneForma",
+    "salary": "",
+    "tech_stack": "english,quality",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1068447/",
+    "summary": "<p><strong>Description:</strong></p><p>We are currently looking for long-term participants for our new project, Milky Way!<br />During this Search Engine Evaluation project, participants will evaluate the quality of queries made by internet users whi...",
+    "posted_date_iso": "2025-08-12"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "english,social media,quality",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1066854/",
+    "summary": "<p>&nbsp;</p><p>If you are looking for a part-time remote position that allows you to enjoy working from home while learning more about and contributing to the development of AI technologies, look no further. This flexible freelance role will help yo...",
+    "posted_date_iso": "2025-08-11"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "english,social media,quality",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1066852/",
+    "summary": "<p>Looking for a freelance opportunity where you can make an impact on technology from the comfort of your home? If you are dynamic, tech-savvy, and always online to learn more, this part-time flexible project is the perfect fit for you!&nbsp;</p><p>...",
+    "posted_date_iso": "2025-08-11"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "english,social media,media",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1066848/",
+    "summary": "<p>Seeking a role that will allow you to work from home while making a difference in the world of technology? Are you someone who is passionate about technology and enjoys staying ahead of the tech curve? Are you looking for a role that offers flexib...",
+    "posted_date_iso": "2025-08-11"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "english,czech,media",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1066831/",
+    "summary": "<p>Looking for a freelance opportunity where you can make an impact on technology from the comfort of your home? If you are dynamic and always online to learn more, this part-time flexible project is the perfect fit for you!</p><p>&nbsp;</p><p><stron...",
+    "posted_date_iso": "2025-08-11"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "english,persian,media",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1066822/",
+    "summary": "<p>Seeking a freelance project that will allow you to work from home while making a difference in the world of technology? If you are someone who is passionate and enjoys staying ahead of the tech curve this part-time remote project with flexible wor...",
+    "posted_date_iso": "2025-08-11"
+  },
+  {
+    "job_title": "",
+    "company": "Clipboard Health",
+    "salary": "",
+    "tech_stack": "b2b,account manager,communication,phone,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/912122/",
+    "summary": "<p><!-- x-tinymce/html --></p><h3><strong>About the Role</strong></h3><p>Clipboard Health is looking for <strong>highly motivated, customer-focused individuals</strong> to join our team as <strong>B2B Support Specialists (HCF Agents).</strong> This i...",
+    "posted_date_iso": "2025-08-10"
+  },
+  {
+    "job_title": "",
+    "company": "StubGroup",
+    "salary": "",
+    "tech_stack": "inbound sales,google ads,communication,digital marketing,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1060259/",
+    "summary": "<p><strong>Who we are:</strong></p><p>We are a team of hard-working marketers running a Premier Google Partner ad agency.</p><p>We help businesses large and small. Most of our clients are located in the United States, and our team members are located...",
+    "posted_date_iso": "2025-08-08"
+  },
+  {
+    "job_title": "",
+    "company": "Lemon.io",
+    "salary": "",
+    "tech_stack": "nodejs,react,react native,nextjs,aws",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1059431/",
+    "summary": "<p>Are you a talented Senior Developer looking for a remote job that lets you show your skills and get decent compensation? Look no further than <a target=\"_blank\" href=\"https://lemon.io/for-developers/?utm_source=workingnomads&utm_medium=job_ad&utm_...",
+    "posted_date_iso": "2025-08-07"
+  },
+  {
+    "job_title": "",
+    "company": "Peroptyx",
+    "salary": "",
+    "tech_stack": "data analyst,social media,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1059405/",
+    "summary": "<p>For thousands of years, maps have provided humans with the knowledge they need to make decisions. As a Maps Evaluator, you will have the opportunity to provide ground truth for your town, city or country.</p><p>&nbsp;</p><p>At Peroptyx, we are loo...",
+    "posted_date_iso": "2025-08-07"
+  },
+  {
+    "job_title": "",
+    "company": "Sneed & Mitchell LLP",
+    "salary": "",
+    "tech_stack": "operations,communication,data entry",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1046209/",
+    "summary": "<p><strong>Company Overview&nbsp;</strong><br /><br />At Sneed &amp; Mitchell, the work we do matters. For thousands of Americans, we&rsquo;re their last line of defense against insurance companies and large corporations or dangerous products. From a...",
+    "posted_date_iso": "2025-07-31"
+  },
+  {
+    "job_title": "",
+    "company": "Marker",
+    "salary": "",
+    "tech_stack": "editing,creative,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1045908/",
+    "summary": "<p><strong>⭐ Get paid to talk about your favourite brands and products on video (regardless of how many followers you have).⭐</strong></p><p>We&rsquo;re Marker Video, and we&rsquo;re looking for creative and social-media-obsessed people to join our p...",
+    "posted_date_iso": "2025-07-31"
+  },
+  {
+    "job_title": "",
+    "company": "Sneed|Mitchell LLP",
+    "salary": "",
+    "tech_stack": "customer service,communication,operations,scheduling",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1042345/",
+    "summary": "<p><strong>Summary</strong></p><p>The&nbsp;<strong>Case Processing Manager&nbsp;</strong>will work closely with leadership and insurance carriers to aid in resolving cases. This individual will be responsible for providing critical support to new cli...",
+    "posted_date_iso": "2025-07-29"
+  },
+  {
+    "job_title": "",
+    "company": "Peroptyx",
+    "salary": "",
+    "tech_stack": "data analyst,dutch,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1036210/",
+    "summary": "<p>For thousands of years, maps have provided humans with the knowledge they need to make decisions. As a Maps Evaluator, you will have the opportunity to provide ground truth for your town, city or country.</p><p>At Peroptyx, we are looking for Data...",
+    "posted_date_iso": "2025-07-25"
+  },
+  {
+    "job_title": "",
+    "company": "Peroptyx",
+    "salary": "",
+    "tech_stack": "data analyst,dutch,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1036208/",
+    "summary": "<p>For thousands of years, maps have provided humans with the knowledge they need to make decisions. As a Maps Evaluator, you will have the opportunity to provide ground truth for your town, city or country.</p><p>&nbsp;</p><p>At Peroptyx, we are loo...",
+    "posted_date_iso": "2025-07-25"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "social media,english,quality",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1034427/",
+    "summary": "<p>If you are looking for a part-time remote position that allows you to enjoy working from home while learning more about and contributing to the development of AI technologies, look no further. This flexible freelance role will help you to make you...",
+    "posted_date_iso": "2025-07-24"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "english,social media,quality",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1034425/",
+    "summary": "<p>If you are looking for a part-time remote position that allows you to enjoy working from home while learning more about and contributing to the development of AI technologies, look no further. This flexible freelance role will help you to make you...",
+    "posted_date_iso": "2025-07-24"
+  },
+  {
+    "job_title": "",
+    "company": "StubGroup",
+    "salary": "",
+    "tech_stack": "google ads,leadership,communication,client relationship",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1030765/",
+    "summary": "<h3><strong>Who we are</strong></h3><p>We are a team of high-performance marketers running a Google Premier Partner ad agency.</p><p>We serve businesses large and small. Most of our clients are located in the United States, and our team members are l...",
+    "posted_date_iso": "2025-07-22"
+  },
+  {
+    "job_title": "",
+    "company": "StubGroup",
+    "salary": "",
+    "tech_stack": "google ads,client relationship,leadership,account manager",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1030754/",
+    "summary": "<h3><strong>Who we are</strong></h3><p>We are a team of hard-working marketers running a Premier Google Partner ad agency.</p><p>We help businesses large and small. Most of our clients are located in the United States, and our team members are locate...",
+    "posted_date_iso": "2025-07-22"
+  },
+  {
+    "job_title": "",
+    "company": "StubGroup",
+    "salary": "",
+    "tech_stack": "lead generation,ecommerce,client relationship,account manager,adwords",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1030748/",
+    "summary": "<h3>Who we are</h3><p>We are a team of hard-working marketers running a Premier Google Partner ad agency.</p><p>We help businesses large and small. Most of our clients are located in the United States, and our team members are located throughout the ...",
+    "posted_date_iso": "2025-07-22"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "social media,communication,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1011000/",
+    "summary": "<p>Seeking a freelance project that will allow you to work from home while making a difference in the world of technology? If you are someone who is passionate and enjoys staying ahead of the tech curve, this part-time remote project with flexible wo...",
+    "posted_date_iso": "2025-07-21"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "social media,communication,english",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1011101/",
+    "summary": "<p>Seeking a freelance project that will allow you to work from home while making a difference in the world of technology? If you are someone who is passionate and enjoys staying ahead of the tech curve this part-time remote project with flexible wor...",
+    "posted_date_iso": "2025-07-21"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "social media,communication,german",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1011103/",
+    "summary": "<p>Suchen Sie eine freiberufliche T&auml;tigkeit, bei der Sie bequem von zu Hause aus Technologie mitgestalten k&ouml;nnen? Wenn Sie dynamisch, technisch versiert und st&auml;ndig online sind, um sich weiterzubilden, ist dieses flexible Teilzeitproje...",
+    "posted_date_iso": "2025-07-21"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "social media,communication,english,quality",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1011117/",
+    "summary": "<p><strong>Seeking a role that will allow you to work from home while making a difference in the world of technology? Are you someone who is passionate about technology and enjoys staying ahead of the tech curve? Are you looking for a role that offer...",
+    "posted_date_iso": "2025-07-21"
+  },
+  {
+    "job_title": "",
+    "company": "TELUS Digital",
+    "salary": "",
+    "tech_stack": "social media,ios,english,android,media",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/1011127/",
+    "summary": "<p>If you are looking for a part-time remote position that allows you to enjoy working from home while learning more about and contributing to the development of AI technologies, look no further. This flexible freelance role will help you to make you...",
+    "posted_date_iso": "2025-07-21"
+  },
+  {
+    "job_title": "",
+    "company": "Chat Assassins",
+    "salary": "",
+    "tech_stack": "english,social media,customer service",
+    "timezone": "Remote",
+    "apply_url": "https://www.workingnomads.com/job/go/42225/",
+    "summary": "<p><strong>Becoming a Chat Assassin is a job opportunity for high-level English speakers located in Latin America to have a stable income in $USD that allows them to provide for their families and work from home.</strong></p><p><strong>Chat Assassins...",
+    "posted_date_iso": "2025-07-08"
+  },
+  {
+    "job_title": "Web Developer for Online Grocery Store",
+    "company": "Arc Exclusive",
+    "salary": "",
+    "tech_stack": "Web, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://arc.dev/remote-jobs/details/web-developer-for-online-grocery-store-msl2alnk8w",
+    "summary": "Listing from Arc",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Full-Stack Developer for Legal Tech AI Platform",
+    "company": "Arc Exclusive",
+    "salary": "",
+    "tech_stack": "Full-Stack, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://arc.dev/remote-jobs/details/full-stack-developer-for-legal-tech-ai-platform-mskgkup7r4",
+    "summary": "Listing from Arc",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Full Stack Developer for Inventory Management System (PHP, SQL, Javascript) - Full Time - LATAM/NA",
+    "company": "Arc Exclusive",
+    "salary": "",
+    "tech_stack": "Full Stack, Developer, PHP, SQL, Javascript",
+    "timezone": "Remote",
+    "apply_url": "https://arc.dev/remote-jobs/details/full-stack-developer-for-inventory-management-system-php-sql-javascript-full-time-latam-na-msfnhdkjs9",
+    "summary": "Listing from Arc",
+    "posted_date_iso": "2025-08-16"
+  },
+  {
+    "job_title": "Fullstack Developer Berlin (all people)",
+    "company": "THE BRETTINGHAMS GmbH",
+    "salary": "",
+    "tech_stack": "Fullstack, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://arc.dev/remote-jobs/j/the-brettinghams-gmbh-fullstack-developer-berlin-all-people-msx5ro91bx",
+    "summary": "Listing from Arc",
+    "posted_date_iso": "2025-08-16"
+  }
+]

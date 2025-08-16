@@ -86,9 +86,16 @@ def generate_cover_letter_from_job_data(job_data_json):
         
         # Parse job data
         if isinstance(job_data_json, str):
+            if not job_data_json.strip():
+                print("❌ No job data found (empty string) — skipping cover letter generation.")
+                return None
             job_data = json.loads(job_data_json)
         else:
             job_data = job_data_json
+
+        if not job_data:
+            print("❌ No job data found (empty list/dict) — skipping cover letter generation.")
+            return None    
             
         # Handle if it's a list of jobs
         if isinstance(job_data, list) and len(job_data) > 0:
