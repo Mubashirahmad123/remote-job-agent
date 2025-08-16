@@ -1,9 +1,49 @@
 import requests, json
 import re
 import datetime
+from dateutil import parser as date_parser
 import time
 import random
 from bs4 import BeautifulSoup
+
+def normalize_date(date_value, source="unknown"):
+    """Normalize any date format to ISO (YYYY-MM-DD)."""
+    if not date_value:
+        return datetime.date.today().isoformat()
+    
+    try:
+        # Handle Unix timestamps (both seconds and milliseconds)
+        if isinstance(date_value, (int, float)) or (isinstance(date_value, str) and date_value.replace('.', '').isdigit()):
+            timestamp = float(date_value)
+            # Check for milliseconds
+            if timestamp > 10000000000:
+                timestamp /= 1000
+            return datetime.datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d')
+        
+        # Handle string dates
+        if isinstance(date_value, str):
+            # Handle ISO date format (just take first 10 chars)
+            if len(date_value) >= 10 and date_value[4] == '-' and date_value[1] == '-':
+                return date_value[:10]
+            # Parse other formats
+            return date_parser.parse(date_value).strftime('%Y-%m-%d')
+            
+    except Exception as e:
+        print(f"  Warning: Could not parse date '{date_value}' from {source}: {e}")
+        return datetime.date.today().isoformat()
+    
+    return datetime.date.today().isoformat()
+
+def clean_html(raw_html):
+    """Remove HTML tags from text"""
+    if not raw_html:
+        return ""
+    cleanr = re.compile('<.*?>')
+    cleaned = re.sub(cleanr, '', str(raw_html))
+    # Decode common HTML entities
+    cleaned = cleaned.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&').replace('&quot;', '"')
+    return cleaned.strip()
+
 
 # === UTILITY FUNCTIONS ===
 def clean_text(element):
@@ -187,8 +227,9 @@ def parse_json_remotive(board, data, debug=False):
             "tech_stack": ", ".join(re.findall(TECH_FILTER, combined_text)[:5]),  # Limit to 5 matches
             "timezone": j.get("candidate_required_location", "Worldwide"),
             "apply_url": j.get("url", ""),
-            "summary": description[:200] + "..." if len(description) > 200 else description,
-            "posted_date_iso": j.get("publication_date", "")[:10] if j.get("publication_date") else datetime.date.today().isoformat()
+            "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "posted_date_iso": normalize_date(j.get("date")),
+            "board": board
         })
     
     if debug:
@@ -224,16 +265,16 @@ def parse_json_remoteokapi(board, data, debug=False):
             continue
         
         # Fix the timestamp conversion
-        posted_date = datetime.date.today().isoformat()
-        if j.get("date"):
-            try:
-                if isinstance(j["date"], (int, float)):
-                    posted_date = datetime.datetime.fromtimestamp(j["date"]).strftime("%Y-%m-%d")
-                elif isinstance(j["date"], str):
-                    posted_date = j["date"][:10]
-            except (ValueError, TypeError, OSError):
-                pass  # Keep default date
-        
+        # posted_date = datetime.date.today().isoformat()
+        # if j.get("date"):
+        #     try:
+        #         if isinstance(j["date"], (int, float)):
+        #             posted_date = datetime.datetime.fromtimestamp(j["date"]).strftime("%Y-%m-%d")
+        #         elif isinstance(j["date"], str):
+        #             posted_date = j["date"][:10]
+        #     except (ValueError, TypeError, OSError):
+        #         pass  # Keep default date
+
         results.append({
             "job_title": title,
             "company": j.get("company", ""),
@@ -241,8 +282,9 @@ def parse_json_remoteokapi(board, data, debug=False):
             "tech_stack": ", ".join(re.findall(TECH_FILTER, combined_text)[:5]),
             "timezone": j.get("location", "Worldwide"),
             "apply_url": j.get("url", ""),
-            "summary": description[:200] + "..." if len(description) > 200 else description,
-            "posted_date_iso": posted_date
+            "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "posted_date_iso": normalize_date(j.get("date")),
+            "board": board
         })
     
     return results
@@ -284,12 +326,12 @@ def parse_json_arbeitnow(board, data, debug=False):
             continue
         
         # Safe date handling
-        posted_date = datetime.date.today().isoformat()
-        if j.get("created_at"):
-            try:
-                posted_date = str(j["created_at"])[:10]
-            except (ValueError, TypeError):
-                pass
+        # posted_date = datetime.date.today().isoformat()
+        # if j.get("created_at"):
+        #     try:
+        #         posted_date = str(j["created_at"])[:10]
+        #     except (ValueError, TypeError):
+        #         pass
         
         results.append({
             "job_title": title,
@@ -298,8 +340,9 @@ def parse_json_arbeitnow(board, data, debug=False):
             "tech_stack": ", ".join(re.findall(TECH_FILTER, combined_text)[:5]),
             "timezone": j.get("location", "Worldwide"),
             "apply_url": j.get("url", ""),
-            "summary": description[:200] + "..." if len(description) > 200 else description,
-            "posted_date_iso": posted_date
+            "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "posted_date_iso": normalize_date(j.get("date")),
+            "board": board
         })
     
     return results
@@ -358,7 +401,8 @@ def parse_html_weworkremotely(html):
                 "timezone": clean_text(element.select_one('span.region')),
                 "apply_url": link,
                 "summary": f"Full-Time listing from WeWorkRemotely.",
-                "posted_date_iso": datetime.date.today().isoformat()
+                "posted_date_iso": datetime.date.today().isoformat(),
+                "board": "WeWorkRemotely"
             })
             
         except Exception as e:
@@ -436,7 +480,8 @@ def parse_html_wellfound(html):
                 "timezone": location,
                 "apply_url": link,
                 "summary": f"Wellfound listing - {location}" + (f" - {salary}" if salary else ""),
-                "posted_date_iso": datetime.date.today().isoformat()
+                "posted_date_iso": normalize_date(None),
+                "board": "Wellfound"
             })
             
         except Exception as e:
@@ -519,7 +564,8 @@ def parse_html_nodesk(html):
                 "timezone": "Remote",
                 "apply_url": link or "",
                 "summary": "NoDesk remote listing",
-                "posted_date_iso": datetime.date.today().isoformat()
+                "posted_date_iso": normalize_date(None),
+                "board": "NoDesk"
             })
             
         except Exception as e:
@@ -602,7 +648,9 @@ def parse_html_himalayas(html):
                 "timezone": "Remote",
                 "apply_url": link or "",
                 "summary": "Himalayas remote listing",
-                "posted_date_iso": datetime.date.today().isoformat()
+                "posted_date_iso": normalize_date(None),
+                "board": "Himalayas"
+
             })
             
         except Exception as e:
@@ -695,7 +743,9 @@ def parse_html_generic(html, board_name, base_url):
                 "timezone": "Remote",
                 "apply_url": link or "",
                 "summary": f"Listing from {board_name}",
-                "posted_date_iso": datetime.date.today().isoformat()
+                "posted_date_iso": normalize_date(None),
+                "board": board_name
+
             })
             
         except Exception as e:
@@ -737,15 +787,17 @@ def parse_json_workingnomads(board, data, debug=False):
             "tech_stack": tags,
             "timezone": "Remote",
             "apply_url": j.get("url", ""),
-            "summary": description[:250] + "..." if len(description) > 250 else description,
-            "posted_date_iso": j.get("pub_date", "")[:10]
+            "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "posted_date_iso": normalize_date(None),
+            "board": board
+
         })
     
     return results
 
 # In scrapper.py, add this new function alongside your other parsers
 
-def parse_html_justremote(html, base_url):
+def parse_html_justremote(html, base_url, board):
     """
     A new, dedicated parser for JustRemote's current HTML structure.
     """
@@ -787,7 +839,9 @@ def parse_html_justremote(html, base_url):
                 "timezone": "Remote",
                 "apply_url": link,
                 "summary": f"Full-Time listing from JustRemote.",
-                "posted_date_iso": datetime.date.today().isoformat()
+                "posted_date_iso": normalize_date(None),
+                "board": board
+
             })
         except Exception as e:
             print(f"    - Error parsing one element: {e}")
@@ -841,7 +895,7 @@ def fetch_jobs_from_board(name, info, debug=False):
                 # Use generic parser for RemoteTech and GoRemote
                 return parse_html_generic(html, name, base_url)
             elif name == "JustRemote":
-               return parse_html_justremote(html, base_url)
+               return parse_html_justremote(html, base_url , name)
             else:
                 # Use generic parser for other HTML sites
                 return parse_html_generic(html, name, base_url)
