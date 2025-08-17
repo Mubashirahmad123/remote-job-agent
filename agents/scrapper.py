@@ -5,44 +5,84 @@ from dateutil import parser as date_parser
 import time
 import random
 from bs4 import BeautifulSoup
+import html as _html
+
+
+# ---- Put near your other imports ----
+try:
+    import feedparser
+    print("✅ feedparser is available")
+except ImportError:
+    feedparser = None
+
+def fetch_authentic_jobs_rss(feed_url="https://authenticjobs.com/rss/custom.php?category=developer"):
+    if feedparser is None:
+        print("  feedparser not installed; falling back to HTML parser for AuthenticJobs")
+        return []
+    d = feedparser.parse(feed_url)
+    out = []
+    for e in d.entries:
+        title = e.title or ""
+        if EXCLUDE_FILTER.search(title) or not re.search(TECH_FILTER, title):
+            continue
+        out.append({
+            "job_title": title,
+            "company": "",  # RSS doesn't always include company cleanly
+            "salary": "",
+            "tech_stack": top_techs(title),
+            "timezone": "Remote",
+            "apply_url": e.link,
+            "summary": clean_html(getattr(e, 'summary', ""))[:200],
+            "posted_date_iso": normalize_date(getattr(e, 'published', None), "AuthenticJobs"),
+            "source": "AuthenticJobs"
+        })
+    return out
+
+
 
 def normalize_date(date_value, source="unknown"):
     """Normalize any date format to ISO (YYYY-MM-DD)."""
-    if not date_value:
-        return datetime.date.today().isoformat()
     try:
-        # Handle Unix timestamps (both seconds and milliseconds)
-        if isinstance(date_value, (int, float)) or (isinstance(date_value, str) and date_value.replace('.', '').isdigit()):
-            timestamp = float(date_value)
-            # Check for milliseconds
-            if timestamp > 10000000000:
-                timestamp /= 1000
-            return datetime.datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d')
-        
-        # Handle string dates
-        if isinstance(date_value, str):
-            # Handle ISO date format (just take first 10 chars)
-            if len(date_value) >= 10 and date_value[4] == '-' and date_value[3] == '-':  # FIXED LINE
-                return date_value[:10]
-            # Parse other formats
-            return date_parser.parse(date_value).strftime('%Y-%m-%d')
-            
+        # numeric epoch (s/ms)
+        ts = None
+        if isinstance(date_value, (int, float)):
+            ts = float(date_value)
+        elif isinstance(date_value, str):
+            s = date_value.strip()
+            if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+                return s[:10]
+            try:
+                ts = float(s)
+            except ValueError:
+                ts = None
+        if ts is not None:
+            if ts > 10_000_000_000:  # ms
+                ts /= 1000
+            return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).strftime('%Y-%m-%d')
+
+        if date_value:
+            return date_parser.parse(str(date_value)).strftime('%Y-%m-%d')
     except Exception as e:
         print(f"  Warning: Could not parse date '{date_value}' from {source}: {e}")
-        return datetime.date.today().isoformat()
-    
     return datetime.date.today().isoformat()
 
 def clean_html(raw_html):
-    """Remove HTML tags from text"""
     if not raw_html:
         return ""
-    cleanr = re.compile('<.*?>')
-    cleaned = re.sub(cleanr, '', str(raw_html))  # FIXED LINE
-    # Decode common HTML entities
-    cleaned = cleaned.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&').replace('&quot;', '"')  # FIXED LINE
-    return cleaned.strip()
+    cleaned = re.sub(r'<.*?>', '', str(raw_html))
+    return _html.unescape(cleaned).strip()
 
+def top_techs(text, limit=5):
+    """Extract up to N unique, normalized tech keywords from text."""
+    found = re.findall(TECH_FILTER, text or "")
+    seen, out = set(), []
+    for w in (t.lower() for t in found):
+        if w not in seen:
+            seen.add(w)
+            out.append(w)
+            if len(out) == limit:
+                break
+    return ", ".join(out)
 
 
 # === UTILITY FUNCTIONS ===
@@ -138,6 +178,46 @@ MASTER_BOARDS = {
         "type": "html"
     }
 }
+
+ADDITIONAL_BOARDS = {
+    # —— High-yield dev/remote (global) ——
+    "Remote4me": {"url": "https://remote4me.com/developer-jobs", "type": "html"},
+    "DailyRemote": {"url": "https://dailyremote.com/remote-developer-jobs", "type": "html"},
+    "AuthenticJobs": {"url": "https://authenticjobs.com/?category=Developer", "type": "html"},
+    "Remojobs-Frontend": {"url": "https://remojobs.com/remote-frontend-jobs", "type": "html"},
+    "Remojobs-Backend": {"url": "https://remojobs.com/remote-backend-jobs", "type": "html"},
+    "Remojobs-Fullstack": {"url": "https://remojobs.com/remote-full-stack-jobs", "type": "html"},
+    "RemoteFrontendJobs": {"url": "https://remotefrontendjobs.com", "type": "html"},
+    "FindBacon": {"url": "https://findbacon.com/jobs", "type": "html"},
+
+    # —— Europe & UK specialists ——
+    "LandingJobs": {"url": "https://landing.jobs/jobs?work_model=remote", "type": "html"},
+    "WeAreDevelopers": {"url": "https://www.wearedevelopers.com/jobs", "type": "html"},
+    "NoFluffJobs": {"url": "https://nofluffjobs.com/pl/remote", "type": "html"},
+    "JustJoinIt": {"url": "https://justjoin.it/all-locations/remote", "type": "html"},
+    "CWJobs": {"url": "https://www.cwjobs.co.uk/jobs/remote", "type": "html"},
+    "WorkInStartups": {"url": "https://workinstartups.com/remote-jobs", "type": "html"},
+
+    # —— US / Americas ——
+    "BuiltIn": {"url": "https://builtin.com/jobs/remote", "type": "html"},
+    "Dice": {"url": "https://www.dice.com/jobs/q-remote+developer-jobs", "type": "html"},
+
+    # —— Middle East / India ——
+    "GulfTalent": {"url": "https://www.gulftalent.com/remote-jobs", "type": "html"},
+    "Naukri": {"url": "https://www.naukri.com/remote-developer-jobs", "type": "html"},
+    "NaukriGulf": {"url": "https://www.naukrigulf.com/remote-jobs", "type": "html"},
+    "FounditIN": {"url": "https://www.foundit.in/srp/results?query=remote%20developer", "type": "html"},
+    "Shine": {"url": "https://www.shine.com/job-search/remote-developer-jobs", "type": "html"},
+    "TimesJobs": {"url": "https://www.timesjobs.com/candidate/job-search.html?from=submit&searchType=personalizedSearch&txtKeywords=remote%20developer", "type": "html"},
+
+    # —— Aggregators / niche ——
+    "TrueUp": {"url": "https://www.trueup.io/remote-jobs", "type": "html"},
+    "RemoteRocketship": {"url": "https://www.remoterocketship.com/remote-jobs", "type": "html"},
+    "RemoteJobsCom": {"url": "https://remotejobs.com/jobs", "type": "html"},
+    "Remotees": {"url": "https://remotees.com/remote-jobs", "type": "html"}
+}
+MASTER_BOARDS.update(ADDITIONAL_BOARDS)
+
 
 # More comprehensive and lenient filters
 TECH_FILTER = r"(?i)(node|django|react|mysql|express|backend|back[- ]?end|frontend|front[- ]?end|full[- ]?stack|javascript|python|php|java|angular|vue|typescript|mongodb|postgresql|sql|html|css|api|rest|graphql|docker|aws|git|web|software|developer|engineer)"
@@ -246,7 +326,7 @@ def parse_json_remoteokapi(board, data, debug=False):
         return results
         
     for j in data:
-        if not isinstance(j, dict):
+        if not isinstance(j, dict) or not j.get("id") or not j.get("position"):
             continue
             
         title = j.get("position", "")
@@ -283,7 +363,7 @@ def parse_json_remoteokapi(board, data, debug=False):
             "timezone": j.get("location", "Worldwide"),
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
-            "posted_date_iso": normalize_date(j.get("publication_date")),
+            "posted_date_iso": normalize_date(j.get("date") or j.get("epoch"), board),
             "source": board
         })
     
@@ -649,7 +729,7 @@ def parse_html_himalayas(html):
                 "apply_url": link or "",
                 "summary": "Himalayas remote listing",
                 "posted_date_iso": normalize_date(None),
-                "board": "Himalayas"
+                "source": "Himalayas"
 
             })
             
@@ -754,46 +834,39 @@ def parse_html_generic(html, board_name, base_url):
     return results
 
 def parse_json_workingnomads(board, data, debug=False):
-    """
-    A new parser for the Working Nomads JSON API endpoint.
-    """
     results = []
     if not isinstance(data, list):
         print(f"  Unexpected data format for {board}, expected a list.")
         return results
 
     for j in data:
-        title = j.get("position", "")
-        description = j.get("description", "")
-        tags = j.get("tags", "")
-        combined_text = f"{title} {description} {tags}"
+        title = j.get("position", "") or ""
+        description = j.get("description", "") or ""
+        tags = j.get("tags") or []
+        if isinstance(tags, str):
+            tags = [t.strip() for t in tags.split(",") if t.strip()]
+        combined_text = f"{title} {description} {' '.join(tags)}"
 
-        # Apply your existing filters
         if EXCLUDE_FILTER.search(title):
             if debug: print(f"    - Filtering out (Senior/Lead): '{title}'")
             continue
-            
         if not re.search(TECH_FILTER, combined_text):
             if debug: print(f"    - Filtering out (No Tech Match): '{title}'")
             continue
-            
-        # Add the job to results
-        if debug: print(f"    + Found Job: '{title}'")
-        
+
         results.append({
             "job_title": title,
-            "company": j.get("company_name", ""),
-            "salary": "", # Salary is not provided in this API endpoint
-            "tech_stack": tags,
+            "company": j.get("company_name", "") or "",
+            "salary": "",
+            "tech_stack": ", ".join(tags[:5]) or top_techs(combined_text),
             "timezone": "Remote",
-            "apply_url": j.get("url", ""),
+            "apply_url": j.get("url", "") or "",
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
-            "posted_date_iso": normalize_date(j.get("pub_date")),
+            "posted_date_iso": normalize_date(j.get("pub_date"), board),
             "source": board
-
         })
-    
     return results
+
 
 # In scrapper.py, add this new function alongside your other parsers
 
@@ -876,6 +949,12 @@ def fetch_jobs_from_board(name, info, debug=False):
                 
         elif typ == "html":
             print(f"Fetching (HTML): {name}")
+            # AuthenticJobs: prefer RSS if available
+            if name == "AuthenticJobs":
+                rss = fetch_authentic_jobs_rss()
+                if rss:
+                    return rss
+            # otherwise continue with HTML fetch
             response = fetch_with_retry(url, timeout=40)
             html = response.text
             print(f"  HTML length: {len(html)}")
@@ -936,10 +1015,6 @@ def scrape_all(debug=False):
         # Add delay between requests to avoid rate limiting
         time.sleep(random.uniform(2, 4))
 
-        if jobs:
-         jobs.sort(key=lambda x: x['posted_date_iso'], reverse=True)
-        print(f"✅ Sorted {len(jobs)} jobs by date (newest first)")
-    
     print(f"\n=== SCRAPING SUMMARY ===")
     print(f"✅ Working scrapers ({len(working_scrapers)}): {working_scrapers}")
     print(f"❌ Failed scrapers ({len(failed_scrapers)}): {failed_scrapers}")
