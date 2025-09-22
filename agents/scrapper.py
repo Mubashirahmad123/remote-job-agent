@@ -15,7 +15,7 @@ try:
 except ImportError:
     feedparser = None
 
-def fetch_authentic_jobs_rss(feed_url="https://authenticjobs.com/rss/custom.php?category=developer"):
+def fetch_authentic_jobs_rss(feed_url="https://authenticjobs.com/rss?category=Developer"):
     if feedparser is None:
         print("  feedparser not installed; falling back to HTML parser for AuthenticJobs")
         return []
