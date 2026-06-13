@@ -40,7 +40,7 @@ print("Gemini API Key Loaded:", bool(GEMINI_API_KEY))
 
 # Configure LLM
 llm = LLM(
-    model=os.environ.get("MODEL", "gemini/gemini-2.0-flash"), 
+    model=os.environ.get("MODEL", "gemini/gemini-2.5-flash"), 
     api_key=os.getenv("GEMINI_API_KEY")
 )
 

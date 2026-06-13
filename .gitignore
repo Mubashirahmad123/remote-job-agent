@@ -1,2 +1,19 @@
 .env
 key.json
+
+
+# Python
+venv/
+.env/
+__pycache__/
+*.pyc
+
+# VS Code
+.vscode/
+
+# Node
+node_modules/
+
+# Build files
+dist/
+build/

@@ -1,9 +1,29 @@
-crewai==0.5.0
-beautifulsoup4==4.12.2
+# Core
 requests==2.31.0
+beautifulsoup4==4.12.3
 python-dotenv==1.0.0
-gspread==5.12.0
-google-auth==2.23.0
+python-dateutil==2.9.0.post0
+feedparser==6.0.11
+
+# AI / CrewAI
+crewai==1.14.7
+google-generativeai==0.5.4
+litellm==1.48.0
+
+# Job scraping
+python-jobspy==1.1.4
+playwright==1.47.0
+playwright-stealth==1.0.6
+crawl4ai==0.3.74
+
+# Google Sheets
+gspread==6.1.0
+google-auth==2.29.0
+
+# PDF generation
+reportlab==4.1.0
+fpdf2==2.7.9
+
+# Scheduling
+apscheduler==3.10.4
 schedule==1.2.0
-google-generativeai==0.4.1
-schedule
