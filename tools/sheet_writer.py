@@ -14,7 +14,8 @@ SCOPE = [
 
 # Updated columns to match scraper output
 COLUMNS = [
-    "job_title", "company", "salary", "tech_stack", "timezone", "apply_url", "summary", "posted_date_iso"
+    "job_title", "company", "salary", "tech_stack", "timezone", "apply_url", "summary", "posted_date_iso",
+    "match_score", "match_reason"
 ]
 
 def test_environment():

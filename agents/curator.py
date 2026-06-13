@@ -1,5 +1,31 @@
 from tools.sheet_writer import append_rows, get_all_rows
+from tools.cv_parser import parse_cv
+from tools.cv_matcher import score_job
 import json
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+CV_PROFILE = None
+CV_MATCHING_ENABLED = False
+MIN_SCORE = int(os.getenv("MIN_MATCH_SCORE", 70))
+
+cv_path = os.getenv("CV_PATH", "").strip()
+if cv_path:
+    resolved_cv_path = Path(cv_path)
+    if not resolved_cv_path.is_absolute():
+        resolved_cv_path = Path(__file__).resolve().parents[1] / resolved_cv_path
+    if resolved_cv_path.exists():
+        try:
+            CV_PROFILE = parse_cv(str(resolved_cv_path))
+            CV_MATCHING_ENABLED = True
+            print(f"CV matching enabled with minimum score {MIN_SCORE}")
+        except Exception as e:
+            print(f"Warning: CV matching disabled because CV parsing failed: {e}")
+    else:
+        print(f"Warning: CV matching disabled because CV_PATH was not found: {cv_path}")
 
 def curate(raw_jobs):
     """
@@ -92,6 +118,51 @@ def curate(raw_jobs):
             "top_jobs": None
         }
 
+    match_rejected_count = 0
+    if CV_MATCHING_ENABLED:
+        print(f"Scoring jobs against CV profile with minimum score {MIN_SCORE}...")
+        matched_jobs = []
+
+        for i, job in enumerate(unique_jobs, 1):
+            job_title = job.get("job_title", "No Title")
+            try:
+                match_score, match_reason = score_job(job, CV_PROFILE)
+                job["match_score"] = match_score
+                job["match_reason"] = match_reason
+
+                if match_score >= MIN_SCORE:
+                    matched_jobs.append(job)
+                    print(f"Job {i}: '{job_title}' - MATCH {match_score}")
+                else:
+                    match_rejected_count += 1
+                    print(f"Job {i}: '{job_title}' - LOW MATCH {match_score}")
+            except Exception as e:
+                match_rejected_count += 1
+                job["match_score"] = ""
+                job["match_reason"] = f"Matching failed: {e}"
+                print(f"Job {i}: '{job_title}' - matching failed, skipping: {e}")
+
+        unique_jobs = matched_jobs
+        print(f"CV matching results: {len(unique_jobs)} matched, {match_rejected_count} rejected")
+
+        if not unique_jobs:
+            print("No jobs met the minimum CV match score.")
+            return {
+                "status": "warning",
+                "message": "No jobs met the minimum CV match score",
+                "stats": {
+                    "original_jobs": len(raw_jobs),
+                    "duplicates_removed": duplicates_count,
+                    "match_rejected": match_rejected_count,
+                    "unique_jobs_added": 0
+                },
+                "top_jobs": None
+            }
+    else:
+        for job in unique_jobs:
+            job.setdefault("match_score", "")
+            job.setdefault("match_reason", "")
+
     # Rank jobs by quality factors
     print("🏆 Ranking jobs by quality...")
     
@@ -150,6 +221,7 @@ def curate(raw_jobs):
             "stats": {
                 "original_jobs": len(raw_jobs),
                 "duplicates_removed": duplicates_count,
+                "match_rejected": match_rejected_count,
                 "unique_jobs_added": len(ranked_jobs),
                 "existing_jobs_in_sheet": len(existing_urls)
             },
@@ -165,6 +237,7 @@ def curate(raw_jobs):
             "stats": {
                 "original_jobs": len(raw_jobs),
                 "duplicates_removed": duplicates_count,
+                "match_rejected": match_rejected_count,
                 "unique_jobs_found": len(ranked_jobs)
             }
         }
