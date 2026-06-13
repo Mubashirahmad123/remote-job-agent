@@ -1,6 +1,7 @@
 from tools.sheet_writer import append_rows, get_all_rows
 from tools.cv_parser import parse_cv
 from tools.cv_matcher import score_job
+from tools.deduplicator import filter_already_seen, load_seen_hashes, save_seen_hashes
 import json
 import os
 from pathlib import Path
@@ -118,6 +119,29 @@ def curate(raw_jobs):
             "top_jobs": None
         }
 
+    seen_hashes = load_seen_hashes()
+    before_seen_filter = len(unique_jobs)
+    unique_jobs = filter_already_seen(unique_jobs, seen_hashes)
+    already_seen_count = before_seen_filter - len(unique_jobs)
+
+    print(f"Fingerprint duplicate results:")
+    print(f"   Already seen jobs skipped: {already_seen_count}")
+    print(f"   New fingerprint jobs: {len(unique_jobs)}")
+
+    if not unique_jobs:
+        print("No new jobs after fingerprint duplicate detection.")
+        return {
+            "status": "warning",
+            "message": "All jobs were already seen - none added to sheet",
+            "stats": {
+                "original_jobs": len(raw_jobs),
+                "duplicates_removed": duplicates_count,
+                "already_seen_removed": already_seen_count,
+                "unique_jobs_added": 0
+            },
+            "top_jobs": None
+        }
+
     match_rejected_count = 0
     if CV_MATCHING_ENABLED:
         print(f"Scoring jobs against CV profile with minimum score {MIN_SCORE}...")
@@ -210,6 +234,7 @@ def curate(raw_jobs):
     print(f"💾 Saving {len(ranked_jobs)} curated jobs to Google Sheet...")
     try:
         append_rows(ranked_jobs)
+        save_seen_hashes(seen_hashes)
         
         success_msg = f"Successfully curated and added {len(ranked_jobs)} unique jobs to Google Sheet"
         print(f"✅ {success_msg}")
@@ -221,6 +246,7 @@ def curate(raw_jobs):
             "stats": {
                 "original_jobs": len(raw_jobs),
                 "duplicates_removed": duplicates_count,
+                "already_seen_removed": already_seen_count,
                 "match_rejected": match_rejected_count,
                 "unique_jobs_added": len(ranked_jobs),
                 "existing_jobs_in_sheet": len(existing_urls)
@@ -237,6 +263,7 @@ def curate(raw_jobs):
             "stats": {
                 "original_jobs": len(raw_jobs),
                 "duplicates_removed": duplicates_count,
+                "already_seen_removed": already_seen_count,
                 "match_rejected": match_rejected_count,
                 "unique_jobs_found": len(ranked_jobs)
             }
