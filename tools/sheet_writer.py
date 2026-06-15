@@ -356,11 +356,14 @@ def append_rows(rows):
             for i in range(0, len(new_values), batch_size):
                 batch = new_values[i:i + batch_size]
                 worksheet.append_rows(batch)
-                remove_old_jobs_from_sheet(worksheet, days=30)  ## remove old jobs
-                print(f"📤 Added batch {i//batch_size + 1}: {len(batch)} rows")
+                if i + batch_size < len(new_values):
+                    import time
+                    time.sleep(1)
+            remove_old_jobs_from_sheet(worksheet, days=30)
+            print(f"📤 Added batch {i//batch_size + 1}: {len(batch)} rows")
                 
                 # Small delay to avoid rate limiting
-                if i + batch_size < len(new_values):
+            if i + batch_size < len(new_values):
                     import time
                     time.sleep(1)
 

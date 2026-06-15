@@ -8,20 +8,21 @@ An automated system that scrapes 30+ remote job boards, matches jobs to your CV 
 
 | Feature | Status | Description |
 |---|---|---|
-| Multi-source scraping | ✅ | 30+ job boards via APIs, HTML parsing, Playwright stealth, JobSpy, and Crawl4AI |
+| Multi-source scraping | ✅ | 45+ job boards via APIs, HTML parsing, Playwright stealth, JobSpy, and Crawl4AI |
 | Dev-only job filter | ✅ | Strips non-dev, senior/lead, and irrelevant roles automatically |
 | CV-based job matching | ✅ | Parses your PDF/DOCX CV via Gemini, scores each job 0–100 |
 | Duplicate detection | ✅ | MD5 fingerprinting prevents duplicate entries across runs |
 | Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS |
 | AI cover letters | ✅ | Generates job-specific cover letters with PDF export |
 | Application tracker | ✅ | `track.py` CLI + `tools/application_tracker.py` — mark applied, update status, list, stats, follow-up reminders |
+| Auto-cleanup old jobs | ✅ | Removes jobs older than 30 days from sheets automatically |
 | Excel cleanup | ✅ | `clean_jobs.py` — extracts company from URLs, strips HTML, deduplicates tags, removes senior roles from xlsx exports |
 | Playwright stealth scraper | ✅ | Scrapes Cloudflare-protected boards (WeWorkRemotely, Remote.co, Wellfound, NoDesk) |
 | Crawl4AI scraper | ✅ | AI-native crawler for JustRemote |
 | JobSpy integration | ✅ | Scrapes LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter |
 | Scheduled automation | ✅ | Cron-based scheduler (Mon/Thu full scrape, daily quick checks) |
 | Universal run script | ✅ | `Run.py` works on Windows / Mac / Linux with `--setup` flag |
-| Dockersupport | ✅ | Ready-to-use Dockerfile |
+| Docker support | 🛠️ | Basic Dockerfile included (requires Playwright + Crawl4AI setup) |
 
 ---
 
@@ -78,17 +79,19 @@ You can also set `RUN_MODE` in `.env`:
 ```
 remote-job-agent/
 ├── agents/
-│   ├── scrapper.py           # 30+ job board scrapers (API, HTML, RSS)
+│   ├── __init__.py
+│   ├── scrapper.py           # 45+ job board scrapers (API, HTML, RSS)
 │   ├── curator.py            # Dedup, CV matching, quality ranking, sheet save
 │   └── gemini_tools.py       # Gemini cover letter generation, markdown extraction
 ├── tools/
+│   ├── __init__.py
 │   ├── cv_parser.py           # PDF/DOCX CV → structured profile via Gemini
 │   ├── cv_matcher.py          # Job scoring 0–100 against CV profile
 │   ├── deduplicator.py        # MD5 fingerprint duplicate detection
-│   ├── sheet_writer.py        # Google Sheets dashboard (5 tabs)
+│   ├── sheet_writer.py        # Google Sheets dashboard (5 tabs) + 30-day auto-cleanup
 │   ├── jobspy_scraper.py      # LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter
-│   ├── playwright_scraper.py  # Stealth browser scraping (WWR, Remote.co, etc.)
-│   ├── crawl4ai_scraper.py    # AI-native Crawl4AI scraper
+│   ├── playwright_scraper.py  # Stealth browser scraping (WWR, Remote.co, Wellfound, NoDesk)
+│   ├── crawl4ai_scraper.py    # AI-native Crawl4AI scraper for JustRemote
 │   ├── scraper_utils.py       # Text cleaning, date parsing utilities
 │   └── application_tracker.py # APPLIED sheet management (mark, update, list, stats)
 ├── clean_jobs.py             # Excel cleanup: extract company, strip HTML, dedup tags, remove senior roles
@@ -98,8 +101,12 @@ remote-job-agent/
 ├── Run.py                    # Universal start script (Win/Mac/Linux)
 ├── scheduler.py              # Cron-based scheduler (Mon/Thu)
 ├── .env                      # Configuration + API keys
+├── .env.example              # Example env file with all variables
+├── .gitignore
 ├── requirements.txt
 ├── Dockerfile
+├── scraped_jobs.json         # Cached scrape output
+├── keys.json                 # Google service account key
 └── my_cv.pdf                 # Your CV (for CV matching)
 ```
 
@@ -220,6 +227,8 @@ python clean_jobs.py --input "my_export.xlsx" --output "cleaned.xlsx" --keep-sen
 docker build -t remote-job-agent .
 docker run --env-file .env remote-job-agent
 ```
+
+> **Note:** The Dockerfile is a starting point. You may need to install Playwright browsers (`playwright install chromium`) and run `crawl4ai.install` inside the container for full functionality.
 
 ---
 
