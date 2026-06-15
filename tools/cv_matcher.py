@@ -7,7 +7,7 @@ import google.generativeai as genai
 def score_job(job: dict, cv_profile: dict) -> tuple[int, str]:
     """Score a job from 0 to 100 against the candidate CV profile."""
     genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-2.5-flash")
 
     prompt = f"""
 Score this job listing from 0-100 based on fit with this candidate.

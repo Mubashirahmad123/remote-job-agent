@@ -9,7 +9,7 @@ from typing import List, Dict, Any
 # --- Import your custom functions ---
 from agents.scrapper import scrape_all
 from agents.curator import curate
-from agents.gemini_tools import generate_cover_letter  # Using your existing file
+from agents.gemini_tools import generate_cover_letter  
 from tools.sheet_writer import append_rows, test_connection
 
 # --- .env and credentials setup ---

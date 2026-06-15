@@ -1,675 +1,287 @@
 # 🚀 Remote Job Agent — Production Roadmap
 
-Everything needed to go from "it scrapes jobs" to "it finds the RIGHT jobs for ME".
+## Build Order
+`Phase 1 → Phase 2 → Phase 3 → Phase 4`
 
 ---
 
-## 🚨 TOP PRIORITY — Do These First
+## Phase 1 — Core Filters & Alerts (Do First)
 
-### Priority 0A — CV Upload + Job Matching
+### ✅ Feature 1: Intelligent Job Rejection Engine
+**Priority:** Critical — saves Gemini API calls on every run  
+**Complexity:** Low
 
-**The Problem:**
-Agent has no idea who you are. It saves every job regardless of fit.
-You end up manually reading 200 jobs to find 5 relevant ones.
+Reject jobs *before* AI scoring using a config-driven keyword filter.
 
-**The Fix:**
-Upload your CV (PDF or DOCX) once → Gemini parses it → every scraped job
-gets scored 0–100 against your actual skills → only high-score jobs saved to Sheets.
+**Auto-reject if title/description contains:**
+- Seniority: `Senior`, `Lead`, `Principal`, `Architect`, `Director`, `Manager`, `VP`, `Head of`
+- Location: `Hybrid`, `Onsite`, `On-site`, `In-office`, `Relocation`
+- Clearance: `Security Clearance`, `TS/SCI`, `Clearance Required`
 
-**Files to create:**
-- `tools/cv_parser.py` — reads your CV file, extracts structured profile using Gemini
-- `tools/cv_matcher.py` — scores each job against your CV profile
+**Implementation:**
+- Store reject keywords in `config.yaml` — no code changes needed to extend
+- Run filter before any Gemini call
+- Log rejected jobs to a separate `REJECTED` sheet tab with reason
 
-**Step 1 — Install CV reading library:**
-```bash
-pip install pdfplumber python-docx
-```
-
-**Step 2 — Add your CV to the project root:**
-```
-remote-job-agent/
-├── my_cv.pdf        ← drop your CV here
-├── main.py
-├── run.py
-...
-```
-
-**Step 3 — Add to `.env`:**
-```env
-CV_PATH=my_cv.pdf
-MIN_MATCH_SCORE=70
-```
-
-**Step 4 — `tools/cv_parser.py`:**
-```python
-import pdfplumber
-import docx
-import google.generativeai as genai
-import json
-import os
-
-def extract_cv_text(cv_path: str) -> str:
-    """Extract raw text from PDF or DOCX CV"""
-    if cv_path.endswith(".pdf"):
-        with pdfplumber.open(cv_path) as pdf:
-            return "\n".join(page.extract_text() or "" for page in pdf.pages)
-    elif cv_path.endswith(".docx"):
-        doc = docx.Document(cv_path)
-        return "\n".join(p.text for p in doc.paragraphs)
-    else:
-        raise ValueError("CV must be a .pdf or .docx file")
-
-def parse_cv(cv_path: str) -> dict:
-    """Parse CV into structured profile using Gemini"""
-    text = extract_cv_text(cv_path)
-
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    model = genai.GenerativeModel("gemini-2.0-flash")
-
-    prompt = f"""
-    Extract structured data from this CV. Return ONLY valid JSON, no explanation:
-    {{
-        "name": "",
-        "years_experience": 0,
-        "skills": [],
-        "frameworks": [],
-        "databases": [],
-        "preferred_titles": [],
-        "seniority": "junior or mid",
-        "languages": []
-    }}
-
-    CV TEXT:
-    {text[:4000]}
-    """
-    response = model.generate_content(prompt)
-    raw = response.text.replace("```json", "").replace("```", "").strip()
-    return json.loads(raw)
-```
-
-**Step 5 — `tools/cv_matcher.py`:**
-```python
-import google.generativeai as genai
-import json
-import os
-
-def score_job(job: dict, cv_profile: dict) -> tuple[int, str]:
-    """Score a job 0-100 against the candidate CV profile"""
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    model = genai.GenerativeModel("gemini-2.0-flash")
-
-    prompt = f"""
-    Score this job listing from 0-100 based on fit with this candidate.
-
-    CANDIDATE:
-    - Skills: {', '.join(cv_profile.get('skills', []))}
-    - Frameworks: {', '.join(cv_profile.get('frameworks', []))}
-    - Experience: {cv_profile.get('years_experience', 0)} years
-    - Seniority: {cv_profile.get('seniority', 'mid')}
-    - Looking for: {', '.join(cv_profile.get('preferred_titles', []))}
-
-    JOB:
-    - Title: {job.get('job_title', '')}
-    - Company: {job.get('company', '')}
-    - Tech Stack: {job.get('tech_stack', '')}
-    - Summary: {job.get('summary', '')[:400]}
-
-    Scoring:
-    - 90-100: Perfect match
-    - 70-89:  Good match
-    - 50-69:  Partial match
-    - 0-49:   Poor match or too senior
-
-    Return ONLY JSON: {{"score": 85, "reason": "Matches Node.js, React, mid-level remote"}}
-    """
-    response = model.generate_content(prompt)
-    raw = response.text.replace("```json", "").replace("```", "").strip()
-    result = json.loads(raw)
-    return result["score"], result["reason"]
-```
-
-**Step 6 — Use in `agents/curator.py`:**
-```python
-from tools.cv_parser import parse_cv
-from tools.cv_matcher import score_job
-import os
-
-# Parse CV once at startup
-CV_PROFILE = parse_cv(os.getenv("CV_PATH", "my_cv.pdf"))
-MIN_SCORE  = int(os.getenv("MIN_MATCH_SCORE", 70))
-
-def curate_jobs(jobs: list) -> list:
-    matched = []
-    for job in jobs:
-        score, reason = score_job(job, CV_PROFILE)
-        job["match_score"]  = score
-        job["match_reason"] = reason
-        if score >= MIN_SCORE:
-            matched.append(job)
-    # Sort best first
-    return sorted(matched, key=lambda x: x["match_score"], reverse=True)
-```
-
-**New Google Sheet columns after this change:**
-```
-job_title | company | salary | tech_stack | apply_url |
-summary | posted_date | source | match_score | match_reason
+```yaml
+# config.yaml
+rejection_keywords:
+  title:
+    - senior
+    - lead
+    - principal
+    - architect
+    - director
+    - manager
+  description:
+    - hybrid
+    - onsite
+    - on-site
+    - security clearance
 ```
 
 ---
 
-### Priority 0B — Fix Job Filter (Only Dev Jobs, No Noise)
+### ✅ Feature 2: Job Freshness Score Boost
+**Priority:** High — improves result quality with zero API cost  
+**Complexity:** Low
 
-**The Problem:**
-`agents/scrapper.py` saves ALL jobs — marketing, design, sales, support —
-not just developer roles. You're wasting time filtering manually.
+Apply a score multiplier based on how recently the job was posted.
 
-**The Fix — Strict tech-only filter in `agents/scrapper.py`:**
+| Age | Bonus |
+|-----|-------|
+| Today (0 days) | +20 |
+| 1 day old | +10 |
+| 2–3 days old | +5 |
+| 4–7 days old | +2 |
+| 8–30 days old | 0 |
+| 30+ days old | −10 (deprioritize) |
 
-```python
-import re
+**Implementation:**
+- Parse `posted_date_iso` from existing sheet column
+- Add `freshness_bonus` to `match_score` before writing to sheet
+- No new columns needed
 
-# ── Strict dev job title filter ───────────────────────────────────────────────
-DEV_TITLE_FILTER = re.compile(r"""(?ix)
-    (
-        developer | engineer | programmer | backend | frontend | fullstack |
-        full.stack | full\ stack | devops | sre | swe | software |
-        node\.?js | django | react | python | typescript | javascript |
-        api\ developer | web\ developer | mobile\ developer | cloud\ engineer |
-        data\ engineer | ml\ engineer | platform\ engineer | site\ reliability
-    )
-""")
+---
 
-# ── Exclude non-dev roles entirely ───────────────────────────────────────────
-NON_DEV_FILTER = re.compile(r"""(?ix)
-    (
-        marketing | sales | designer | copywriter | accountant | finance |
-        recruiter | hr\ | human\ resources | customer\ success | customer\ support |
-        content\ writer | seo | social\ media | product\ manager | project\ manager |
-        data\ analyst | business\ analyst | operations\ manager | office\ manager |
-        graphic\ design | ui\ designer | ux\ designer | illustrator
-    )
-""")
+### ✅ Feature 3: Telegram Real-Time Alerts
+**Priority:** High — eliminates manual terminal monitoring  
+**Complexity:** Low (~30 lines with `python-telegram-bot`)
 
-# ── Exclude senior/lead roles ─────────────────────────────────────────────────
-SENIORITY_FILTER = re.compile(r"""(?ix)
-    \b(
-        senior | sr\. | lead | principal | staff | architect |
-        director | manager | vp | head\ of | cto | ceo
-    )\b
-""")
+Send instant Telegram messages for jobs scoring above a threshold.
 
-def is_valid_dev_job(job: dict) -> bool:
-    title = job.get("job_title", "").lower()
-    stack = job.get("tech_stack", "").lower()
-    combined = title + " " + stack
+**Alert format:**
+```
+🔥 Backend Developer @ Acme Corp
+Score: 94 | Posted: Today
+Stack: Node.js, PostgreSQL, AWS
+Timezone: US/EU overlap
+💰 $80K–$110K
 
-    # Must match a dev keyword
-    if not DEV_TITLE_FILTER.search(title):
-        return False
+Apply → https://...
+```
 
-    # Must not be a non-dev role
-    if NON_DEV_FILTER.search(title):
-        return False
-
-    # Must not be senior/lead
-    if SENIORITY_FILTER.search(title):
-        return False
-
-    return True
-
-# ── Use in your scrape_all() function ────────────────────────────────────────
-def scrape_all() -> list:
-    raw_jobs = []
-    # ... your existing scraping calls ...
-
-    # Apply filter before returning
-    filtered = [job for job in raw_jobs if is_valid_dev_job(job)]
-    print(f"Filtered: {len(raw_jobs)} total → {len(filtered)} dev jobs")
-    return filtered
+**Config:**
+```yaml
+telegram:
+  bot_token: ${TELEGRAM_BOT_TOKEN}
+  chat_id: ${TELEGRAM_CHAT_ID}
+  alert_threshold: 80        # Only alert for score >= 80
+  alert_on_top_match: true   # Always alert for TOP MATCHES sheet
 ```
 
 ---
 
-## 🏁 Updated Priority Order
+## Phase 2 — Data Quality
 
-| Priority | Feature | Impact | Effort |
-|---|---|---|---|
-| 🔴 0A | CV Upload + Job Matching | Finds jobs matched to YOU | Medium |
-| 🔴 0B | Fix Job Filter (dev only) | Kills noise immediately | Low |
-| 🔴 1 | Duplicate Detection | No repeat listings | Low |
-| 🟡 2 | Telegram Notifications | Instant top-match alerts | Low |
-| 🟡 3 | Smart Sheet Structure | Better visibility | Low |
-| 🟡 4 | Smarter Cover Letters | Job-specific, not generic | Medium |
-| 🟢 5 | Timezone Scoring | India-friendly async roles | Low |
-| 🟢 6 | Smart Scheduler | Daily quick API checks | Low |
-| 🟢 7 | Application Tracker | Track your pipeline | Medium |
+### ✅ Feature 4: Auto Cleanup (Job Retention)
+**Priority:** Medium  
+**Complexity:** Low
 
----
+Automatically delete old rows from the `ALL JOBS` sheet.
 
-## 🔑 How to Run (Any OS)
+**Rules:**
+- Delete rows where `scraped_at` is older than `JOB_RETENTION_DAYS` (default: 30)
+- **Never delete** rows where `status` = `INTERVIEW`, `OFFER`, or `APPLIED`
+- Run cleanup at the end of every pipeline execution
+- Log count of deleted rows to `STATS` sheet
 
-```bash
-# First time setup
-python run.py --setup
-
-# Every time after
-python run.py
+```yaml
+retention:
+  days: 30
+  protected_statuses:
+    - INTERVIEW
+    - OFFER
+    - APPLIED
 ```
 
-Works on Windows, Mac, and Linux. No .bat files needed.
+---
+
+### ✅ Feature 5: Apply Status Tracker
+**Priority:** Medium  
+**Complexity:** Low
+
+A proper status lifecycle so cleanup and filters respect your pipeline.
+
+**Status values:**
+| Status | Meaning |
+|--------|---------|
+| `NEW` | Just scraped, not reviewed |
+| `REVIEWED` | Looked at, not applied |
+| `APPLIED` | Application sent |
+| `INTERVIEW` | Interview scheduled |
+| `OFFER` | Offer received |
+| `REJECTED` | Company rejected or ghosted |
+| `SKIP` | Manually marked to ignore |
+
+**Implementation:**
+- Add dropdown validation to `status` column in Google Sheets
+- Auto-set `NEW` on insert
+- Rejection engine sets `SKIP` with `match_reason` = rejection keyword
 
 ---
 
-## 🧠 Feature 1 — CV-Based Job Matching (Most Important)
+### ✅ Feature 6: Duplicate Detection (Pre-Scoring)
+**Priority:** Medium  
+**Complexity:** Low
 
-### The Problem Right Now
-Your agent scrapes jobs and saves them all to Sheets — but it has no idea
-what's actually relevant to YOU. You're manually reading 200 jobs to find 5 good ones.
+You already have `job_fingerprint` — make sure deduplication happens *before* the Gemini call, not after writing to the sheet.
 
-### The Fix — CV Embeddings + Semantic Scoring
+**Current risk:** If dedup runs after scoring, you're wasting API credits on jobs already in the sheet.
+
+**Fix:**
+1. On startup, load all existing fingerprints from sheet into a Python set
+2. Filter scraped jobs against the set before any processing
+3. Log count of skipped duplicates to `STATS`
+
+---
+
+## Phase 3 — Multi-CV & Intelligence
+
+### ✅ Feature 7: Multi-CV Matching Engine
+**Priority:** Medium  
+**Complexity:** Medium
+
+Support multiple resumes; let Gemini pick the best one per job.
+
+**Supported CVs:**
+```
+/cvs/backend_cv.pdf
+/cvs/fullstack_cv.pdf
+/cvs/python_cv.pdf
+```
 
 **How it works:**
-1. Parse your CV once → extract skills, experience, titles, stack
-2. For each scraped job → generate a match score (0–100) using Gemini
-3. Only save jobs with score > 70 to Google Sheets
-4. Add a `match_score` column so you see the best ones first
+1. Pre-parse all CVs once at startup using `parse_cv()` (not per-job)
+2. Pass job description + list of CV summaries to Gemini
+3. Gemini returns: `{ "best_cv": "backend_cv.pdf", "reason": "..." }`
+4. Use chosen CV for match scoring
+5. Log `cv_used` as a new sheet column
 
-**What to build — `tools/cv_matcher.py`:**
-
-```python
-import google.generativeai as genai
-import json
-
-CV_TEXT = """
-Name: Mubashir
-Experience: 2.8 years
-Stack: Node.js, Express, Django, PostgreSQL, MongoDB, React, TypeScript
-Role: Full Stack / Backend Engineer
-Seniority: Mid-level (NOT senior, NOT lead)
-"""
-
-def score_job(job: dict) -> int:
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    prompt = f"""
-    Score this job listing from 0-100 based on how well it matches this candidate.
-
-    CANDIDATE:
-    {CV_TEXT}
-
-    JOB:
-    Title: {job['job_title']}
-    Company: {job['company']}
-    Tech Stack: {job['tech_stack']}
-    Summary: {job['summary'][:500]}
-
-    Scoring rules:
-    - 90-100: Perfect match (right stack, right level, remote, good salary)
-    - 70-89:  Good match (most requirements met)
-    - 50-69:  Partial match (some stack overlap)
-    - 0-49:   Poor match (wrong stack, too senior, not remote)
-
-    IMPORTANT: Return ONLY a JSON object like this:
-    {{"score": 85, "reason": "Matches Node.js and React, mid-level, remote-first"}}
-    """
-    response = model.generate_content(prompt)
-    result = json.loads(response.text)
-    return result["score"], result["reason"]
-```
-
-**In your curator.py — only save jobs above threshold:**
-```python
-score, reason = score_job(job)
-job["match_score"] = score
-job["match_reason"] = reason
-if score >= 70:
-    save_to_sheets(job)
-```
+**No need for a complex engine — one Gemini call per job handles the decision.**
 
 ---
 
-## 📄 Feature 2 — CV Parser (Auto-Update Skills from CV)
+### ✅ Feature 8: Market Intelligence Dashboard (Deferred)
+**Priority:** Low — needs 3–6 months of data first  
+**Complexity:** Medium
 
-Instead of hardcoding your CV in the matcher, parse it dynamically.
-This way if you update your CV, the matcher updates automatically.
+Analyze trends from your accumulated job data.
 
-**What to build — `tools/cv_parser.py`:**
+**Metrics to track:**
+- Most requested skills (count from `tech_stack` column)
+- Average salary by role
+- Countries/timezones with most openings
+- Score distribution over time
+- Best sources (which job board sends highest-scoring jobs)
 
-```python
-import pdfplumber  # pip install pdfplumber
-import google.generativeai as genai
-import json
+**Implementation:**
+- Python script reads `ALL JOBS` sheet
+- Aggregates into `STATS` sheet weekly
+- Optional: export to a simple HTML dashboard
 
-def parse_cv(cv_path: str) -> dict:
-    # Extract text from PDF CV
-    with pdfplumber.open(cv_path) as pdf:
-        text = "\n".join(page.extract_text() for page in pdf.pages)
-
-    # Use Gemini to extract structured data
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    prompt = f"""
-    Extract structured data from this CV. Return ONLY JSON:
-    {{
-        "name": "",
-        "years_experience": 0,
-        "skills": [],
-        "frameworks": [],
-        "databases": [],
-        "job_titles": [],
-        "seniority": "junior/mid/senior",
-        "languages": []
-    }}
-
-    CV TEXT:
-    {text[:4000]}
-    """
-    response = model.generate_content(prompt)
-    return json.loads(response.text)
-```
-
-**Usage:**
-```python
-# In main.py or config
-CV_PROFILE = parse_cv("my_cv.pdf")  # parse once at startup
-```
+**⚠️ Don't build until you have 500+ rows of data.**
 
 ---
 
-## 📊 Feature 3 — Smart Scoring Dashboard in Google Sheets
+## Phase 4 — Research & Outreach (V2)
 
-Right now you dump all jobs flat. Instead, structure the Sheet properly:
+### 🔮 Feature 9: Company Quality Scoring
+**Status:** Defer — fragile to build  
+**Reason:** Glassdoor/Crunchbase scraping gets rate-limited fast
 
-### Sheet Tabs to Create:
-
-| Tab | Purpose |
-|---|---|
-| `TOP MATCHES` | Score ≥ 85, sorted by score desc |
-| `GOOD MATCHES` | Score 70–84 |
-| `ALL JOBS` | Everything scraped (archive) |
-| `APPLIED` | Jobs you've applied to (manual) |
-| `STATS` | Run history, counts, sources |
-
-### Columns to Add:
-
-```
-job_title | company | salary | tech_stack | timezone | apply_url |
-summary | posted_date | source | match_score | match_reason |
-scraped_at | status (new/applied/rejected)
-```
+**Simpler alternative for now:**
+- Flag companies with < 50 Glassdoor reviews as `UNVERIFIED`
+- Store company metadata in a separate `COMPANIES` sheet tab
+- Populate manually or via a one-off research script
 
 ---
 
-## ⏰ Feature 4 — Smart Scheduler (Not Just Mon/Thu)
+### 🔮 Feature 10: Recruiter Intelligence Database
+**Status:** Defer — data sourcing is the bottleneck  
+**Reason:** Most job boards don't expose recruiter contact info
 
-### Current Problem
-Hardcoded Monday/Thursday 9AM. If a hot job posts Tuesday, you miss it for 3 days.
+**Build when:** You're doing active cold outreach campaigns.
 
-### Better Approach
-
-```python
-# scheduler.py — smarter schedule
-from apscheduler.schedulers.blocking import BlockingScheduler
-
-scheduler = BlockingScheduler()
-
-# Full scrape — twice a week (Mon + Thu)
-scheduler.add_job(run_full_pipeline, "cron", day_of_week="mon,thu", hour=9)
-
-# Quick API-only scrape (no Playwright) — every day
-scheduler.add_job(run_quick_scrape, "cron", hour=8)
-
-# Stats email — every Sunday
-scheduler.add_job(send_weekly_summary, "cron", day_of_week="sun", hour=10)
-```
-
-### `run_quick_scrape` — fast daily check (APIs only, no browser):
-```python
-def run_quick_scrape():
-    jobs = []
-    jobs += scrape_remotive()    # ~30s
-    jobs += scrape_himalayas()   # ~10s
-    jobs += scrape_jobicy()      # ~10s
-    jobs += scrape_with_jobspy() # ~60s
-    # Skip Playwright (slow), skip Crawl4AI
-    curate_and_save(jobs)
-```
+**Schema (for future):**
+| Field | Type |
+|-------|------|
+| `recruiter_name` | text |
+| `email` | text |
+| `linkedin_url` | text |
+| `company` | text |
+| `last_contact_date` | date |
+| `response_status` | enum |
 
 ---
 
-## 📧 Feature 5 — Email / Telegram Notification for Top Matches
+### 🔮 Feature 11: AI Company Research Reports
+**Status:** Defer to V2  
+**Reason:** Requires agentic web scraping — complex and brittle
 
-When a job scores 85+, send yourself an instant notification.
-
-### Option A — Email (Gmail SMTP, free)
-
-```python
-# tools/notifier.py
-import smtplib
-from email.mime.text import MIMEText
-import os
-
-def send_email_alert(jobs: list):
-    top_jobs = [j for j in jobs if j.get("match_score", 0) >= 85]
-    if not top_jobs:
-        return
-
-    body = "🔥 TOP JOB MATCHES TODAY\n\n"
-    for job in top_jobs[:5]:
-        body += f"[{job['match_score']}] {job['job_title']} at {job['company']}\n"
-        body += f"  {job['apply_url']}\n"
-        body += f"  Why: {job['match_reason']}\n\n"
-
-    msg = MIMEText(body)
-    msg["Subject"] = f"🎯 {len(top_jobs)} Top Job Matches Found"
-    msg["From"] = os.getenv("GMAIL_FROM")
-    msg["To"] = os.getenv("GMAIL_TO")
-
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(os.getenv("GMAIL_FROM"), os.getenv("GMAIL_APP_PASSWORD"))
-        server.send_message(msg)
-```
-
-### Option B — Telegram Bot (even easier)
-
-```python
-import requests, os
-
-def send_telegram_alert(jobs: list):
-    top_jobs = [j for j in jobs if j.get("match_score", 0) >= 85]
-    if not top_jobs:
-        return
-
-    for job in top_jobs[:5]:
-        msg = (
-            f"🎯 *{job['job_title']}* at {job['company']}\n"
-            f"Score: {job['match_score']}/100\n"
-            f"Why: {job['match_reason']}\n"
-            f"[Apply Here]({job['apply_url']})"
-        )
-        requests.post(
-            f"https://api.telegram.org/bot{os.getenv('TELEGRAM_BOT_TOKEN')}/sendMessage",
-            json={
-                "chat_id": os.getenv("TELEGRAM_CHAT_ID"),
-                "text": msg,
-                "parse_mode": "Markdown"
-            }
-        )
-```
-
-**Telegram setup (5 min, fully free):**
-1. Message `@BotFather` on Telegram → `/newbot` → get token
-2. Message `@userinfobot` → get your chat_id
-3. Add both to `.env`
+**When ready, generate per top match:**
+- Funding stage & investors
+- Team size estimate
+- Tech stack from job listings
+- Culture signals from reviews
+- Interview prep notes from Glassdoor
 
 ---
 
-## 🔁 Feature 6 — Duplicate Detection (Across Runs)
+## Summary Table
 
-Right now if the same job appears in run 1 and run 2, it gets saved twice.
-
-```python
-# tools/deduplicator.py
-import hashlib
-
-def job_fingerprint(job: dict) -> str:
-    """Create unique hash from job title + company + url"""
-    key = f"{job['job_title'].lower().strip()}{job['company'].lower().strip()}{job['apply_url']}"
-    return hashlib.md5(key.encode()).hexdigest()
-
-def filter_already_seen(jobs: list, seen_hashes: set) -> list:
-    new_jobs = []
-    for job in jobs:
-        h = job_fingerprint(job)
-        if h not in seen_hashes:
-            new_jobs.append(job)
-            seen_hashes.add(h)
-    return new_jobs
-```
-
-Store `seen_hashes` in a local `seen_jobs.json` file. Load it at start,
-save it at end of each run.
+| # | Feature | Phase | Effort | Impact |
+|---|---------|-------|--------|--------|
+| 1 | Rejection Engine | 1 | Low | 🔴 Critical |
+| 2 | Freshness Boost | 1 | Low | 🟠 High |
+| 3 | Telegram Alerts | 1 | Low | 🟠 High |
+| 4 | Auto Cleanup | 2 | Low | 🟡 Medium |
+| 5 | Status Tracker | 2 | Low | 🟡 Medium |
+| 6 | Duplicate Dedup | 2 | Low | 🟡 Medium |
+| 7 | Multi-CV Matching | 3 | Medium | 🟡 Medium |
+| 8 | Market Dashboard | 3 | Medium | 🟢 Low (needs data) |
+| 9 | Company Scoring | 4 | High | 🟢 Low |
+| 10 | Recruiter DB | 4 | High | 🟢 Low |
+| 11 | AI Research Reports | 4 | High | 🟢 Low |
 
 ---
 
-## 🌍 Feature 7 — Timezone Compatibility Scoring
-
-As someone in India (UTC+5:30), async/overlap matters for remote work.
-
-```python
-def timezone_score(job: dict) -> int:
-    description = (job.get("summary", "") + job.get("tech_stack", "")).lower()
-
-    # Best — fully async, no overlap needed
-    if any(x in description for x in ["async", "fully remote", "no overlap", "flexible hours"]):
-        return 100
-
-    # Good — European timezone overlap (IST overlaps well with CET)
-    if any(x in description for x in ["europe", "cet", "gmt", "uk", "emea"]):
-        return 80
-
-    # Okay — some US overlap possible
-    if any(x in description for x in ["est", "pst", "us only", "americas"]):
-        return 40
-
-    # Unknown — neutral
-    return 60
-```
-
-Add `timezone_score` as a column in Sheets and factor it into overall match score.
-
----
-
-## 📝 Feature 8 — Smarter Cover Letters
-
-### Current Problem
-Your cover letter is generic — same template for every job.
-
-### Better Approach — Job-Specific Cover Letters
-
-```python
-def generate_cover_letter(job: dict, cv_profile: dict) -> str:
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    prompt = f"""
-    Write a SHORT, punchy cover letter (200 words max).
-
-    CANDIDATE:
-    - Name: {cv_profile['name']}
-    - Stack: {', '.join(cv_profile['skills'][:8])}
-    - Experience: {cv_profile['years_experience']} years
-
-    JOB:
-    - Title: {job['job_title']}
-    - Company: {job['company']}
-    - Requirements: {job['summary'][:400]}
-
-    Rules:
-    - First line must hook them immediately (no "I am writing to apply...")
-    - Mention 2-3 specific skills that match the job
-    - Reference the company by name
-    - End with a clear CTA
-    - NO generic filler phrases
-    """
-    response = model.generate_content(prompt)
-    return response.text
-```
-
-Only generate cover letters for jobs with `match_score >= 75` — save tokens.
-
----
-
-## 🗂️ Feature 9 — Application Tracker
-
-Add a simple status tracker so you know what you've applied to.
-
-**New Sheet tab: `APPLIED`**
-
-```python
-def mark_applied(job_url: str, notes: str = ""):
-    """Call this manually when you apply to a job"""
-    sheet = get_sheet("APPLIED")
-    sheet.append_row([
-        job_url,
-        datetime.now().isoformat(),
-        "applied",
-        notes
-    ])
-```
-
-Or build a tiny CLI:
-```bash
-python track.py --apply "https://job-url.com" --note "Good fit, applied via LinkedIn"
-python track.py --status  # shows summary of applications
-```
-
----
-
-## 🔧 Updated .env (All Features)
+## Environment Variables (Full Reference)
 
 ```env
-# Core
-GOOGLE_SHEETS_ID=your_sheet_id
-GOOGLE_SERVICE_ACCOUNT=keys.json
-GEMINI_API_KEY=your_key
-MODEL=gemini/gemini-2.0-flash
-RUN_MODE=crewai
+# Existing
+GEMINI_API_KEY=
+GOOGLE_SHEETS_ID=
+GOOGLE_SERVICE_ACCOUNT_PATH=keys.json
 
-# Job Scraping
-ADZUNA_APP_ID=your_id
-ADZUNA_APP_KEY=your_key
-JOBSPY_RESULTS_PER_SITE=20
-JOBSPY_DELAY=3
-PLAYWRIGHT_HEADLESS=true
+# Phase 1 additions
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+ALERT_SCORE_THRESHOLD=80
 
-# CV Matching
-CV_PATH=my_cv.pdf
-MIN_MATCH_SCORE=70
+# Phase 2 additions
+JOB_RETENTION_DAYS=30
 
-# Notifications (pick one)
-GMAIL_FROM=your@gmail.com
-GMAIL_TO=your@gmail.com
-GMAIL_APP_PASSWORD=your_app_password
-
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
+# Phase 3 additions
+CV_DIR=./cvs
 ```
-
----
-
-## 🏁 Priority Order — What to Build First
-
-| Priority | Feature | Impact | Effort |
-|---|---|---|---|
-| 🔴 1 | CV-Based Job Matching | Huge — finds right jobs | Medium |
-| 🔴 2 | Duplicate Detection | Cleans up Sheets fast | Low |
-| 🟡 3 | Telegram Notifications | Instant alerts | Low |
-| 🟡 4 | Smart Sheet Structure | Better visibility | Low |
-| 🟡 5 | Smarter Cover Letters | More personal | Medium |
-| 🟢 6 | CV Parser (PDF) | Auto-updates matching | Medium |
-| 🟢 7 | Timezone Scoring | India-relevant results | Low |
-| 🟢 8 | Smart Scheduler | Daily quick checks | Low |
-| 🟢 9 | Application Tracker | Tracks your pipeline | Medium |
-
----
-
-*Start with Feature 1 (CV Matching) + Feature 2 (Deduplication) —
-those two alone will transform the quality of results.*

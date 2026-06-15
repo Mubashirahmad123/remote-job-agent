@@ -5,6 +5,8 @@ import traceback
 from datetime import datetime
 from dotenv import load_dotenv
 from tools.deduplicator import add_job_fingerprint, job_fingerprint, normalize_url
+from datetime import datetime, timedelta
+
 
 load_dotenv()
 
@@ -28,6 +30,59 @@ LEGACY_SHEET = "LIVE Remote Jobs Tracker"
 
 APPLIED_COLUMNS = COLUMNS + ["applied_at", "notes"]
 STATS_COLUMNS = ["run_at", "total_processed", "new_jobs_added", "duplicates_skipped", "top_matches", "good_matches"]
+
+
+
+def remove_old_jobs_from_sheet(worksheet, days=30):
+    """
+    Remove jobs older than X days based on posted_date_iso.
+    Keeps header row intact.
+    """
+
+    data = worksheet.get_all_values()
+
+    if len(data) <= 1:
+        return
+
+    header = data[0]
+
+    try:
+        date_idx = header.index("posted_date_iso")
+    except ValueError:
+        print("posted_date_iso column not found")
+        return
+
+    cutoff = datetime.now() - timedelta(days=days)
+
+    filtered_rows = []
+
+    for row in data[1:]:
+        try:
+            if len(row) <= date_idx:
+                continue
+
+            posted_date = datetime.strptime(
+                row[date_idx].strip(),
+                "%Y-%m-%d"
+            )
+
+            if posted_date >= cutoff:
+                filtered_rows.append(row)
+
+        except Exception:
+            # Keep rows with bad dates if desired
+            continue
+
+    removed = len(data) - 1 - len(filtered_rows)
+
+    if removed > 0:
+        worksheet.clear()
+        worksheet.append_row(header)
+
+        if filtered_rows:
+            worksheet.append_rows(filtered_rows)
+
+    print(f"🧹 Removed {removed} jobs older than {days} days")
 
 def test_environment():
     """Test if environment variables are properly set"""
@@ -301,6 +356,7 @@ def append_rows(rows):
             for i in range(0, len(new_values), batch_size):
                 batch = new_values[i:i + batch_size]
                 worksheet.append_rows(batch)
+                remove_old_jobs_from_sheet(worksheet, days=30)  ## remove old jobs
                 print(f"📤 Added batch {i//batch_size + 1}: {len(batch)} rows")
                 
                 # Small delay to avoid rate limiting
