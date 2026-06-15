@@ -1,3 +1,4 @@
+import os
 import requests, json
 import re
 import datetime
@@ -115,6 +116,22 @@ MASTER_BOARDS = {
         "url": "https://www.arbeitnow.com/api/job-board-api",
         "type": "api"
     },
+    "Himalayas": {
+        "url": "https://himalayas.app/api/jobs?limit=100",
+        "type": "api"
+    },
+    "Jobicy": {
+        "url": "https://jobicy.com/api/v0/remote-jobs?count=50&tag=developer",
+        "type": "api"
+    },
+    "TheMuse": {
+        "url": "https://www.themuse.com/api/public/jobs?page=1&level=Entry%20Level&level=Mid%20Level",
+        "type": "api"
+    },
+    "Adzuna": {
+        "url": "https://api.adzuna.com/v1/api/jobs/gb/search/1",
+        "type": "api"
+    },
     # --- HTML Boards ---
     "WeWorkRemotely": {
         "url": "https://weworkremotely.com/remote-full-time-jobs",
@@ -167,10 +184,6 @@ MASTER_BOARDS = {
     },
     "RemoteTech": {
         "url": "https://remotetech.io/remote-jobs/developer/",
-        "type": "html"
-    },
-    "Himalayas": {
-        "url": "https://himalayas.app/jobs/remote-software-engineering",
         "type": "html"
     },
     "GoRemote": {
@@ -226,6 +239,54 @@ EXP_FILTER = re.compile(r"\b(junior|entry.*level|mid.*level|1-3\s?yr|early.*care
 
 # More specific exclusion filter
 EXCLUDE_FILTER = re.compile(r"\b(senior.*(?:engineer|developer|architect)|lead.*(?:engineer|developer)|principal.*(?:engineer|developer|architect)|engineering.*manager|head.*of.*engineering|staff.*engineer|director.*engineering)\b", re.I)
+
+DEV_TITLE_FILTER = re.compile(r"""(?ix)
+    (
+        developer | engineer | programmer | backend | back[-\s]?end |
+        frontend | front[-\s]?end | fullstack | full[-\s]?stack |
+        devops | sre | swe | software | node\.?js | django | react |
+        python | typescript | javascript | api\ developer | web\ developer |
+        mobile\ developer | cloud\ engineer | data\ engineer | ml\ engineer |
+        platform\ engineer | site\ reliability
+    )
+""")
+
+NON_DEV_FILTER = re.compile(r"""(?ix)
+    (
+        marketing | sales | designer | copywriter | accountant | finance |
+        recruiter | human\ resources | customer\ success | customer\ support |
+        content\ writer | seo | social\ media | product\ manager |
+        project\ manager | data\ analyst | business\ analyst |
+        operations\ manager | office\ manager | graphic\ design |
+        ui\ designer | ux\ designer | illustrator | virtual\ assistant |
+        community\ manager | account\ executive | business\ development
+    )
+""")
+
+SENIORITY_FILTER = re.compile(r"""(?ix)
+    \b(
+        senior | sr\.? | lead | principal | staff | architect |
+        director | manager | vp | head\ of | cto | ceo
+    )\b
+""")
+
+def is_valid_dev_job(job):
+    """Return True only for non-senior software/developer roles."""
+    title = (job.get("job_title") or "").strip().lower()
+    tech_stack = (job.get("tech_stack") or "").strip().lower()
+
+    if not title:
+        return False
+    if not DEV_TITLE_FILTER.search(title):
+        return False
+    if NON_DEV_FILTER.search(title):
+        return False
+    if SENIORITY_FILTER.search(title):
+        return False
+    if tech_stack and NON_DEV_FILTER.search(tech_stack):
+        return False
+
+    return True
 
 HEADERS = {
     'User-Agent': (
@@ -425,6 +486,135 @@ def parse_json_arbeitnow(board, data, debug=False):
             "source": board
         })
     
+    return results
+
+def _accept_job(title, description=""):
+    combined_text = f"{title} {description}"
+    if not is_valid_dev_job({"job_title": title, "tech_stack": combined_text}):
+        return False
+    return bool(
+        EXP_FILTER.search(combined_text)
+        or any(word in title.lower() for word in ["developer", "engineer", "programmer"])
+    )
+
+def parse_json_himalayas(board, data, debug=False):
+    results = []
+    jobs = data.get("jobs", []) if isinstance(data, dict) else []
+
+    for j in jobs:
+        title = j.get("title", "") or ""
+        description = j.get("description", "") or ""
+        tags = j.get("tags", []) or []
+        tag_text = " ".join(tags) if isinstance(tags, list) else str(tags)
+        if not _accept_job(title, f"{description} {tag_text}"):
+            continue
+
+        company = j.get("company", {})
+        results.append({
+            "job_title": title,
+            "company": company.get("name", "") if isinstance(company, dict) else "",
+            "salary": j.get("salary", "") or "",
+            "tech_stack": ", ".join(tags[:5]) if isinstance(tags, list) else top_techs(f"{title} {description}"),
+            "timezone": "Remote",
+            "apply_url": j.get("url", "") or "",
+            "summary": clean_html(description)[:300],
+            "posted_date_iso": normalize_date(j.get("createdAt") or j.get("created_at"), board),
+            "source": board
+        })
+
+    if debug:
+        print(f"  Himalayas API results: {len(results)}")
+    return results
+
+def parse_json_jobicy(board, data, debug=False):
+    results = []
+    jobs = data.get("jobs", []) if isinstance(data, dict) else []
+
+    for j in jobs:
+        title = j.get("jobTitle", "") or j.get("title", "") or ""
+        description = j.get("jobDescription", "") or j.get("jobExcerpt", "") or ""
+        industries = j.get("jobIndustry", []) or []
+        if isinstance(industries, str):
+            industries = [industries]
+        if not _accept_job(title, f"{description} {' '.join(industries)}"):
+            continue
+
+        salary_min = j.get("annualSalaryMin", "") or ""
+        salary_max = j.get("annualSalaryMax", "") or ""
+        salary = f"{salary_min} - {salary_max}".strip(" -")
+        results.append({
+            "job_title": title,
+            "company": j.get("companyName", "") or "",
+            "salary": salary,
+            "tech_stack": ", ".join(industries[:5]) or top_techs(f"{title} {description}"),
+            "timezone": j.get("jobGeo", "") or "Remote",
+            "apply_url": j.get("url", "") or "",
+            "summary": clean_html(description)[:300],
+            "posted_date_iso": normalize_date(j.get("pubDate"), board),
+            "source": board
+        })
+
+    if debug:
+        print(f"  Jobicy API results: {len(results)}")
+    return results
+
+def parse_json_themuse(board, data, debug=False):
+    results = []
+    jobs = data.get("results", []) if isinstance(data, dict) else []
+
+    for j in jobs:
+        title = j.get("name", "") or ""
+        contents = j.get("contents", "") or ""
+        categories = [c.get("name", "") for c in j.get("categories", []) if isinstance(c, dict)]
+        if not _accept_job(title, f"{contents} {' '.join(categories)}"):
+            continue
+
+        company = j.get("company", {})
+        locations = [loc.get("name", "") for loc in j.get("locations", []) if isinstance(loc, dict)]
+        results.append({
+            "job_title": title,
+            "company": company.get("name", "") if isinstance(company, dict) else "",
+            "salary": "",
+            "tech_stack": ", ".join(categories[:5]) or top_techs(f"{title} {contents}"),
+            "timezone": ", ".join(locations) or "Remote",
+            "apply_url": j.get("refs", {}).get("landing_page", "") if isinstance(j.get("refs"), dict) else "",
+            "summary": clean_html(contents)[:300],
+            "posted_date_iso": normalize_date(j.get("publication_date"), board),
+            "source": board
+        })
+
+    if debug:
+        print(f"  The Muse API results: {len(results)}")
+    return results
+
+def parse_json_adzuna(board, data, debug=False):
+    results = []
+    jobs = data.get("results", []) if isinstance(data, dict) else []
+
+    for j in jobs:
+        title = j.get("title", "") or ""
+        description = j.get("description", "") or ""
+        if not _accept_job(title, description):
+            continue
+
+        salary_min = j.get("salary_min", "") or ""
+        salary_max = j.get("salary_max", "") or ""
+        salary = f"{salary_min} - {salary_max}".strip(" -")
+        company = j.get("company", {})
+        results.append({
+            "job_title": title,
+            "company": company.get("display_name", "") if isinstance(company, dict) else "",
+            "salary": salary,
+            "tech_stack": top_techs(f"{title} {description}"),
+            "timezone": j.get("location", {}).get("display_name", "Remote") if isinstance(j.get("location"), dict) else "Remote",
+            "apply_url": j.get("redirect_url", "") or "",
+            "summary": clean_html(description)[:300],
+            "posted_date_iso": normalize_date(j.get("created"), board),
+            "source": board
+        })
+
+    if debug:
+        print(f"  Adzuna API results: {len(results)}")
     return results
 
 # === HTML PARSERS ===
@@ -932,6 +1122,16 @@ def fetch_jobs_from_board(name, info, debug=False):
     try:
         if typ == "api":
             print(f"Fetching (API): {name}")
+            if name == "Adzuna":
+                app_id = os.getenv("ADZUNA_APP_ID")
+                app_key = os.getenv("ADZUNA_APP_KEY")
+                if not app_id or not app_key:
+                    print("  Missing ADZUNA_APP_ID or ADZUNA_APP_KEY, skipping Adzuna")
+                    return []
+                url = (
+                    f"{url}?app_id={app_id}&app_key={app_key}"
+                    "&what=developer+remote&results_per_page=50&content-type=application/json"
+                )
             response = fetch_with_retry(url, timeout=30)
             data = response.json()
             
@@ -943,6 +1143,14 @@ def fetch_jobs_from_board(name, info, debug=False):
                 return parse_json_arbeitnow(name, data, debug)
             elif name == "WorkingNomads":
                 return parse_json_workingnomads(name, data, debug)
+            elif name == "Himalayas":
+                return parse_json_himalayas(name, data, debug)
+            elif name == "Jobicy":
+                return parse_json_jobicy(name, data, debug)
+            elif name == "TheMuse":
+                return parse_json_themuse(name, data, debug)
+            elif name == "Adzuna":
+                return parse_json_adzuna(name, data, debug)
             else:
                 print(f"  No specific parser for {name}, skipping")
                 return []
@@ -986,6 +1194,21 @@ def fetch_jobs_from_board(name, info, debug=False):
         print(f"  {name} scrape error: {e}")
         return []
 
+def _run_optional_scraper(label, scrape_func, jobs, working_scrapers, failed_scrapers, debug=False):
+    print(f"\n--- Processing {label} ---")
+    try:
+        scraped = scrape_func(debug=debug)
+        if scraped:
+            print(f"âœ… Parsed {len(scraped)} jobs from {label}")
+            jobs.extend(scraped)
+            working_scrapers.append(label)
+        else:
+            print(f"âš ï¸  No jobs found from {label}")
+            failed_scrapers.append(label)
+    except Exception as e:
+        print(f"âŒ {label} completely failed: {e}")
+        failed_scrapers.append(label)
+
 def scrape_all(debug=False):
     """Main scraping function"""
     jobs = []
@@ -1014,6 +1237,31 @@ def scrape_all(debug=False):
         
         # Add delay between requests to avoid rate limiting
         time.sleep(random.uniform(2, 4))
+
+    try:
+        from tools.jobspy_scraper import scrape_with_jobspy
+        _run_optional_scraper("JobSpy", scrape_with_jobspy, jobs, working_scrapers, failed_scrapers, debug)
+    except Exception as e:
+        print(f"âŒ JobSpy setup failed: {e}")
+        failed_scrapers.append("JobSpy")
+
+    try:
+        from tools.playwright_scraper import scrape_stealth_boards
+        _run_optional_scraper("PlaywrightStealth", scrape_stealth_boards, jobs, working_scrapers, failed_scrapers, debug)
+    except Exception as e:
+        print(f"âŒ Playwright stealth setup failed: {e}")
+        failed_scrapers.append("PlaywrightStealth")
+
+    try:
+        from tools.crawl4ai_scraper import scrape_justremote_with_crawl4ai
+        _run_optional_scraper("Crawl4AI-JustRemote", scrape_justremote_with_crawl4ai, jobs, working_scrapers, failed_scrapers, debug)
+    except Exception as e:
+        print(f"âŒ Crawl4AI setup failed: {e}")
+        failed_scrapers.append("Crawl4AI-JustRemote")
+
+    total_before_filter = len(jobs)
+    jobs = [job for job in jobs if is_valid_dev_job(job)]
+    print(f"Filtered dev jobs: {total_before_filter} total -> {len(jobs)} valid developer jobs")
 
     print(f"\n=== SCRAPING SUMMARY ===")
     print(f"✅ Working scrapers ({len(working_scrapers)}): {working_scrapers}")

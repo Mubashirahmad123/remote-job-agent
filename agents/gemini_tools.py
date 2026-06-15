@@ -15,6 +15,41 @@ if not GEMINI_API_KEY:
 # --- Configure Gemini globally ---
 genai.configure(api_key=GEMINI_API_KEY)
 
+def extract_jobs_from_markdown(markdown: str) -> list:
+    """
+    Extract developer jobs from crawler markdown using Gemini.
+    Returns a list of normalized job dictionaries.
+    """
+    if not markdown:
+        return []
+
+    prompt = f"""
+Extract all job listings from the following content.
+Return a JSON array with these fields:
+job_title, company, salary, tech_stack, timezone, apply_url, summary, posted_date_iso.
+
+Only include software/developer jobs. Skip senior, lead, principal, staff, manager,
+director, and head-of-engineering roles.
+
+Content:
+{markdown[:8000]}
+
+Return ONLY valid JSON, no markdown fences and no explanation.
+"""
+
+    try:
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        response = model.generate_content(prompt)
+        text = (response.text or "").strip()
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.I | re.S).strip()
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            parsed = parsed.get("jobs", [])
+        return parsed if isinstance(parsed, list) else []
+    except Exception as e:
+        print(f"âŒ Gemini markdown extraction failed: {e}")
+        return []
+
 def generate_cover_letter(job_title, company, job_description, applicant_name="Mubashir"):
     """
     Generate a concise, enthusiastic, and tailored cover letter for a specific job using Gemini.
@@ -31,7 +66,7 @@ COMPANY: {company}
 JOB DESCRIPTION: {job_description}
 """
         
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
         
         # Add retry logic
         max_retries = 3
