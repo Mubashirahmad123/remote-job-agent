@@ -70,8 +70,8 @@ def remove_old_jobs_from_sheet(worksheet, days=30):
                 filtered_rows.append(row)
 
         except Exception:
-            # Keep rows with bad dates if desired
-            continue
+            # Keep rows with unparseable dates instead of dropping them
+            filtered_rows.append(row)
 
     removed = len(data) - 1 - len(filtered_rows)
 
@@ -82,7 +82,8 @@ def remove_old_jobs_from_sheet(worksheet, days=30):
         if filtered_rows:
             worksheet.append_rows(filtered_rows)
 
-    print(f"🧹 Removed {removed} jobs older than {days} days")
+    if removed > 0:
+        print(f"🧹 Removed {removed} jobs older than {days} days")
 
 def test_environment():
     """Test if environment variables are properly set"""
@@ -356,14 +357,8 @@ def append_rows(rows):
             for i in range(0, len(new_values), batch_size):
                 batch = new_values[i:i + batch_size]
                 worksheet.append_rows(batch)
+                print(f"📤 Added batch {i//batch_size + 1}: {len(batch)} rows")
                 if i + batch_size < len(new_values):
-                    import time
-                    time.sleep(1)
-            remove_old_jobs_from_sheet(worksheet, days=30)
-            print(f"📤 Added batch {i//batch_size + 1}: {len(batch)} rows")
-                
-                # Small delay to avoid rate limiting
-            if i + batch_size < len(new_values):
                     import time
                     time.sleep(1)
 
@@ -399,6 +394,11 @@ def append_rows(rows):
             
         else:
             print("ℹ️ No new unique jobs to add")
+
+        # Always clean old jobs, even when no new jobs were added
+        for ws_name in (ALL_JOBS_SHEET, TOP_MATCHES_SHEET, GOOD_MATCHES_SHEET):
+            ws = worksheets[ws_name]
+            remove_old_jobs_from_sheet(ws, days=30)
         
         # Summary
         print(f"\n📊 SUMMARY:")

@@ -10,7 +10,7 @@ An automated system that scrapes 30+ remote job boards, matches jobs to your CV 
 |---|---|---|
 | Multi-source scraping | ✅ | 45+ job boards via APIs, HTML parsing, Playwright stealth, JobSpy, and Crawl4AI |
 | Dev-only job filter | ✅ | Strips non-dev, senior/lead, and irrelevant roles automatically |
-| CV-based job matching | ✅ | Parses your PDF/DOCX CV via Gemini, scores each job 0–100 |
+| CV-based job matching | ✅ | Parses your PDF/DOCX CV via Gemini, local keyword scoring (no API calls per job) |
 | Duplicate detection | ✅ | MD5 fingerprinting prevents duplicate entries across runs |
 | Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS |
 | AI cover letters | ✅ | Generates job-specific cover letters with PDF export |
@@ -68,7 +68,7 @@ python Run.py --setup         # First-time environment setup
 ```
 
 You can also set `RUN_MODE` in `.env`:
-- `crewai` (default) — Full CrewAI pipeline with scrape → curate → cover letter
+- `crewai` (default) — CrewAI pipeline: scrape + curate → cover letter (2 agents)
 - `simple` — Direct scrape → sheets without CrewAI
 - `test` — Test individual tools
 
@@ -86,7 +86,7 @@ remote-job-agent/
 ├── tools/
 │   ├── __init__.py
 │   ├── cv_parser.py           # PDF/DOCX CV → structured profile via Gemini
-│   ├── cv_matcher.py          # Job scoring 0–100 against CV profile
+│   ├── cv_matcher.py          # Local keyword job scoring (no API calls)
 │   ├── deduplicator.py        # MD5 fingerprint duplicate detection
 │   ├── sheet_writer.py        # Google Sheets dashboard (5 tabs) + 30-day auto-cleanup
 │   ├── jobspy_scraper.py      # LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter
@@ -143,14 +143,14 @@ MIN_MATCH_SCORE=70
      │
      ▼
   agents/scrapper.py     ◄── API calls, HTML parse, Playwright, JobSpy, Crawl4AI
-     │
+     │                   ──   (called by merged Scraper+Curator agent)
      ▼
-  agents/curator.py       ◄── Dedup → CV score → quality rank → Sheets
-     │
+  agents/curator.py       ◄── Dedup → CV score (local) → quality rank → Sheets
+     │                    ──   (called by merged Scraper+Curator agent)
      ├─ tools/deduplicator.py    (MD5 fingerprinting)
      ├─ tools/cv_parser.py       (Gemini CV → profile)
-     ├─ tools/cv_matcher.py      (Gemini job scoring)
-     └─ tools/sheet_writer.py    (Google Sheets dashboard)
+     ├─ tools/cv_matcher.py      (Local keyword scoring, no API calls)
+     └─ tools/sheet_writer.py    (Google Sheets dashboard + 30-day cleanup)
      │
      ▼
   Google Sheets Dashboard

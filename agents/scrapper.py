@@ -133,10 +133,6 @@ MASTER_BOARDS = {
         "type": "api"
     },
     # --- HTML Boards ---
-    "WeWorkRemotely": {
-        "url": "https://weworkremotely.com/remote-full-time-jobs",
-        "type": "html"
-    },
     "RemoteOK": {
         "url": "https://remoteok.com/remote-dev-jobs",
         "type": "html"
@@ -153,10 +149,6 @@ MASTER_BOARDS = {
         "url": "https://euremotejobs.com/jobs/remote-full-stack",
         "type": "html"
     },
-    "Wellfound": {
-        "url": "https://wellfound.com/role/r/remote/full-stack-developer",
-        "type": "html"
-    },
     "Arc": {
         "url": "https://arc.dev/remote-jobs/full-stack-developer",
         "type": "html"
@@ -169,19 +161,11 @@ MASTER_BOARDS = {
         "url": "https://www.flexjobs.com/search?remote=yes&experience=entry,mid",
         "type": "html"
     },
-    "Remote.co": {
-        "url": "https://remote.co/remote-jobs/developer/",
-        "type": "html"
-    },
     "JustRemote": {
         "url": "https://justremote.co/remote-developer-jobs?exp=junior,mid",
         "type": "html"
     },
     # --- NEW VERIFIED SITES ---
-    "NoDesk": {
-        "url": "https://nodesk.co/remote-jobs/engineering/",
-        "type": "html"
-    },
     "RemoteTech": {
         "url": "https://remotetech.io/remote-jobs/developer/",
         "type": "html"
