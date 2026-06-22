@@ -12,11 +12,14 @@ An automated system that scrapes 30+ remote job boards, matches jobs to your CV 
 | Dev-only job filter | ✅ | Strips non-dev, senior/lead, and irrelevant roles automatically |
 | CV-based job matching | ✅ | Parses your PDF/DOCX CV via Gemini, local keyword scoring (no API calls per job) |
 | Duplicate detection | ✅ | MD5 fingerprinting prevents duplicate entries across runs |
-| Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS |
+| Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS — with colored score bands, hyperlinks, frozen headers |
 | AI cover letters | ✅ | Generates job-specific cover letters with PDF export |
 | Application tracker | ✅ | `track.py` CLI + `tools/application_tracker.py` — mark applied, update status, list, stats, follow-up reminders |
-| Auto-cleanup old jobs | ✅ | Removes jobs older than 30 days from sheets automatically |
-| Excel cleanup | ✅ | `clean_jobs.py` — extracts company from URLs, strips HTML, deduplicates tags, removes senior roles from xlsx exports |
+| Auto-cleanup old jobs | ✅ | Removes jobs older than 30 days from all sheets (including legacy `LIVE Remote Jobs Tracker`) |
+| Sheet formatting (Google Sheets) | ✅ | Auto-applies colored score bands, clickable hyperlinks, wrapped text, column widths via Google Sheets API |
+| Sheet formatting (xlsx export) | ✅ | `format_jobs_xlsx.py` — professional Excel formatting with same visual style |
+| Standalone cleanup CLI | ✅ | `python tools/sheet_writer.py --cleanup [days]` — run cleanup + formatting anytime |
+| Excel cleanup + format | ✅ | `clean_jobs.py` — extracts company from URLs, strips HTML, deduplicates tags, removes senior roles; `format_jobs_xlsx.py` — professional xlsx formatting |
 | Playwright stealth scraper | ✅ | Scrapes Cloudflare-protected boards (WeWorkRemotely, Remote.co, Wellfound, NoDesk) |
 | Crawl4AI scraper | ✅ | AI-native crawler for JustRemote |
 | JobSpy integration | ✅ | Scrapes LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter |
@@ -95,6 +98,7 @@ remote-job-agent/
 │   ├── scraper_utils.py       # Text cleaning, date parsing utilities
 │   └── application_tracker.py # APPLIED sheet management (mark, update, list, stats)
 ├── clean_jobs.py             # Excel cleanup: extract company, strip HTML, dedup tags, remove senior roles
+├── format_jobs_xlsx.py       # Professional Excel formatter (colored bands, hyperlinks, frozen header)
 ├── track.py                  # Application tracker CLI (mark applied, status, list, stats, followups)
 ├── cover_letters/            # Generated PDF cover letters
 ├── main.py                   # CrewAI pipeline entry point
@@ -150,7 +154,7 @@ MIN_MATCH_SCORE=70
      ├─ tools/deduplicator.py    (MD5 fingerprinting)
      ├─ tools/cv_parser.py       (Gemini CV → profile)
      ├─ tools/cv_matcher.py      (Local keyword scoring, no API calls)
-     └─ tools/sheet_writer.py    (Google Sheets dashboard + 30-day cleanup)
+      └─ tools/sheet_writer.py    (Google Sheets dashboard + cleanup + formatting)
      │
      ▼
   Google Sheets Dashboard
@@ -210,13 +214,20 @@ python track.py --followups
 
 ---
 
-## Excel Cleanup
+## Excel Cleanup & Formatting
 
-Clean exported xlsx from Google Sheets (extract company from URLs, strip HTML, dedup tags, remove senior roles):
+Clean exported xlsx from Google Sheets (extract company from URLs, strip HTML, dedup tags, remove senior roles), then apply professional formatting:
 
 ```bash
 python clean_jobs.py
 python clean_jobs.py --input "my_export.xlsx" --output "cleaned.xlsx" --keep-senior
+```
+
+Format a raw xlsx (colored score bands, clickable hyperlinks, frozen header, wrapped text):
+
+```bash
+python format_jobs_xlsx.py input.xlsx output.xlsx
+python format_jobs_xlsx.py input.xlsx              # overwrites in place
 ```
 
 ---
@@ -240,6 +251,10 @@ python -c "from agents.scrapper import scrape_all; jobs = scrape_all(debug=False
 
 # Test sheet connection
 python -c "from tools.sheet_writer import test_connection; test_connection()"
+
+# Run cleanup + formatting on all sheets
+python tools/sheet_writer.py --cleanup
+python tools/sheet_writer.py --cleanup 60   # custom age threshold
 
 # Test CV matching
 python -c "from tools.cv_parser import parse_cv; profile = parse_cv('my_cv.pdf'); print(profile)"

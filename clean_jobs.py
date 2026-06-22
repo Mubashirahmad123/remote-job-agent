@@ -21,6 +21,7 @@ import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 from copy import copy
 from datetime import datetime, timedelta
+from format_jobs_xlsx import format_workbook
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -254,6 +255,7 @@ def clean_jobs(input_path: str, output_path: str, keep_senior: bool = False):
     ws_main.freeze_panes = "A2"
 
     wb_out.save(output_path)
+    format_workbook(output_path, output_path)  # Apply additional formatting (from format_jobs_xlsx.py)
 
     # ── Stats ─────────────────────────────────────────────────────────────────
     print(f"\n✅ Done! Saved to: {output_path}")
