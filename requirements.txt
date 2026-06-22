@@ -25,7 +25,10 @@ google-auth==2.29.0
 reportlab==4.1.0
 fpdf2==2.7.9
 
-# Excel cleanup
+# Date parsing
+python-dateutil==2.9.0
+
+# Excel cleanup + formatting
 openpyxl==3.1.5
 
 # Scheduling

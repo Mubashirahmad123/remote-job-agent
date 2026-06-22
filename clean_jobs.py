@@ -20,6 +20,8 @@ from urllib.parse import urlparse
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 from copy import copy
+from datetime import datetime, timedelta
+from format_jobs_xlsx import format_workbook
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -103,6 +105,31 @@ def is_senior_role(title: str) -> bool:
     return bool(title and SENIOR_PATTERN.search(title))
 
 
+def remove_old_jobs(data: list, headers: list, days: int = 30) -> tuple:
+    """Remove jobs older than X days based on posted_date_iso column."""
+    if 'posted_date_iso' not in headers:
+        print("⚠️  No posted_date_iso column — skipping date cleanup")
+        return data, 0
+
+    date_idx = headers.index('posted_date_iso')
+    cutoff = datetime.now() - timedelta(days=days)
+    kept, removed = [], 0
+
+    for row in data:
+        try:
+            val = str(row[date_idx]).strip()
+            if datetime.strptime(val, "%Y-%m-%d") >= cutoff:
+                kept.append(row)
+            else:
+                removed += 1
+        except Exception:
+            kept.append(row)  # keep rows with unparseable/missing dates
+
+    print(f"🧹 Removed {removed} jobs older than {days} days")
+    return kept, removed
+
+
+
 def style_header_row(ws):
     """Apply header styling."""
     header_fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
@@ -125,6 +152,10 @@ def clean_jobs(input_path: str, output_path: str, keep_senior: bool = False):
     data = rows[1:]
 
     print(f"   {len(data)} rows found")
+
+    data, old_removed = remove_old_jobs(data, headers, days=30)  # ← ADD THIS
+    print(f"   {len(data)} rows after date cleanup")
+
 
     # Column indices
     col = {name: i for i, name in enumerate(headers)}
@@ -224,6 +255,7 @@ def clean_jobs(input_path: str, output_path: str, keep_senior: bool = False):
     ws_main.freeze_panes = "A2"
 
     wb_out.save(output_path)
+    format_workbook(output_path, output_path)  # Apply additional formatting (from format_jobs_xlsx.py)
 
     # ── Stats ─────────────────────────────────────────────────────────────────
     print(f"\n✅ Done! Saved to: {output_path}")
@@ -235,6 +267,7 @@ def clean_jobs(input_path: str, output_path: str, keep_senior: bool = False):
     print(f"   Placeholders cleared: {stats['placeholder_cleared']}")
     print(f"   Tags deduplicated   : {stats['tags_deduped']}")
     print(f"   Senior roles removed: {stats['senior_removed']} (saved to 'SENIOR ROLES' sheet)")
+    print(f"   Old jobs removed    : {old_removed} (older than 30 days)")  # ← ADD THIS
     print()
 
 

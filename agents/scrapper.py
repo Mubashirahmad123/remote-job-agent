@@ -133,10 +133,6 @@ MASTER_BOARDS = {
         "type": "api"
     },
     # --- HTML Boards ---
-    "WeWorkRemotely": {
-        "url": "https://weworkremotely.com/remote-full-time-jobs",
-        "type": "html"
-    },
     "RemoteOK": {
         "url": "https://remoteok.com/remote-dev-jobs",
         "type": "html"
@@ -153,10 +149,6 @@ MASTER_BOARDS = {
         "url": "https://euremotejobs.com/jobs/remote-full-stack",
         "type": "html"
     },
-    "Wellfound": {
-        "url": "https://wellfound.com/role/r/remote/full-stack-developer",
-        "type": "html"
-    },
     "Arc": {
         "url": "https://arc.dev/remote-jobs/full-stack-developer",
         "type": "html"
@@ -169,19 +161,11 @@ MASTER_BOARDS = {
         "url": "https://www.flexjobs.com/search?remote=yes&experience=entry,mid",
         "type": "html"
     },
-    "Remote.co": {
-        "url": "https://remote.co/remote-jobs/developer/",
-        "type": "html"
-    },
     "JustRemote": {
         "url": "https://justremote.co/remote-developer-jobs?exp=junior,mid",
         "type": "html"
     },
     # --- NEW VERIFIED SITES ---
-    "NoDesk": {
-        "url": "https://nodesk.co/remote-jobs/engineering/",
-        "type": "html"
-    },
     "RemoteTech": {
         "url": "https://remotetech.io/remote-jobs/developer/",
         "type": "html"
@@ -1060,58 +1044,107 @@ def parse_json_workingnomads(board, data, debug=False):
 
 # In scrapper.py, add this new function alongside your other parsers
 
+def _extract_preloaded_state(html: str):
+    """Brace-counting JSON extraction (regex breaks on nested '};' in text fields)."""
+    marker = "window.__PRELOADED_STATE__"
+    start_idx = html.find(marker)
+    if start_idx == -1:
+        return None
+
+    eq_idx = html.find("=", start_idx)
+    brace_start = html.find("{", eq_idx)
+    if brace_start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    i = brace_start
+
+    while i < len(html):
+        ch = html[i]
+        if escape:
+            escape = False
+        elif ch == "\\" and in_string:
+            escape = True
+        elif ch == '"' and not escape:
+            in_string = not in_string
+        elif not in_string:
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    json_str = html[brace_start:i + 1]
+                    try:
+                        return json.loads(json_str)
+                    except json.JSONDecodeError:
+                        return None
+        i += 1
+    return None
+
+
+def _parse_relative_date(date_str: str) -> str:
+    """Convert JustRemote's '21 Jun' style date to ISO format (assumes current year)."""
+    try:
+        parsed = datetime.datetime.strptime(f"{date_str} {datetime.date.today().year}", "%d %b %Y")
+        return parsed.strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        return datetime.date.today().isoformat()
+
+
 def parse_html_justremote(html, base_url, board):
     """
-    A new, dedicated parser for JustRemote's current HTML structure.
+    Extract jobs from JustRemote's embedded __PRELOADED_STATE__ JSON.
+    JustRemote renders job cards client-side via React, but the full job
+    list is already embedded as JSON in a <script> tag before any JS runs.
+    This reads that directly instead of hunting for CSS selectors that
+    don't exist in the static HTML.
     """
-    soup = BeautifulSoup(html, "html.parser")
+    state = _extract_preloaded_state(html)
+    if not state:
+        print(f"  ⚠️ {board}: __PRELOADED_STATE__ not found — site structure may have changed")
+        return []
+
+    jobs_list = state.get("jobsState", {}).get("entity", {}).get("all", [])
+    if not jobs_list:
+        print(f"  ⚠️ {board}: No jobs found in preloaded state")
+        return []
+
+    DEV_CATEGORIES = {"developer", "devopsandsysadmin"}
+
     results = []
-    
-    # The new main selector for each job posting
-    job_elements = soup.select('div.job-card__container')
-    print(f"  Found {len(job_elements)} potential job elements with selector: div.job-card__container")
-
-    for element in job_elements:
-        try:
-            # The title and link are in the same element
-            title_elem = element.select_one('a.job-card__title')
-            if not title_elem:
-                continue
-
-            title = clean_text(title_elem)
-            link = title_elem.get('href', '')
-            if link and not link.startswith('http'):
-                link = base_url + link
-
-            # Get the company name
-            company_elem = element.select_one('div.job-card__company-name')
-            company = clean_text(company_elem)
-            
-            # --- Apply your filters ---
-            if EXCLUDE_FILTER.search(title):
-                continue
-            if not re.search(TECH_FILTER, title):
-                continue
-            
-            print(f"    + Found Job: '{title}' at {company}")
-            results.append({
-                "job_title": title,
-                "company": company,
-                "salary": "", # Salary info is not easily accessible on the main page
-                "tech_stack": ", ".join(re.findall(TECH_FILTER, title)[:5]),
-                "timezone": "Remote",
-                "apply_url": link,
-                "summary": f"Full-Time listing from JustRemote.",
-                "posted_date_iso": normalize_date(None),
-                "source": board
-
-            })
-        except Exception as e:
-            print(f"    - Error parsing one element: {e}")
+    for j in jobs_list:
+        if not j.get("is_active", True):
             continue
-            
-    return results
 
+        category = (j.get("category") or "").lower()
+        title = j.get("title", "") or ""
+
+        if category not in DEV_CATEGORIES:
+            continue
+
+        href = j.get("href", "") or ""
+        link = f"{base_url}/{href}" if href and not href.startswith("http") else href
+
+        location_restrictions = j.get("location_restrictions") or []
+        timezone = ", ".join(location_restrictions) if location_restrictions else "Remote"
+
+        print(f"    + Found Job: '{title}' at {j.get('company_name', '')}")
+        results.append({
+            "job_title": title,
+            "company": j.get("company_name", "") or "",
+            "salary": "",
+            "tech_stack": category,
+            "timezone": timezone,
+            "apply_url": link,
+            "summary": f"{j.get('job_type', 'Remote')} position via JustRemote",
+            "posted_date_iso": _parse_relative_date(j.get("date", "")),
+            "source": board,
+        })
+
+    print(f"  ✅ {board}: Extracted {len(results)} developer jobs from preloaded state ({len(jobs_list)} total listed)")
+    return results
 
 # === MAIN FETCH LOGIC ===
 
@@ -1192,6 +1225,8 @@ def fetch_jobs_from_board(name, info, debug=False):
             
     except Exception as e:
         print(f"  {name} scrape error: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 def _run_optional_scraper(label, scrape_func, jobs, working_scrapers, failed_scrapers, debug=False):
@@ -1207,6 +1242,8 @@ def _run_optional_scraper(label, scrape_func, jobs, working_scrapers, failed_scr
             failed_scrapers.append(label)
     except Exception as e:
         print(f"âŒ {label} completely failed: {e}")
+        import traceback
+        traceback.print_exc()
         failed_scrapers.append(label)
 
 def scrape_all(debug=False):
@@ -1233,6 +1270,8 @@ def scrape_all(debug=False):
                 
         except Exception as e:
             print(f"❌ {name} completely failed: {e}")
+            import traceback
+            traceback.print_exc()
             failed_scrapers.append(name)
         
         # Add delay between requests to avoid rate limiting

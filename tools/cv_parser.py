@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path;
 
 import google.generativeai as genai
@@ -44,6 +45,26 @@ Extract structured data from this CV. Return ONLY valid JSON, no explanation:
 CV TEXT:
 {text[:4000]}
 """
-    response = model.generate_content(prompt)  # ← call on model, not client
+    response = model.generate_content(prompt)
     raw = response.text.replace("```json", "").replace("```", "").strip()
-    return json.loads(raw)
+
+    # Fix common Gemini JSON issues: trailing commas before ] or }
+    raw = re.sub(r",\s*([\]}])", r"\1", raw)
+    # Remove trailing comma before newline/EOF
+    raw = re.sub(r",\s*$", "", raw)
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"⚠️ CV JSON parsing failed: {e}")
+        # Return a minimal default profile so CV matching can still operate
+        return {
+            "name": "",
+            "years_experience": 0,
+            "skills": [],
+            "frameworks": [],
+            "databases": [],
+            "preferred_titles": [],
+            "seniority": "mid",
+            "languages": [],
+        }

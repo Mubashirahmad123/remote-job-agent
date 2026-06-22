@@ -8,20 +8,24 @@ An automated system that scrapes 30+ remote job boards, matches jobs to your CV 
 
 | Feature | Status | Description |
 |---|---|---|
-| Multi-source scraping | ✅ | 30+ job boards via APIs, HTML parsing, Playwright stealth, JobSpy, and Crawl4AI |
+| Multi-source scraping | ✅ | 45+ job boards via APIs, HTML parsing, Playwright stealth, JobSpy, and Crawl4AI |
 | Dev-only job filter | ✅ | Strips non-dev, senior/lead, and irrelevant roles automatically |
-| CV-based job matching | ✅ | Parses your PDF/DOCX CV via Gemini, scores each job 0–100 |
+| CV-based job matching | ✅ | Parses your PDF/DOCX CV via Gemini, local keyword scoring (no API calls per job) |
 | Duplicate detection | ✅ | MD5 fingerprinting prevents duplicate entries across runs |
-| Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS |
+| Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS — with colored score bands, hyperlinks, frozen headers |
 | AI cover letters | ✅ | Generates job-specific cover letters with PDF export |
 | Application tracker | ✅ | `track.py` CLI + `tools/application_tracker.py` — mark applied, update status, list, stats, follow-up reminders |
-| Excel cleanup | ✅ | `clean_jobs.py` — extracts company from URLs, strips HTML, deduplicates tags, removes senior roles from xlsx exports |
+| Auto-cleanup old jobs | ✅ | Removes jobs older than 30 days from all sheets (including legacy `LIVE Remote Jobs Tracker`) |
+| Sheet formatting (Google Sheets) | ✅ | Auto-applies colored score bands, clickable hyperlinks, wrapped text, column widths via Google Sheets API |
+| Sheet formatting (xlsx export) | ✅ | `format_jobs_xlsx.py` — professional Excel formatting with same visual style |
+| Standalone cleanup CLI | ✅ | `python tools/sheet_writer.py --cleanup [days]` — run cleanup + formatting anytime |
+| Excel cleanup + format | ✅ | `clean_jobs.py` — extracts company from URLs, strips HTML, deduplicates tags, removes senior roles; `format_jobs_xlsx.py` — professional xlsx formatting |
 | Playwright stealth scraper | ✅ | Scrapes Cloudflare-protected boards (WeWorkRemotely, Remote.co, Wellfound, NoDesk) |
 | Crawl4AI scraper | ✅ | AI-native crawler for JustRemote |
 | JobSpy integration | ✅ | Scrapes LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter |
 | Scheduled automation | ✅ | Cron-based scheduler (Mon/Thu full scrape, daily quick checks) |
 | Universal run script | ✅ | `Run.py` works on Windows / Mac / Linux with `--setup` flag |
-| Dockersupport | ✅ | Ready-to-use Dockerfile |
+| Docker support | 🛠️ | Basic Dockerfile included (requires Playwright + Crawl4AI setup) |
 
 ---
 
@@ -67,7 +71,7 @@ python Run.py --setup         # First-time environment setup
 ```
 
 You can also set `RUN_MODE` in `.env`:
-- `crewai` (default) — Full CrewAI pipeline with scrape → curate → cover letter
+- `crewai` (default) — CrewAI pipeline: scrape + curate → cover letter (2 agents)
 - `simple` — Direct scrape → sheets without CrewAI
 - `test` — Test individual tools
 
@@ -78,28 +82,35 @@ You can also set `RUN_MODE` in `.env`:
 ```
 remote-job-agent/
 ├── agents/
-│   ├── scrapper.py           # 30+ job board scrapers (API, HTML, RSS)
+│   ├── __init__.py
+│   ├── scrapper.py           # 45+ job board scrapers (API, HTML, RSS)
 │   ├── curator.py            # Dedup, CV matching, quality ranking, sheet save
 │   └── gemini_tools.py       # Gemini cover letter generation, markdown extraction
 ├── tools/
+│   ├── __init__.py
 │   ├── cv_parser.py           # PDF/DOCX CV → structured profile via Gemini
-│   ├── cv_matcher.py          # Job scoring 0–100 against CV profile
+│   ├── cv_matcher.py          # Local keyword job scoring (no API calls)
 │   ├── deduplicator.py        # MD5 fingerprint duplicate detection
-│   ├── sheet_writer.py        # Google Sheets dashboard (5 tabs)
+│   ├── sheet_writer.py        # Google Sheets dashboard (5 tabs) + 30-day auto-cleanup
 │   ├── jobspy_scraper.py      # LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter
-│   ├── playwright_scraper.py  # Stealth browser scraping (WWR, Remote.co, etc.)
-│   ├── crawl4ai_scraper.py    # AI-native Crawl4AI scraper
+│   ├── playwright_scraper.py  # Stealth browser scraping (WWR, Remote.co, Wellfound, NoDesk)
+│   ├── crawl4ai_scraper.py    # AI-native Crawl4AI scraper for JustRemote
 │   ├── scraper_utils.py       # Text cleaning, date parsing utilities
 │   └── application_tracker.py # APPLIED sheet management (mark, update, list, stats)
 ├── clean_jobs.py             # Excel cleanup: extract company, strip HTML, dedup tags, remove senior roles
+├── format_jobs_xlsx.py       # Professional Excel formatter (colored bands, hyperlinks, frozen header)
 ├── track.py                  # Application tracker CLI (mark applied, status, list, stats, followups)
 ├── cover_letters/            # Generated PDF cover letters
 ├── main.py                   # CrewAI pipeline entry point
 ├── Run.py                    # Universal start script (Win/Mac/Linux)
 ├── scheduler.py              # Cron-based scheduler (Mon/Thu)
 ├── .env                      # Configuration + API keys
+├── .env.example              # Example env file with all variables
+├── .gitignore
 ├── requirements.txt
 ├── Dockerfile
+├── scraped_jobs.json         # Cached scrape output
+├── keys.json                 # Google service account key
 └── my_cv.pdf                 # Your CV (for CV matching)
 ```
 
@@ -136,14 +147,14 @@ MIN_MATCH_SCORE=70
      │
      ▼
   agents/scrapper.py     ◄── API calls, HTML parse, Playwright, JobSpy, Crawl4AI
-     │
+     │                   ──   (called by merged Scraper+Curator agent)
      ▼
-  agents/curator.py       ◄── Dedup → CV score → quality rank → Sheets
-     │
+  agents/curator.py       ◄── Dedup → CV score (local) → quality rank → Sheets
+     │                    ──   (called by merged Scraper+Curator agent)
      ├─ tools/deduplicator.py    (MD5 fingerprinting)
      ├─ tools/cv_parser.py       (Gemini CV → profile)
-     ├─ tools/cv_matcher.py      (Gemini job scoring)
-     └─ tools/sheet_writer.py    (Google Sheets dashboard)
+     ├─ tools/cv_matcher.py      (Local keyword scoring, no API calls)
+      └─ tools/sheet_writer.py    (Google Sheets dashboard + cleanup + formatting)
      │
      ▼
   Google Sheets Dashboard
@@ -203,13 +214,20 @@ python track.py --followups
 
 ---
 
-## Excel Cleanup
+## Excel Cleanup & Formatting
 
-Clean exported xlsx from Google Sheets (extract company from URLs, strip HTML, dedup tags, remove senior roles):
+Clean exported xlsx from Google Sheets (extract company from URLs, strip HTML, dedup tags, remove senior roles), then apply professional formatting:
 
 ```bash
 python clean_jobs.py
 python clean_jobs.py --input "my_export.xlsx" --output "cleaned.xlsx" --keep-senior
+```
+
+Format a raw xlsx (colored score bands, clickable hyperlinks, frozen header, wrapped text):
+
+```bash
+python format_jobs_xlsx.py input.xlsx output.xlsx
+python format_jobs_xlsx.py input.xlsx              # overwrites in place
 ```
 
 ---
@@ -221,6 +239,8 @@ docker build -t remote-job-agent .
 docker run --env-file .env remote-job-agent
 ```
 
+> **Note:** The Dockerfile is a starting point. You may need to install Playwright browsers (`playwright install chromium`) and run `crawl4ai.install` inside the container for full functionality.
+
 ---
 
 ## Quick Test Commands
@@ -231,6 +251,10 @@ python -c "from agents.scrapper import scrape_all; jobs = scrape_all(debug=False
 
 # Test sheet connection
 python -c "from tools.sheet_writer import test_connection; test_connection()"
+
+# Run cleanup + formatting on all sheets
+python tools/sheet_writer.py --cleanup
+python tools/sheet_writer.py --cleanup 60   # custom age threshold
 
 # Test CV matching
 python -c "from tools.cv_parser import parse_cv; profile = parse_cv('my_cv.pdf'); print(profile)"

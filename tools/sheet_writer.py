@@ -1,4 +1,12 @@
 import os
+import sys
+from pathlib import Path
+
+# Ensure project root is on sys.path so that 'tools' package is importable
+_project_root = Path(__file__).resolve().parents[1]
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 import gspread
 from google.oauth2.service_account import Credentials
 import traceback
@@ -33,10 +41,37 @@ STATS_COLUMNS = ["run_at", "total_processed", "new_jobs_added", "duplicates_skip
 
 
 
+DATE_PARSE_FORMATS = [
+    "%Y-%m-%d",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M:%S",
+    "%m/%d/%Y",
+    "%d/%m/%Y",
+    "%b %d, %Y",
+    "%B %d, %Y",
+]
+
+def _parse_date_cell(value):
+    """Try multiple date formats; return a datetime or None."""
+    if not value or not value.strip():
+        return None
+    s = value.strip()
+    for fmt in DATE_PARSE_FORMATS:
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    try:
+        from dateutil import parser
+        return parser.parse(s)
+    except Exception:
+        return None
+
+
 def remove_old_jobs_from_sheet(worksheet, days=30):
     """
     Remove jobs older than X days based on posted_date_iso.
-    Keeps header row intact.
+    Keeps header row intact. Rows with missing/unparseable dates are removed.
     """
 
     data = worksheet.get_all_values()
@@ -61,16 +96,17 @@ def remove_old_jobs_from_sheet(worksheet, days=30):
             if len(row) <= date_idx:
                 continue
 
-            posted_date = datetime.strptime(
-                row[date_idx].strip(),
-                "%Y-%m-%d"
-            )
+            date_str = row[date_idx].strip() if row[date_idx] else ""
+            posted_date = _parse_date_cell(date_str)
+
+            if posted_date is None:
+                # No valid date → treat as old and remove
+                continue
 
             if posted_date >= cutoff:
                 filtered_rows.append(row)
 
         except Exception:
-            # Keep rows with bad dates if desired
             continue
 
     removed = len(data) - 1 - len(filtered_rows)
@@ -82,7 +118,8 @@ def remove_old_jobs_from_sheet(worksheet, days=30):
         if filtered_rows:
             worksheet.append_rows(filtered_rows)
 
-    print(f"🧹 Removed {removed} jobs older than {days} days")
+    if removed > 0:
+        print(f"[CLEANUP] Removed {removed} jobs older than {days} days")
 
 def test_environment():
     """Test if environment variables are properly set"""
@@ -356,10 +393,7 @@ def append_rows(rows):
             for i in range(0, len(new_values), batch_size):
                 batch = new_values[i:i + batch_size]
                 worksheet.append_rows(batch)
-                remove_old_jobs_from_sheet(worksheet, days=30)  ## remove old jobs
                 print(f"📤 Added batch {i//batch_size + 1}: {len(batch)} rows")
-                
-                # Small delay to avoid rate limiting
                 if i + batch_size < len(new_values):
                     import time
                     time.sleep(1)
@@ -396,7 +430,25 @@ def append_rows(rows):
             
         else:
             print("ℹ️ No new unique jobs to add")
-        
+
+        # Always clean old jobs, even when no new jobs were added
+        for ws_name in (ALL_JOBS_SHEET, TOP_MATCHES_SHEET, GOOD_MATCHES_SHEET):
+            ws = worksheets[ws_name]
+            remove_old_jobs_from_sheet(ws, days=30)
+
+        # Also clean legacy sheet if it still exists
+        try:
+            legacy_ws = sheet.worksheet(LEGACY_SHEET)
+            remove_old_jobs_from_sheet(legacy_ws, days=30)
+        except gspread.exceptions.WorksheetNotFound:
+            pass
+
+        # Apply formatting
+        try:
+            format_dashboard_worksheets(worksheets, sheet)
+        except Exception as e:
+            print(f"⚠️ Formatting failed (non-fatal): {e}")
+
         # Summary
         print(f"\n📊 SUMMARY:")
         print(f"   • Total jobs processed: {len(rows)}")
@@ -560,22 +612,218 @@ def test_duplicate_detection():
     print(f"Adding {len(test_jobs)} test jobs (including 1 duplicate)...")
     append_rows(test_jobs)
 
+# ─── Sheet Formatting ──────────────────────────────────────────────────────────
+
+def format_dashboard_worksheets(worksheets, sheet):
+    """Apply professional formatting to all dashboard worksheets."""
+    for ws_name in (ALL_JOBS_SHEET, TOP_MATCHES_SHEET, GOOD_MATCHES_SHEET):
+        ws = worksheets.get(ws_name)
+        if ws:
+            _format_single_worksheet(ws)
+
+    try:
+        legacy_ws = sheet.worksheet(LEGACY_SHEET)
+        _format_single_worksheet(legacy_ws)
+    except gspread.exceptions.WorksheetNotFound:
+        pass
+
+
+def _format_single_worksheet(ws):
+    """Apply formatting: frozen header, column widths, score colors, hyperlinks."""
+    data = ws.get_all_values()
+    if not data or len(data) < 1:
+        return
+
+    header = data[0]
+    num_cols = len(header)
+    num_rows = len(data)
+
+    ws.freeze(rows=1)
+
+    col_names = {name.lower(): i for i, name in enumerate(header)}
+    end_col = chr(ord("A") + num_cols - 1)
+
+    # 1. Style header row
+    ws.format(f"A1:{end_col}1", {
+        "backgroundColor": {"red": 0.12, "green": 0.16, "blue": 0.22},
+        "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}, "fontSize": 11},
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
+    })
+
+    if num_rows <= 1:
+        return
+
+    # 2. Style body — font, vertical alignment
+    ws.format(f"A2:{end_col}{num_rows}", {
+        "textFormat": {"fontSize": 10},
+        "verticalAlignment": "TOP",
+    })
+
+    # 3. Wrapped-text columns
+    for col_name in ("summary", "job_title", "tech_stack", "match_reason", "company"):
+        idx = col_names.get(col_name)
+        if idx is not None:
+            col_letter = chr(ord("A") + idx)
+            ws.format(f"{col_letter}2:{col_letter}{num_rows}", {"wrapStrategy": "WRAP"})
+
+    # 4. Hyperlink apply_url column (replace URL with "Apply ->" link)
+    url_idx = col_names.get("apply_url")
+    if url_idx is not None:
+        url_letter = chr(ord("A") + url_idx)
+        url_values = ws.col_values(url_idx + 1)
+        cells_to_update = []
+        for i, url in enumerate(url_values[1:], start=2):
+            if url and isinstance(url, str) and url.startswith("http"):
+                escaped_url = url.replace('"', '""')
+                cells_to_update.append(
+                    gspread.Cell(i, url_idx + 1, f'=HYPERLINK("{escaped_url}", "Apply ->")')
+                )
+        if cells_to_update:
+            ws.update_cells(cells_to_update, value_input_option="USER_ENTERED")
+            ws.format(f"{url_letter}2:{url_letter}{num_rows}", {
+                "textFormat": {"foregroundColor": {"red": 0.15, "green": 0.39, "blue": 0.92}, "fontSize": 10},
+                "horizontalAlignment": "CENTER",
+                "verticalAlignment": "MIDDLE",
+            })
+
+    # 5. Color-coded rows by match_score
+    score_idx = col_names.get("match_score")
+    if score_idx is not None:
+        score_letter = chr(ord("A") + score_idx)
+        score_values = ws.col_values(score_idx + 1)[1:]
+
+        bands = {"top": [], "good": [], "potential": [], "reject": []}
+        for i, s in enumerate(score_values):
+            row_num = i + 2
+            try:
+                score = float(s) if s else -1
+            except (ValueError, TypeError):
+                continue
+            if score >= 80:
+                bands["top"].append(row_num)
+            elif score >= 60:
+                bands["good"].append(row_num)
+            elif score >= 45:
+                bands["potential"].append(row_num)
+            else:
+                bands["reject"].append(row_num)
+
+        band_styles = [
+            ("top",  {"red": 0.78, "green": 0.94, "blue": 0.84}),
+            ("good",  {"red": 1.0, "green": 0.92, "blue": 0.61}),
+            ("potential", {"red": 1.0, "green": 0.88, "blue": 0.70}),
+            ("reject", {"red": 1.0, "green": 0.78, "blue": 0.81}),
+        ]
+        for band_name, bg in band_styles:
+            rows = bands[band_name]
+            if not rows:
+                continue
+            # Compress contiguous rows into ranges to minimise API calls
+            ranges = []
+            start = end = rows[0]
+            for r in rows[1:]:
+                if r == end + 1:
+                    end = r
+                else:
+                    ranges.append((start, end))
+                    start = end = r
+            ranges.append((start, end))
+
+            for start_row, end_row in ranges:
+                rng = f"A{start_row}:{end_col}{end_row}"
+                ws.format(rng, {"backgroundColor": bg})
+            # Bold + centre the score cell for each band row
+            for row_num in rows:
+                ws.format(f"{score_letter}{row_num}", {
+                    "textFormat": {"bold": True},
+                    "horizontalAlignment": "CENTER",
+                    "verticalAlignment": "MIDDLE",
+                })
+
+    # 6. Column widths (pixel approximations) via batch_update
+    col_width_px = {
+        "apply_url": 120, "summary": 350, "job_fingerprint": 130,
+        "scraped_at": 130, "posted_date_iso": 100, "applied_at": 100,
+        "match_reason": 250, "tech_stack": 250, "job_title": 200,
+        "company": 180, "match_score": 60, "source": 100,
+        "salary": 100, "timezone": 100, "status": 80, "notes": 200,
+    }
+    requests = []
+    for col_name, width in col_width_px.items():
+        idx = col_names.get(col_name)
+        if idx is not None:
+            requests.append({
+                "updateDimensionProperties": {
+                    "range": {
+                        "sheetId": ws.id,
+                        "dimension": "COLUMNS",
+                        "startIndex": idx,
+                        "endIndex": idx + 1,
+                    },
+                    "properties": {"pixelSize": width},
+                    "fields": "pixelSize",
+                }
+            })
+    if requests:
+        ws.spreadsheet.batch_update({"requests": requests})
+
+
+def run_cleanup(days=30):
+    """
+    Standalone cleanup: remove old jobs from ALL sheets (including legacy).
+    Can be called directly or via CLI: python tools/sheet_writer.py --cleanup [days]
+    """
+    print(f"\n[CLEANUP] Running standalone cleanup - removing jobs older than {days} days...")
+
+    if not test_environment():
+        print("[CLEANUP] Environment test failed")
+        return
+
+    sheet = get_sheet()
+    worksheets = ensure_dashboard_tabs(sheet)
+
+    # Clean main dashboard sheets
+    for ws_name in (ALL_JOBS_SHEET, TOP_MATCHES_SHEET, GOOD_MATCHES_SHEET):
+        ws = worksheets[ws_name]
+        remove_old_jobs_from_sheet(ws, days=days)
+
+    # Clean legacy sheet if it exists
+    try:
+        legacy_ws = sheet.worksheet(LEGACY_SHEET)
+        remove_old_jobs_from_sheet(legacy_ws, days=days)
+    except gspread.exceptions.WorksheetNotFound:
+        print("[CLEANUP] Legacy sheet not found - skipping")
+
+    # Apply formatting
+    try:
+        format_dashboard_worksheets(worksheets, sheet)
+    except Exception as e:
+        print(f"[CLEANUP] Formatting failed (non-fatal): {e}")
+
+    print("[CLEANUP] Cleanup complete!")
+
+
 if __name__ == "__main__":
-    # Test the connection
-    print("🧪 TESTING GOOGLE SHEETS INTEGRATION")
-    print("=" * 50)
-    
-    # Test 1: Environment and connection
-    if test_connection():
-        print("\n✅ Connection test passed!")
-        
-        # Test 2: Get current stats
-        get_sheet_stats()
-        
-        # Test 3: Test duplicate detection (uncomment to test)
-        # print("\n🧪 Testing duplicate detection...")
-        # test_duplicate_detection()
-        
+    if len(sys.argv) > 1 and sys.argv[1] == "--cleanup":
+        days = int(sys.argv[2]) if len(sys.argv) > 2 else 30
+        run_cleanup(days=days)
     else:
-        print("\n❌ Connection test failed!")
-        print("Please check your environment variables and service account file.")
+        # Test the connection
+        print("🧪 TESTING GOOGLE SHEETS INTEGRATION")
+        print("=" * 50)
+        
+        # Test 1: Environment and connection
+        if test_connection():
+            print("\n✅ Connection test passed!")
+            
+            # Test 2: Get current stats
+            get_sheet_stats()
+            
+            # Test 3: Test duplicate detection (uncomment to test)
+            # print("\n🧪 Testing duplicate detection...")
+            # test_duplicate_detection()
+            
+        else:
+            print("\n❌ Connection test failed!")
+            print("Please check your environment variables and service account file.")
