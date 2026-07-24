@@ -22,92 +22,81 @@
     "source": "Remotive"
   },
   {
-    "job_title": "Safety & Compliance Engineer (m/w/d)",
+    "job_title": "Frontend Developer Junior",
+    "company": "Universia PerÃº",
+    "salary": "",
+    "tech_stack": "Frontend, Developer, FrontEnd, Developer, git",
+    "timezone": "San Isidro, San Isidro, PerÃº",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-frontend-developer-junior-universia-peru-1134158",
+    "summary": "Buscamos un(a) FrontEnd Developer Junior para integrarse a un equipo de desarrollo orientado a soluciones digitales. ParticiparÃ¡s en el desarrollo y mantenimiento de aplicaciones web utilizando JavaS...",
+    "posted_date_iso": "2026-06-26",
+    "source": "RemoteOKAPI"
+  },
+  {
+    "job_title": "System Software Engineer",
+    "company": "Hewlett Packard Enterprise",
+    "salary": "",
+    "tech_stack": "Software, Engineer, software, software, software",
+    "timezone": "Aguadilla, ",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-system-software-engineer-hewlett-packard-enterprise-1134102",
+    "summary": "This role has been designed as âHybridâ with an expectation that you will work on average 2 days per week from an HPE office.Who We AreHewlett Packard Enterprise is the global edge-to-cloud compan...",
+    "posted_date_iso": "2026-06-25",
+    "source": "RemoteOKAPI"
+  },
+  {
+    "job_title": "Field Reliability Engineer LATAM",
+    "company": "Honeycomb.io",
+    "salary": "",
+    "tech_stack": "Engineer, developer, Engineer, AWS, engineer",
+    "timezone": "Brazil",
+    "apply_url": "https://remoteOK.com/remote-jobs/remote-field-reliability-engineer-latam-honeycomb-io-1134061",
+    "summary": "What Weâre Building\nHoneycomb is a service for the near and present future, defining observability and raising expectations of what developer tools can do! Weâre working with well known companies ...",
+    "posted_date_iso": "2026-06-25",
+    "source": "RemoteOKAPI"
+  },
+  {
+    "job_title": "AI Research Engineer",
+    "company": "",
+    "salary": "",
+    "tech_stack": "Engineer, API, API, Web, Software",
+    "timezone": "Berlin",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/nulegal-gmbh/ai-research-engineer-berlin-281335",
+    "summary": "Worum es geht\nWir bauen die Infrastruktur, die KI in der Rechtsbranche tatsächlich belastbar macht, nicht als Demo, sondern in Produktion, mit messbarer juristischer Qualität. Dafür suchen wir Mensche...",
+    "posted_date_iso": "2026-06-29",
+    "source": "Arbeitnow"
+  },
+  {
+    "job_title": "Software Engineer (Angular / TypeScript / C++) (m/w/x)",
+    "company": "",
+    "salary": "",
+    "tech_stack": "Software, Engineer, Angular, TypeScript, Software",
+    "timezone": "Mindelheim",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/k-tronik-gmbh/software-engineer-angular-typescript-c-mindelheim-226685",
+    "summary": "Projektbeschreibung:\nTechnologie begeistert Sie? Uns auch! Zur Verstärkung unseres Expertenteams bei unserem Kunden aus der Verteidigungs- und Luft- & Raumfahrt Branche suchen wir einen Software Engin...",
+    "posted_date_iso": "2026-06-29",
+    "source": "Arbeitnow"
+  },
+  {
+    "job_title": "IT-System Engineer (m/w/d)",
     "company": "",
     "salary": "",
     "tech_stack": "Engineer, Engineer",
-    "timezone": "Leipzig",
-    "apply_url": "https://www.arbeitnow.com/jobs/companies/falk-defence-gmbh/safety-compliance-engineer-leipzig-204457",
-    "summary": "Falk Defence entwickelt hochmoderne Technologien für Raketen, Lenkflugkörper und Startsysteme im militärischen Umfeld. Wir verbinden Innovationskraft, technische Exzellenz und Zuverlässigkeit und lief...",
-    "posted_date_iso": "2026-06-21",
+    "timezone": "Bochum",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/think-about-it-gmbh/it-system-engineer-bochum-340320",
+    "summary": "Die thinkGROUP ist eine erfolgreiche Systemhausgruppe, die ständig nach Innovation strebt und großen Wert auf die kontinuierliche Optimierung unserer internen Prozesse legt. Die Nutzung modernster Tec...",
+    "posted_date_iso": "2026-06-29",
     "source": "Arbeitnow"
   },
   {
-    "job_title": "Embedded Software Engineer für innovative Funklösungen in der Maschinensteuerung",
+    "job_title": "Sytems & Infrastructure Engineer - Robotics (m/f/d)",
     "company": "",
     "salary": "",
-    "tech_stack": "Software, Engineer, Software, Git, Software",
-    "timezone": "Ölbronn-Dürrn",
-    "apply_url": "https://www.arbeitnow.com/jobs/companies/nbb-controls-components-gmbh/embedded-software-engineer-fur-innovative-funklosungen-in-der-maschinensteuerung-olbronn-durrn-343131",
-    "summary": "Seit über 40 Jahren entwickeln, produzieren und vertreiben wir elektromechanische Systeme, Industrieelektronik und industrielle Funkfernsteuerungssysteme. Die Grundlage des Firmenerfolgs ist unser gut...",
-    "posted_date_iso": "2026-06-21",
+    "tech_stack": "Engineer, Software, Engineer, software, software",
+    "timezone": "Rostock",
+    "apply_url": "https://www.arbeitnow.com/jobs/companies/quantum-systems-gmbh/sytems-infrastructure-engineer-robotics-rostock-37249",
+    "summary": "As a Software Engineer at our Rostock location, you will develop innovative software solutions for the next generation of autonomous systems. Working closely with cross-functional teams, you will tack...",
+    "posted_date_iso": "2026-06-29",
     "source": "Arbeitnow"
-  },
-  {
-    "job_title": "Software Engineer, iOS Core Product - Frankfurt, Germany",
-    "company": "",
-    "salary": "",
-    "tech_stack": "Software, Engineer, web, Web, frontend",
-    "timezone": "Frankfurt, Hesse, Germany",
-    "apply_url": "https://www.arbeitnow.com/jobs/companies/speechify/software-engineer-ios-core-product-frankfurt-germany-58805",
-    "summary": "The mission of Speechify is to make sure that reading is never a barrier to learning.\nOver 50 million people use Speechify's text-to-speech products to turn whatever they're reading – PDFs, books, Goo...",
-    "posted_date_iso": "2026-06-21",
-    "source": "Arbeitnow"
-  },
-  {
-    "job_title": "Systems V&V Engineer - Testautomatisierung im Rahmen vernetzter Funktionen",
-    "company": "",
-    "salary": "",
-    "tech_stack": "Engineer, software, engineer, git, git",
-    "timezone": "Berlin",
-    "apply_url": "https://www.arbeitnow.com/jobs/companies/verolt-technology-solutions-gmbh/systems-vv-engineer-testautomatisierung-im-rahmen-vernetzter-funktionen-berlin-436761",
-    "summary": "Verolt is a next-generation technology development organization founded in 2017 and headquartered in India, with a strong European presence in Frankfurt and a design and development hub in Berlin. The...",
-    "posted_date_iso": "2026-06-20",
-    "source": "Arbeitnow"
-  },
-  {
-    "job_title": "Computer Vision & AI Engineer - N3XT Interceptor C‑UAS (m/f/d)",
-    "company": "",
-    "salary": "",
-    "tech_stack": "Engineer, Engineer, software, engineer, engineer",
-    "timezone": "Gilching",
-    "apply_url": "https://www.arbeitnow.com/jobs/companies/quantum-systems-gmbh/computer-vision-ai-engineer-n3xt-interceptor-cuas-gilching-191952",
-    "summary": "About the RoleAt Quantum Systems, we are building highly autonomous interceptor systems that must perceive, decide, and act under extreme latency, motion, and environmental constraints.We are looking ...",
-    "posted_date_iso": "2026-06-19",
-    "source": "Arbeitnow"
-  },
-  {
-    "job_title": "Ground Control Station Software Engineer - N3XT Interceptor C‑UAS (m/f/d)",
-    "company": "",
-    "salary": "",
-    "tech_stack": "Software, Engineer, Software, Engineer, software",
-    "timezone": "Gilching",
-    "apply_url": "https://www.arbeitnow.com/jobs/companies/quantum-systems-gmbh/ground-control-station-software-engineer-n3xt-interceptor-cuas-gilching-466898",
-    "summary": "About the RoleAt Quantum Systems, our interceptor systems are not only drones. They are complete operational systems consisting of aircraft, ground control stations, sensor inputs, communication links...",
-    "posted_date_iso": "2026-06-19",
-    "source": "Arbeitnow"
-  },
-  {
-    "job_title": "System Engineer Requirements & Systemarchitektur (m/w/d)",
-    "company": "",
-    "salary": "",
-    "tech_stack": "Engineer, Engineer, Engineer, Engineer, Engineer",
-    "timezone": "Munich",
-    "apply_url": "https://www.arbeitnow.com/jobs/companies/my-humancapital-gmbh/system-engineer-requirements-systemarchitektur-munich-486030",
-    "summary": "Im Auftrag unseres Partnerunternehmens in München suchen wir Sie zum nächstmöglichen Zeitpunkt als „System Engineer Requirements & Systemarchitektur (m/w/d)“.\nAufgaben\n\nAls Systems Engineer (m/w/d) er...",
-    "posted_date_iso": "2026-06-19",
-    "source": "Arbeitnow"
-  },
-  {
-    "job_title": "Mechanical Engineer, Tower/Launch and Test",
-    "company": "SpaceX",
-    "salary": "",
-    "tech_stack": "Science and Engineering",
-    "timezone": "Brownsville, TX",
-    "apply_url": "https://www.themuse.com/jobs/spacex/mechanical-engineer-towerlaunch-and-test",
-    "summary": "SpaceX was founded under the belief that a future where humanity is out exploring the stars is fundamentally more exciting than one where we are not. Today SpaceX is actively developing the technologies to make this possible, with the ultimate goal of enabling human life on Mars.\n\nMECHANICAL ENGINEE",
-    "posted_date_iso": "2026-05-26",
-    "source": "TheMuse"
   },
   {
     "job_title": "Welding Engineer",
@@ -121,204 +110,6 @@
     "source": "TheMuse"
   },
   {
-    "job_title": ".Net Back End Developer- Remote",
-    "company": "Exposed Solutions",
-    "salary": "60000 - 70000",
-    "tech_stack": "back end, developer, backend, engineer",
-    "timezone": "London, UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5756654575?se=8jdbYgdu8RGJe8gKxAvXaw&utm_medium=api&utm_source=c6e3311e&v=88382479A75B3E8889E071FBD50BE72429A9CDD5",
-    "summary": "JOB DESCRIPTION Our client builds AI-powered products for the property and insurance markets in the UK and Australia. The platform helps insurers, loss adjusters and contractors assess damage, generate estimates and produce structured reports. The role A hands-on backend engineering seat. Most of th",
-    "posted_date_iso": "2026-06-08",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Laravel Developer (Remote)",
-    "company": "Marstep Resourcing Solutions",
-    "salary": "65000 - 65000",
-    "tech_stack": "developer, api",
-    "timezone": "Chester, Cheshire",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5738652842?utm_medium=api&utm_source=c6e3311e",
-    "summary": "This is a great opportunity to work for an established and fast growing business, where you will have the opportunity to develop a worthwhile career. The company are experiencing significant growth and this will create genuine learning and development opportunities. They offer a remote working model",
-    "posted_date_iso": "2026-05-23",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Full Stack Developer (Remote)",
-    "company": "SDS Softwares",
-    "salary": "62056.88 - 62056.88",
-    "tech_stack": "full stack, developer, frontend, backend, software",
-    "timezone": "Birmingham, West Midlands",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5639296548?utm_medium=api&utm_source=c6e3311e",
-    "summary": "Full Stack Developer (Remote) - India As a Full Stack Developer based in Birmingham, you will play a vital role in designing and implementing both frontend and backend solutions. This remote position allows you to be part of a dynamic team, driving innovative software projects that cater to diverse ",
-    "posted_date_iso": "2026-02-21",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Net Back End Developer- Remote",
-    "company": "Exposed Solutions",
-    "salary": "60000 - 70000",
-    "tech_stack": "back end, developer, backend, engineer",
-    "timezone": "Soho, West London",
-    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5756540336?se=8jdbYgdu8RGJe8gKxAvXaw&utm_medium=api&utm_source=c6e3311e&v=234A6B8BCC25171B325519BE3867803C5F16952B",
-    "summary": "JOB DESCRIPTION Our client builds AI-powered products for the property and insurance markets in the UK and Australia. The platform helps insurers, loss adjusters and contractors assess damage, generate estimates and produce structured reports. The role A hands-on backend engineering seat. Most of th",
-    "posted_date_iso": "2026-06-08",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "SQL Developer - Remote - Inside IR35",
-    "company": "Morson Edge",
-    "salary": "111800 - 117000",
-    "tech_stack": "sql, developer",
-    "timezone": "South East London, London",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5736650995?utm_medium=api&utm_source=c6e3311e",
-    "summary": "This is a fantastic opportunity to work as a SQL Developer on a long term project, inside IR35, on a remote basis. The key skills required for this SQL Developer position are: SQL At least one of SSIS/SSRS/SSAS T-SQL (desirable) Agile If you do have the relevant experience for this remote SQL Develo",
-    "posted_date_iso": "2026-05-21",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Net Back End Developer - Remote",
-    "company": "Exposed Solutions",
-    "salary": "60000 - 70000",
-    "tech_stack": "back end, developer, sql, api",
-    "timezone": "Mount Pleasant, Porth",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5769211188?utm_medium=api&utm_source=c6e3311e",
-    "summary": "Salary: £60,000 - 70,000 per year Requirements: Strong commercial C# and modern .NET 8 experience Production experience with Blazor Experience designing and operating microservices Strong Azure experience, including App Service or Container Apps, Azure SQL, Service Bus, and Key Vault Experience with",
-    "posted_date_iso": "2026-06-19",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": ".Net Back End Developer- Remote",
-    "company": "Exposed Solutions",
-    "salary": "70000 - 70000",
-    "tech_stack": "back end, developer, backend, engineer",
-    "timezone": "South West London, London",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5756818468?utm_medium=api&utm_source=c6e3311e",
-    "summary": "JOB DESCRIPTION Our client builds AI-powered products for the property and insurance markets in the UK and Australia. The platform helps insurers, loss adjusters and contractors assess damage, generate estimates and produce structured reports. The role A hands-on backend engineering seat. Most of th",
-    "posted_date_iso": "2026-06-09",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "ServiceNow Developer - Remote (UK) - SC Cleared",
-    "company": "Simon James IT",
-    "salary": "123500 - 130000",
-    "tech_stack": "developer, api",
-    "timezone": "London, UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5751244881?utm_medium=api&utm_source=c6e3311e",
-    "summary": "Required Skills ServiceNow ITSM ITOM API SNOW Job Summary ServiceNow Developer (SC Cleared) - Remote - Contract x 4 Remote (UK Based), 3-Month Initial Contract, £600-700pd, Active SC Clearance (Essential) Overview: A leading global technology consultancy is seeking four SC Cleared Senior ServiceNow ",
-    "posted_date_iso": "2026-06-03",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Full Stack Developer (UK Remote) - Node / Vue",
-    "company": "DBCharles Recruitment Limited",
-    "salary": "40000 - 45000",
-    "tech_stack": "full stack, developer, node, vue, software",
-    "timezone": "Henley-On-Thames, Oxfordshire",
-    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5748393972?se=8jdbYgdu8RGJe8gKxAvXaw&utm_medium=api&utm_source=c6e3311e&v=A50F4B469A3E04AECDBA6F22E394564BAD1B1B2B",
-    "summary": "A UK based business are working with DB Charles Recruitment to hire a remote working permanent Full Stack Developer. The business are based within the IT / App development sector and are Software Developers offering a wide range of services and products across numerous channels with a strong focus t",
-    "posted_date_iso": "2026-06-01",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Python Developer - Fully Remote",
-    "company": "Mercor",
-    "salary": "49124.29 - 49124.29",
-    "tech_stack": "python, developer",
-    "timezone": "London, UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5760747307?utm_medium=api&utm_source=c6e3311e",
-    "summary": "About the job Mercor connects elite creative and technical talent with leading AI research labs. Headquartered in San Francisco, our investors include Benchmark , General Catalyst , Peter Thiel , Adam D'Angelo , Larry Summers , and Jack Dorsey . Position: Python SWE Type: Contract Compensation: $100",
-    "posted_date_iso": "2026-06-12",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Python Developer - UK (Remote)",
-    "company": "Anyone AI",
-    "salary": "31200 - 72800",
-    "tech_stack": "python, developer, software, engineer, javascript",
-    "timezone": "London, UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5762592075?utm_medium=api&utm_source=c6e3311e",
-    "summary": "Anyone AI is recruiting skilled Python Developers to work on a project with a leading AI lab. Qualifications: Advanced professional written proficiency in English 3–7 years of professional software engineering experience Strong proficiency in Python and JavaScript/TypeScript; working knowledge of Ja",
-    "posted_date_iso": "2026-06-13",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "SC Cleared ServiceNow Developer - Fully Remote",
-    "company": "Square One Resources",
-    "salary": "117000 - 130000",
-    "tech_stack": "developer",
-    "timezone": "London, UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5752135756?utm_medium=api&utm_source=c6e3311e",
-    "summary": "Job Title: SC Cleared Senior ServiceNow Developer Location: UK based (fully remote) Salary/Rate: £500 per day inside IR35 Start Date: June Job Type: Initial 3 month contract (with scope to be extended) CANDIDATES MUST HOLD AN ACTIVE SC CLEARANCE Company Introduction We have an exciting opportunity n",
-    "posted_date_iso": "2026-06-04",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Python Developer - UK Remote Contract - Outside IR35",
-    "company": "Infused Solutions",
-    "salary": "72800 - 78000",
-    "tech_stack": "python, developer, backend, engineer",
-    "timezone": "UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5749725676?utm_medium=api&utm_source=c6e3311e",
-    "summary": "Senior Backend Python Developer (Contract) Contract: Rolling 3-Month Contract Location: Fully Remote (UK Based Only) Rate: £300 per day IR35 Status: Outside IR35 Start Date: ASAP Please note: Applicants must be based in the UK. Sponsorship is not available for this position. The Opportunity We're wo",
-    "posted_date_iso": "2026-06-02",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Quantitative Developer - Derivatives/Options | FinTech | Remote",
-    "company": "eFinancialCareers",
-    "salary": "83018.95 - 83018.95",
-    "tech_stack": "developer, engineer",
-    "timezone": "London, UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5728209665?se=8jdbYgdu8RGJe8gKxAvXaw&utm_medium=api&utm_source=c6e3311e&v=636730AC13B5A41B6B132A8D40B1CF0CEB4AF087",
-    "summary": "We are working with a highly successful, niche fintech based in London that is looking to hire a Quant Developer with experience in option pricing models. They are a remote‑first and profitable business planning to grow their team. We can share further details with qualified candidates. Responsibili",
-    "posted_date_iso": "2026-05-13",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Python Developer - UK Remote Contract - Outside IR35",
-    "company": "Infused Solutions Ltd",
-    "salary": "72800 - 78000",
-    "tech_stack": "python, developer, backend, engineer",
-    "timezone": "UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5749420156?se=8jdbYgdu8RGJe8gKxAvXaw&utm_medium=api&utm_source=c6e3311e&v=64E1BB1A61FA6B6EE384A7244854719884E10D76",
-    "summary": "Senior Backend Python Developer (Contract) Contract: Rolling 3-Month Contract Location: Fully Remote (UK Based Only) Rate: £300 per day IR35 Status: Outside IR35 Start Date: ASAP Please note: Applicants must be based in the UK. Sponsorship is not available for this position. The Opportunity We're wo",
-    "posted_date_iso": "2026-06-02",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Python Developer - UK Remote Contract - Outside IR35",
-    "company": "Infused Solutions Ltd",
-    "salary": "121067.95 - 121067.95",
-    "tech_stack": "python, developer, backend, engineer",
-    "timezone": "UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5761559907?se=8jdbYgdu8RGJe8gKxAvXaw&utm_medium=api&utm_source=c6e3311e&v=63AB3ED6E1507A72676A1EDC90E88102D012C00F",
-    "summary": "Senior Backend Python Developer (Contract) Contract: Rolling 3-Month Contract Location: Fully Remote (UK Based Only) Rate: £Negotiable IR35 Status: Outside IR35 Start Date: ASAP Please note: Applicants must be based in the UK. Sponsorship is not available for this position. The Opportunity We're wor",
-    "posted_date_iso": "2026-06-12",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "Python Developer - UK Remote Contract - Outside IR35",
-    "company": "INFUSED SOLUTIONS LIMITED",
-    "salary": "117265.67 - 117265.67",
-    "tech_stack": "python, developer, backend, engineer",
-    "timezone": "UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/details/5762061111?utm_medium=api&utm_source=c6e3311e",
-    "summary": "Senior Backend Python Developer (Contract) Contract: Rolling 3-Month Contract Location: Fully Remote (UK Based Only) Rate: £Negotiable IR35 Status: Outside IR35 Start Date: ASAP Please note: Applicants must be based in the UK. Sponsorship is not available for this position. The Opportunity We're wor",
-    "posted_date_iso": "2026-06-13",
-    "source": "Adzuna"
-  },
-  {
-    "job_title": "SAP ABAP Developer (E-Invoicing) - Fully Remote - Europe",
-    "company": "IO Associates",
-    "salary": "78387.95 - 78387.95",
-    "tech_stack": "developer",
-    "timezone": "UK",
-    "apply_url": "https://www.adzuna.co.uk/jobs/land/ad/5766735347?se=8jdbYgdu8RGJe8gKxAvXaw&utm_medium=api&utm_source=c6e3311e&v=92C2C140B0C65E6F74909E9D032C6C167E8846F9",
-    "summary": "Freelance/Contract SAP ABAP Developer (E-Invoicing) - Remote - Europe Location Remote Engagement Type On-Demand Contractor Work Arrangement 0-20 hours per week Work assigned based on project demand Flexible, as-needed engagement model Long-term opportunity for the right consultant Position Summary W",
-    "posted_date_iso": "2026-06-17",
-    "source": "Adzuna"
-  },
-  {
     "job_title": "Full Stack Software Engineer",
     "company": "Unknown",
     "salary": "",
@@ -326,7 +117,7 @@
     "timezone": "Remote",
     "apply_url": "https://jobspresso.co/author/jobspresso/",
     "summary": "Listing from Jobspresso",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Jobspresso"
   },
   {
@@ -337,7 +128,7 @@
     "timezone": "Remote",
     "apply_url": "https://jobspresso.co/author/jobspresso/",
     "summary": "Listing from Jobspresso",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Jobspresso"
   },
   {
@@ -348,7 +139,7 @@
     "timezone": "Remote",
     "apply_url": "https://jobspresso.co/author/jobspresso/",
     "summary": "Listing from Jobspresso",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Jobspresso"
   },
   {
@@ -359,8 +150,19 @@
     "timezone": "Remote",
     "apply_url": "https://jobspresso.co/author/jobspresso/",
     "summary": "Listing from Jobspresso",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Jobspresso"
+  },
+  {
+    "job_title": "Full-Stack Web Developer WW-PT",
+    "company": "Arc Exclusive",
+    "salary": "",
+    "tech_stack": "Full-Stack, Web, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://arc.dev/remote-jobs/details/full-stack-web-developer-ww-pt-p0psyie9ir",
+    "summary": "Listing from Arc",
+    "posted_date_iso": "2026-06-29",
+    "source": "Arc"
   },
   {
     "job_title": "Full stack engineer",
@@ -370,51 +172,84 @@
     "timezone": "Remote",
     "apply_url": "https://arc.dev/remote-jobs/details/full-stack-engineer-oyqao13p02",
     "summary": "Listing from Arc",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Arc"
   },
   {
-    "job_title": "Full Stack Developer  (Next.js / Supabase)",
-    "company": "Arc Exclusive",
-    "salary": "",
-    "tech_stack": "Full Stack, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://arc.dev/remote-jobs/details/full-stack-developer-next-js-supabase-oypl8udz5v",
-    "summary": "Listing from Arc",
-    "posted_date_iso": "2026-06-22",
-    "source": "Arc"
-  },
-  {
-    "job_title": "Full-Stack Developer (Next, Typescript, PostgreSQL) - PT/FT - LATAM/EU",
-    "company": "Arc Exclusive",
-    "salary": "",
-    "tech_stack": "Full-Stack, Developer, Typescript, PostgreSQL",
-    "timezone": "Remote",
-    "apply_url": "https://arc.dev/remote-jobs/details/full-stack-developer-next-typescript-postgresql-pt-ft-latam-eu-oxb0hecdxj",
-    "summary": "Listing from Arc",
-    "posted_date_iso": "2026-06-22",
-    "source": "Arc"
-  },
-  {
-    "job_title": "Full Stack Software Engineer",
-    "company": "System One",
+    "job_title": "Test Tools & Automation Full Stack Software Engineer",
+    "company": "Ciena",
     "salary": "",
     "tech_stack": "Full Stack, Software, Engineer",
     "timezone": "Remote",
-    "apply_url": "https://arc.dev/remote-jobs/j/system-one-full-stack-software-engineer-oyaxy2s4rn",
+    "apply_url": "https://arc.dev/remote-jobs/j/ciena-test-tools-automation-full-stack-software-engineer-ozkgiw4jbq",
     "summary": "Listing from Arc",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Arc"
   },
   {
+    "job_title": "Full Stack Engineer",
+    "company": "Humanoid",
+    "salary": "",
+    "tech_stack": "Full Stack, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://arc.dev/remote-jobs/j/humanoid-full-stack-engineer-ozkgp0czj6",
+    "summary": "Listing from Arc",
+    "posted_date_iso": "2026-06-29",
+    "source": "Arc"
+  },
+  {
+    "job_title": "Fullstack Software Engineer (x/f/m) - Claims Management",
+    "company": "alan",
+    "salary": "",
+    "tech_stack": "Fullstack, Software, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://arc.dev/remote-jobs/j/alan-fullstack-software-engineer-x-f-m-claims-management-ozc9bkjr9y",
+    "summary": "Listing from Arc",
+    "posted_date_iso": "2026-06-29",
+    "source": "Arc"
+  },
+  {
+    "job_title": "Fullstack Software Engineer (f/m/d)",
+    "company": "Contentful",
+    "salary": "",
+    "tech_stack": "Fullstack, Software, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://arc.dev/remote-jobs/j/contentful-fullstack-software-engineer-f-m-d-ozkgrkgve2",
+    "summary": "Listing from Arc",
+    "posted_date_iso": "2026-06-29",
+    "source": "Arc"
+  },
+  {
+    "job_title": "Software Engineer",
+    "company": "Everbridge",
+    "salary": "",
+    "tech_stack": "developer",
+    "timezone": "United States",
+    "apply_url": "https://justremote.co/remote-developer-jobs/software-engineer-everbridge",
+    "summary": "permanent position via JustRemote",
+    "posted_date_iso": "2026-06-21",
+    "source": "JustRemote"
+  },
+  {
+    "job_title": "Applied AI Engineer",
+    "company": "AssemblyAI",
+    "salary": "",
+    "tech_stack": "developer",
+    "timezone": "United States",
+    "apply_url": "https://justremote.co/remote-developer-jobs/applied-ai-engineer-assemblyai-ac8c5eec-cbe1-47ac-82d7-4ecd955ee937",
+    "summary": "permanent position via JustRemote",
+    "posted_date_iso": "2026-06-19",
+    "source": "JustRemote"
+  },
+  {
     "job_title": "Developer",
-    "company": "Full Time·1 Week Ago",
+    "company": "Full Time·6 Days Ago",
     "salary": "",
     "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/developer-5135725",
+    "apply_url": "https://dailyremote.com/remote-job/developer-5182359",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
@@ -423,262 +258,185 @@
     "salary": "",
     "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/developer-5091716",
+    "apply_url": "https://dailyremote.com/remote-job/developer-5135725",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
     "job_title": "Developer",
-    "company": "Full Time·3 Weeks Ago",
-    "salary": "",
-    "tech_stack": "Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/developer-5072082",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Developer",
-    "company": "Full Time·4 Weeks Ago",
+    "company": "Full Time·5 Weeks Ago",
     "salary": "",
     "tech_stack": "Developer",
     "timezone": "Remote",
     "apply_url": "https://dailyremote.com/remote-job/developer-5043980",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
     "job_title": "Developer",
-    "company": "Full Time·19 Weeks Ago",
-    "salary": "",
-    "tech_stack": "Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/developer-4547009",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Developer",
-    "company": "Full Time·34 Weeks Ago",
+    "company": "Full Time·35 Weeks Ago",
     "salary": "",
     "tech_stack": "Developer",
     "timezone": "Remote",
     "apply_url": "https://dailyremote.com/remote-job/developer-4151534",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
-    "job_title": "Epic Community Connect BI Developer",
-    "company": "Full Time·59 mins ago",
+    "job_title": "BI Developer – Power BI, Fabric & SQL Server",
+    "company": "Full Time·3 mins ago",
+    "salary": "",
+    "tech_stack": "Developer, SQL",
+    "timezone": "Remote",
+    "apply_url": "https://dailyremote.com/remote-job/bi-developer-power-bi-fabric-sql-server-5217742",
+    "summary": "Listing from DailyRemote",
+    "posted_date_iso": "2026-06-29",
+    "source": "DailyRemote"
+  },
+  {
+    "job_title": "Business Intelligence Developer",
+    "company": "Full Time·3 mins ago",
     "salary": "",
     "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/epic-community-connect-bi-developer-5176728",
+    "apply_url": "https://dailyremote.com/remote-job/business-intelligence-developer-5217737",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
-    "job_title": "Software Developer",
-    "company": "Full Time·3 hours ago",
+    "job_title": "Developer Relations Engineer",
+    "company": "Full Time·4 mins ago",
+    "salary": "",
+    "tech_stack": "Developer, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://dailyremote.com/remote-job/developer-relations-engineer-5217702",
+    "summary": "Listing from DailyRemote",
+    "posted_date_iso": "2026-06-29",
+    "source": "DailyRemote"
+  },
+  {
+    "job_title": "Full-Stack Developer (Ecuador)",
+    "company": "Full Time·4 mins ago",
+    "salary": "",
+    "tech_stack": "Full-Stack, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://dailyremote.com/remote-job/full-stack-developer-ecuador-5217701",
+    "summary": "Listing from DailyRemote",
+    "posted_date_iso": "2026-06-29",
+    "source": "DailyRemote"
+  },
+  {
+    "job_title": "Frontend Developer",
+    "company": "Full Time·4 mins ago",
+    "salary": "",
+    "tech_stack": "Frontend, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://dailyremote.com/remote-job/frontend-developer-5217555",
+    "summary": "Listing from DailyRemote",
+    "posted_date_iso": "2026-06-29",
+    "source": "DailyRemote"
+  },
+  {
+    "job_title": "Software Developer 4",
+    "company": "Full Time·4 mins ago",
     "salary": "",
     "tech_stack": "Software, Developer",
     "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/software-developer-5176633",
+    "apply_url": "https://dailyremote.com/remote-job/software-developer-4-5217518",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
-    "job_title": "Curriculum Developer - Philippines",
-    "company": "Full Time·3 hours ago",
+    "job_title": "Fullstack Developer (all genders)",
+    "company": "Full Time·4 mins ago",
+    "salary": "",
+    "tech_stack": "Fullstack, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://dailyremote.com/remote-job/fullstack-developer-all-genders-5217509",
+    "summary": "Listing from DailyRemote",
+    "posted_date_iso": "2026-06-29",
+    "source": "DailyRemote"
+  },
+  {
+    "job_title": "Fullstack Developer (all genders)",
+    "company": "Full Time·4 mins ago",
+    "salary": "",
+    "tech_stack": "Fullstack, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://dailyremote.com/remote-job/fullstack-developer-all-genders-5217508",
+    "summary": "Listing from DailyRemote",
+    "posted_date_iso": "2026-06-29",
+    "source": "DailyRemote"
+  },
+  {
+    "job_title": "InsuranceNow Developer",
+    "company": "Full Time·1 hour ago",
     "salary": "",
     "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/curriculum-developer-philippines-5176591",
+    "apply_url": "https://dailyremote.com/remote-job/insurance-now-developer-5217491",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
-    "job_title": "Fullstack PHP Developer / Remoto",
-    "company": "Full Time·4 hours ago",
+    "job_title": "Front-End Developer",
+    "company": "Full Time·1 hour ago",
     "salary": "",
-    "tech_stack": "Fullstack, PHP, Developer",
+    "tech_stack": "Front-End, Developer",
     "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/fullstack-php-developer-remoto-5176579",
+    "apply_url": "https://dailyremote.com/remote-job/front-end-developer-5217470",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
+    "job_title": "Associate MDM EBX Developer",
+    "company": "Full Time·1 hour ago",
     "salary": "",
-    "tech_stack": "Angular, Node, Developer",
+    "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176298",
+    "apply_url": "https://dailyremote.com/remote-job/associate-mdm-ebx-developer-5217419",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
+    "job_title": "OUAF WACS Developer",
+    "company": "Full Time·1 hour ago",
     "salary": "",
-    "tech_stack": "Angular, Node, Developer",
+    "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176297",
+    "apply_url": "https://dailyremote.com/remote-job/ouaf-wacs-developer-5217391",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
+    "job_title": "Android Developer",
+    "company": "Full Time·1 hour ago",
     "salary": "",
-    "tech_stack": "Angular, Node, Developer",
+    "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176296",
+    "apply_url": "https://dailyremote.com/remote-job/android-developer-5217379",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
+    "job_title": "Android Developer",
+    "company": "Full Time·1 hour ago",
     "salary": "",
-    "tech_stack": "Angular, Node, Developer",
+    "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176295",
+    "apply_url": "https://dailyremote.com/remote-job/android-developer-5217347",
     "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176294",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176293",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176292",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176291",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176290",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176289",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176288",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176287",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176286",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176285",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
-    "source": "DailyRemote"
-  },
-  {
-    "job_title": "Angular/NodeJS Developer",
-    "company": "Full Time·9 hours ago",
-    "salary": "",
-    "tech_stack": "Angular, Node, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://dailyremote.com/remote-job/angular-node-js-developer-5176284",
-    "summary": "Listing from DailyRemote",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "DailyRemote"
   },
   {
@@ -704,25 +462,14 @@
     "source": "AuthenticJobs"
   },
   {
-    "job_title": "Python Backend Developer",
-    "company": "Unknown",
-    "salary": "",
-    "tech_stack": "Python, Backend, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://landing.jobs/at/optima-forma/python-backend-developer-in-loule",
-    "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
-    "source": "LandingJobs"
-  },
-  {
-    "job_title": "DevOps Engineer",
+    "job_title": "Mid Data Migration Engineer",
     "company": "Unknown",
     "salary": "",
     "tech_stack": "Engineer",
     "timezone": "Remote",
-    "apply_url": "https://landing.jobs/at/cliftonlarsonallen/devops-engineer-in-lisbon-2025-1",
+    "apply_url": "https://landing.jobs/at/indicium-ai/mid-data-migration-engineer",
     "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "LandingJobs"
   },
   {
@@ -733,18 +480,7 @@
     "timezone": "Remote",
     "apply_url": "https://landing.jobs/at/indicium-ai/associate-data-migrations-engineer",
     "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
-    "source": "LandingJobs"
-  },
-  {
-    "job_title": "Mid Data Migration Engineer",
-    "company": "Unknown",
-    "salary": "",
-    "tech_stack": "Engineer",
-    "timezone": "Remote",
-    "apply_url": "https://landing.jobs/at/indicium-ai/mid-data-migration-engineer",
-    "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "LandingJobs"
   },
   {
@@ -755,29 +491,7 @@
     "timezone": "Remote",
     "apply_url": "https://landing.jobs/at/oralpro-llc/sql-bridge-engineer",
     "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
-    "source": "LandingJobs"
-  },
-  {
-    "job_title": "AI Developer",
-    "company": "Unknown",
-    "salary": "",
-    "tech_stack": "Developer",
-    "timezone": "Remote",
-    "apply_url": "https://landing.jobs/at/inscale/ai-developer",
-    "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
-    "source": "LandingJobs"
-  },
-  {
-    "job_title": "Product Engineer, Core",
-    "company": "Unknown",
-    "salary": "",
-    "tech_stack": "Engineer",
-    "timezone": "Remote",
-    "apply_url": "https://landing.jobs/at/bounce/product-engineer-core",
-    "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "LandingJobs"
   },
   {
@@ -788,7 +502,29 @@
     "timezone": "Remote",
     "apply_url": "https://landing.jobs/at/dashlane-pt/software-engineer-backend-in-lisbon-2026",
     "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
+    "source": "LandingJobs"
+  },
+  {
+    "job_title": "AI Developer",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Developer",
+    "timezone": "Remote",
+    "apply_url": "https://landing.jobs/at/inscale/ai-developer",
+    "summary": "Listing from LandingJobs",
+    "posted_date_iso": "2026-06-29",
+    "source": "LandingJobs"
+  },
+  {
+    "job_title": "Product Engineer, Core",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://landing.jobs/at/bounce/product-engineer-core",
+    "summary": "Listing from LandingJobs",
+    "posted_date_iso": "2026-06-29",
     "source": "LandingJobs"
   },
   {
@@ -799,7 +535,7 @@
     "timezone": "Remote",
     "apply_url": "https://landing.jobs/at/damia-group-portugal/platform-engineer-in-2026",
     "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "LandingJobs"
   },
   {
@@ -810,7 +546,7 @@
     "timezone": "Remote",
     "apply_url": "https://landing.jobs/at/damia-group-portugal/nlp-engineer-in-porto",
     "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "LandingJobs"
   },
   {
@@ -821,7 +557,7 @@
     "timezone": "Remote",
     "apply_url": "https://landing.jobs/at/damia-group-portugal/site-reliability-engineer-in-2026",
     "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "LandingJobs"
   },
   {
@@ -832,7 +568,7 @@
     "timezone": "Remote",
     "apply_url": "https://landing.jobs/at/damia-group-portugal/data-platform-engineer-in",
     "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "LandingJobs"
   },
   {
@@ -843,8 +579,19 @@
     "timezone": "Remote",
     "apply_url": "https://landing.jobs/at/damia-group-portugal/backend-developer-in-lisbon-2025",
     "summary": "Listing from LandingJobs",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "LandingJobs"
+  },
+  {
+    "job_title": "Software Engineer SAP FS-ICM (m/w/d)",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Software, Engineer",
+    "timezone": "Remote",
+    "apply_url": "https://www.wearedevelopers.com/en/companies/3038/personalwerk-gmbh/48274/software-engineer-sap-fs-icm-m-w-d",
+    "summary": "Listing from WeAreDevelopers",
+    "posted_date_iso": "2026-06-29",
+    "source": "WeAreDevelopers"
   },
   {
     "job_title": "IT Infrastructure Engineer – Linux & Automation (m/w/d)",
@@ -854,7 +601,7 @@
     "timezone": "Remote",
     "apply_url": "https://www.wearedevelopers.com/en/companies/3038/personalwerk-gmbh/48269/it-infrastructure-engineer-linux-automation-m-w-d",
     "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "WeAreDevelopers"
   },
   {
@@ -865,7 +612,7 @@
     "timezone": "Remote",
     "apply_url": "https://www.wearedevelopers.com/en/companies/3038/personalwerk-gmbh/48268/it-system-engineer-network-backup-m-w-d",
     "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "WeAreDevelopers"
   },
   {
@@ -876,7 +623,7 @@
     "timezone": "Remote",
     "apply_url": "https://www.wearedevelopers.com/en/companies/2938/raiffeisen-bank-international-ag/48266/platform-engineer-f-m-x-mercury-runtime-platform",
     "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "WeAreDevelopers"
   },
   {
@@ -887,7 +634,7 @@
     "timezone": "Remote",
     "apply_url": "https://www.wearedevelopers.com/en/companies/4134/gohiring/48265/ruby-on-rails-developer-m-w-d-remote-within-germany",
     "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "WeAreDevelopers"
   },
   {
@@ -898,7 +645,7 @@
     "timezone": "Remote",
     "apply_url": "https://www.wearedevelopers.com/en/companies/4251/wdw/48264/platform-engineer-devops",
     "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "WeAreDevelopers"
   },
   {
@@ -909,7 +656,7 @@
     "timezone": "Remote",
     "apply_url": "https://www.wearedevelopers.com/en/companies/3038/personalwerk-gmbh/48252/data-platform-engineer-kubernetes-w-m-d",
     "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "WeAreDevelopers"
   },
   {
@@ -920,7 +667,7 @@
     "timezone": "Remote",
     "apply_url": "https://www.wearedevelopers.com/en/companies/3038/personalwerk-gmbh/48240/devops-platform-engineer-w-m-d-cloud-im-bi-umfeld",
     "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "WeAreDevelopers"
   },
   {
@@ -931,7 +678,7 @@
     "timezone": "Remote",
     "apply_url": "https://www.wearedevelopers.com/en/companies/3038/personalwerk-gmbh/48239/business-intelligence-data-engineer-w-m-d",
     "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "WeAreDevelopers"
   },
   {
@@ -942,195 +689,195 @@
     "timezone": "Remote",
     "apply_url": "https://www.wearedevelopers.com/en/companies/1611/tech-jobs/48235/full-stack-developer-m-w-d",
     "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "WeAreDevelopers"
   },
   {
-    "job_title": "CLOUD ENGINEER / AZURE (M/W/D)",
-    "company": "Unknown",
-    "salary": "",
-    "tech_stack": "ENGINEER",
-    "timezone": "Remote",
-    "apply_url": "https://www.wearedevelopers.com/en/companies/3832/wilken-gmbh/48231/cloud-engineer-azure-m-w-d",
-    "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
-    "source": "WeAreDevelopers"
-  },
-  {
-    "job_title": "Data Engineer",
+    "job_title": "AI Platform Engineer (Remote)",
     "company": "Unknown",
     "salary": "",
     "tech_stack": "Engineer",
     "timezone": "Remote",
-    "apply_url": "https://www.wearedevelopers.com/en/companies/4168/turboneer-llc/48224/data-engineer",
-    "summary": "Listing from WeAreDevelopers",
-    "posted_date_iso": "2026-06-22",
-    "source": "WeAreDevelopers"
-  },
-  {
-    "job_title": "Security Engineer 1, Application Security",
-    "company": "Unknown",
-    "salary": "",
-    "tech_stack": "Engineer",
-    "timezone": "Remote",
-    "apply_url": "https://builtin.com/company/trail-bits",
+    "apply_url": "https://builtin.com/company/crowdstrike",
     "summary": "Listing from BuiltIn",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "BuiltIn"
   },
   {
-    "job_title": "Security Engineer 1, Application Security",
+    "job_title": "AI Platform Engineer (Remote)",
     "company": "Unknown",
     "salary": "",
     "tech_stack": "Engineer",
     "timezone": "Remote",
-    "apply_url": "https://builtin.com/company/trail-bits",
+    "apply_url": "https://builtin.com/company/crowdstrike",
     "summary": "Listing from BuiltIn",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "BuiltIn"
   },
   {
-    "job_title": "Engineer, Builder Enablement",
+    "job_title": "Solutions Engineer (Hybrid - Boston)",
     "company": "Unknown",
     "salary": "",
     "tech_stack": "Engineer",
     "timezone": "Remote",
-    "apply_url": "https://builtin.com/company/nbcuniversal",
+    "apply_url": "https://builtin.com/company/dynatrace",
     "summary": "Listing from BuiltIn",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "BuiltIn"
   },
   {
-    "job_title": "Java Angular Developer (P2 / P3 Cadre)",
+    "job_title": "Solutions Engineer (Hybrid - NYC)",
     "company": "Unknown",
     "salary": "",
-    "tech_stack": "Java, Angular, Developer",
+    "tech_stack": "Engineer",
     "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/java-angular-developer-p2-p3-cadre/intellics-global-services-private-limited/19139131",
-    "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
-    "source": "Shine"
+    "apply_url": "https://builtin.com/company/dynatrace",
+    "summary": "Listing from BuiltIn",
+    "posted_date_iso": "2026-06-29",
+    "source": "BuiltIn"
   },
   {
-    "job_title": "Java Angular Developer (P2 / P3 Cadre)",
+    "job_title": "Join Our Engineering Talent Community",
     "company": "Unknown",
     "salary": "",
-    "tech_stack": "Java, Angular, Developer",
+    "tech_stack": "Engineer",
     "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/java-angular-developer-p2-p3-cadre/intellics-global-services-private-limited/19139131",
-    "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
-    "source": "Shine"
+    "apply_url": "https://builtin.com/company/rubrik-inc",
+    "summary": "Listing from BuiltIn",
+    "posted_date_iso": "2026-06-29",
+    "source": "BuiltIn"
   },
   {
-    "job_title": "Java Angular Developer (P2 / P3 Cadre)",
-    "company": "Unknown",
-    "salary": "",
-    "tech_stack": "Java, Angular, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/java-angular-developer-p2-p3-cadre/intellics-global-services-private-limited/19139131",
-    "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
-    "source": "Shine"
-  },
-  {
-    "job_title": "Java Angular Developer (P2 / P3 Cadre)",
-    "company": "Unknown",
-    "salary": "",
-    "tech_stack": "Java, Angular, Developer",
-    "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/java-angular-developer-p2-p3-cadre/intellics-global-services-private-limited/19139131",
-    "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
-    "source": "Shine"
-  },
-  {
-    "job_title": "Walk-in Drive for Gen AI Developer - Noida Sec 60 on 20th June",
+    "job_title": "Conversational AI Developer",
     "company": "Unknown",
     "salary": "",
     "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/walk-in-drive-for-gen-ai-developer-noida-sec-on-th-june/hcl-technologies-ltd/19131421",
+    "apply_url": "https://www.shine.com/jobs/conversational-ai-developer/artech-infosystems-private-limited/19074419",
     "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Shine"
   },
   {
-    "job_title": "Walk-in Drive for Gen AI Developer - Noida Sec 60 on 20th June",
+    "job_title": "Conversational AI Developer",
     "company": "Unknown",
     "salary": "",
     "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/walk-in-drive-for-gen-ai-developer-noida-sec-on-th-june/hcl-technologies-ltd/19131421",
+    "apply_url": "https://www.shine.com/jobs/conversational-ai-developer/artech-infosystems-private-limited/19074419",
     "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Shine"
   },
   {
-    "job_title": "Walk-in Drive for Gen AI Developer - Noida Sec 60 on 20th June",
+    "job_title": "Conversational AI Developer",
     "company": "Unknown",
     "salary": "",
     "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/walk-in-drive-for-gen-ai-developer-noida-sec-on-th-june/hcl-technologies-ltd/19131421",
+    "apply_url": "https://www.shine.com/jobs/conversational-ai-developer/artech-infosystems-private-limited/19074419",
     "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Shine"
   },
   {
-    "job_title": "Walk-in Drive for Gen AI Developer - Noida Sec 60 on 20th June",
+    "job_title": "Conversational AI Developer",
     "company": "Unknown",
     "salary": "",
     "tech_stack": "Developer",
     "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/walk-in-drive-for-gen-ai-developer-noida-sec-on-th-june/hcl-technologies-ltd/19131421",
+    "apply_url": "https://www.shine.com/jobs/conversational-ai-developer/artech-infosystems-private-limited/19074419",
     "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Shine"
   },
   {
-    "job_title": "Reactjs Developer",
+    "job_title": "dotnet developer",
     "company": "Unknown",
     "salary": "",
-    "tech_stack": "React, Developer",
+    "tech_stack": "developer",
     "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/reactjs-developer/e4-software-services-private-limited/19076121",
+    "apply_url": "https://www.shine.com/jobs/dotnet-developer/wroots-global-private-limited/19074200",
     "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Shine"
   },
   {
-    "job_title": "Reactjs Developer",
+    "job_title": "dotnet developer",
     "company": "Unknown",
     "salary": "",
-    "tech_stack": "React, Developer",
+    "tech_stack": "developer",
     "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/reactjs-developer/e4-software-services-private-limited/19076121",
+    "apply_url": "https://www.shine.com/jobs/dotnet-developer/wroots-global-private-limited/19074200",
     "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Shine"
   },
   {
-    "job_title": "Reactjs Developer",
+    "job_title": "dotnet developer",
     "company": "Unknown",
     "salary": "",
-    "tech_stack": "React, Developer",
+    "tech_stack": "developer",
     "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/reactjs-developer/e4-software-services-private-limited/19076121",
+    "apply_url": "https://www.shine.com/jobs/dotnet-developer/wroots-global-private-limited/19074200",
     "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Shine"
   },
   {
-    "job_title": "Reactjs Developer",
+    "job_title": "dotnet developer",
     "company": "Unknown",
     "salary": "",
-    "tech_stack": "React, Developer",
+    "tech_stack": "developer",
     "timezone": "Remote",
-    "apply_url": "https://www.shine.com/jobs/reactjs-developer/e4-software-services-private-limited/19076121",
+    "apply_url": "https://www.shine.com/jobs/dotnet-developer/wroots-global-private-limited/19074200",
     "summary": "Listing from Shine",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "Shine"
+  },
+  {
+    "job_title": "Java Backend Developer",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Java, Backend, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://www.shine.com/jobs/java-backend-developer/intellics-global-services-private-limited/19077409",
+    "summary": "Listing from Shine",
+    "posted_date_iso": "2026-06-29",
+    "source": "Shine"
+  },
+  {
+    "job_title": "Java Backend Developer",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Java, Backend, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://www.shine.com/jobs/java-backend-developer/intellics-global-services-private-limited/19077409",
+    "summary": "Listing from Shine",
+    "posted_date_iso": "2026-06-29",
+    "source": "Shine"
+  },
+  {
+    "job_title": "Java Backend Developer",
+    "company": "Unknown",
+    "salary": "",
+    "tech_stack": "Java, Backend, Developer",
+    "timezone": "Remote",
+    "apply_url": "https://www.shine.com/jobs/java-backend-developer/intellics-global-services-private-limited/19077409",
+    "summary": "Listing from Shine",
+    "posted_date_iso": "2026-06-29",
+    "source": "Shine"
+  },
+  {
+    "job_title": "Freelance Full-Stack Web App Developer",
+    "company": "Mindrift",
+    "salary": "",
+    "tech_stack": "",
+    "timezone": "Remote",
+    "apply_url": "https://weworkremotely.com/remote-jobs/mindrift-freelance-full-stack-web-app-developer",
+    "summary": "5d",
+    "posted_date_iso": "2026-06-29",
+    "source": "WeWorkRemotely"
   },
   {
     "job_title": "Software engineer",
@@ -1139,8 +886,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/sticker-mule-software-engineer-3",
-    "summary": "9d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "16d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1150,8 +897,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/thrill-labs-devops-engineer",
-    "summary": "9d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "17d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1161,8 +908,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/vvd-product-engineer",
-    "summary": "9d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "17d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1172,8 +919,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/vultr-network-devops-engineer-rdma-fabric-automation",
-    "summary": "11d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "19d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1183,8 +930,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/dentology-full-stack-product-engineer",
-    "summary": "15d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "23d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1194,8 +941,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/patrianna-devops-engineer",
-    "summary": "15d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "23d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1205,8 +952,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/memora-aps-founding-engineer",
-    "summary": "16d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "23d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1216,8 +963,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/varicent-support-engineer-sql-web-applications-remote-mexico-only",
-    "summary": "16d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "24d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1227,8 +974,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/ahu-technologies-web-applications-developer-sacramento-ca",
-    "summary": "16d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "24d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1238,8 +985,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/fonio-founding-product-engineer-m-w-d",
-    "summary": "16d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "24d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1249,8 +996,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/pos-full-stack-javascript-engineer-remote-latam-or-europe",
-    "summary": "19d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "26d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1260,30 +1007,8 @@
     "tech_stack": "",
     "timezone": "Remote",
     "apply_url": "https://weworkremotely.com/remote-jobs/binance-devops-engineer-futures",
-    "summary": "19d",
-    "posted_date_iso": "2026-06-22",
-    "source": "WeWorkRemotely"
-  },
-  {
-    "job_title": "Full Stack Software Developer 80-100% (f/m/x)",
-    "company": "Comparis Ch",
-    "salary": "",
-    "tech_stack": "",
-    "timezone": "Remote",
-    "apply_url": "https://weworkremotely.com/remote-jobs/comparis-ch-full-stack-software-developer-80-100-f-m-x",
-    "summary": "23d",
-    "posted_date_iso": "2026-06-22",
-    "source": "WeWorkRemotely"
-  },
-  {
-    "job_title": "Webapp Offensive Security Software Engineer",
-    "company": "Horizon3 Ai",
-    "salary": "",
-    "tech_stack": "",
-    "timezone": "Remote",
-    "apply_url": "https://weworkremotely.com/remote-jobs/horizon3-ai-webapp-offensive-security-software-engineer",
-    "summary": "24d",
-    "posted_date_iso": "2026-06-22",
+    "summary": "27d",
+    "posted_date_iso": "2026-06-29",
     "source": "WeWorkRemotely"
   },
   {
@@ -1294,7 +1019,7 @@
     "timezone": "Remote",
     "apply_url": "https://nodesk.co/remote-jobs/kodify-media-group-software-development-engineer-in-test/",
     "summary": "NoDesk engineering listing",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "NoDesk"
   },
   {
@@ -1305,7 +1030,7 @@
     "timezone": "Remote",
     "apply_url": "https://nodesk.co/remote-jobs/mobile-developer/",
     "summary": "NoDesk engineering listing",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "NoDesk"
   },
   {
@@ -1316,7 +1041,7 @@
     "timezone": "Remote",
     "apply_url": "https://nodesk.co/remote-jobs/full-stack-developer/",
     "summary": "NoDesk engineering listing",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "NoDesk"
   },
   {
@@ -1327,7 +1052,7 @@
     "timezone": "Remote",
     "apply_url": "https://nodesk.co/remote-jobs/frontend-developer/",
     "summary": "NoDesk engineering listing",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "NoDesk"
   },
   {
@@ -1338,7 +1063,7 @@
     "timezone": "Remote",
     "apply_url": "https://nodesk.co/remote-jobs/frontend-developer/",
     "summary": "NoDesk engineering listing",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "NoDesk"
   },
   {
@@ -1349,29 +1074,40 @@
     "timezone": "Remote",
     "apply_url": "https://nodesk.co/remote-jobs/software-engineer/",
     "summary": "NoDesk engineering listing",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "NoDesk"
   },
   {
-    "job_title": "Security Engineer",
-    "company": "Sourcegraph",
+    "job_title": "Kernel Developer",
+    "company": "Cloudlinux",
     "salary": "",
     "tech_stack": "",
     "timezone": "Remote",
-    "apply_url": "https://nodesk.co/remote-jobs/sourcegraph-security-engineer-2/",
+    "apply_url": "https://nodesk.co/remote-jobs/cloudlinux-kernel-developer/",
     "summary": "NoDesk engineering listing",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
     "source": "NoDesk"
   },
   {
-    "job_title": "Support AI Engineer",
-    "company": "Figma",
+    "job_title": "WordPress Developer",
+    "company": "Awesome",
     "salary": "",
     "tech_stack": "",
     "timezone": "Remote",
-    "apply_url": "https://nodesk.co/remote-jobs/figma-support-ai-engineer/",
+    "apply_url": "https://nodesk.co/remote-jobs/awesome-motive-wordpress-developer-2/",
     "summary": "NoDesk engineering listing",
-    "posted_date_iso": "2026-06-22",
+    "posted_date_iso": "2026-06-29",
+    "source": "NoDesk"
+  },
+  {
+    "job_title": "Product Engineer III",
+    "company": "Splice",
+    "salary": "",
+    "tech_stack": "",
+    "timezone": "Remote",
+    "apply_url": "https://nodesk.co/remote-jobs/splice-product-engineer-iii/",
+    "summary": "NoDesk engineering listing",
+    "posted_date_iso": "2026-06-29",
     "source": "NoDesk"
   }
 ]

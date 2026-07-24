@@ -23,7 +23,9 @@ NON_DEV_TERMS = [
     "designer", "graphic designer", "ui designer", "ux designer",
     "customer support", "customer success", "seo", "content writer",
     "copywriter", "social media", "product manager", "project manager",
-    "business analyst",
+    "business analyst", "ml engineer", "machine learning", "ai engineer",
+    "ai developer", "network engineer", "data scientist",
+    "deep learning", "computer vision",
 ]
 
 SENIOR_TERMS = [
