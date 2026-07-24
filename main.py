@@ -197,21 +197,23 @@ def _setup_crewai_tools(Agent, Crew, Task, LLM, tool, llm):
             if not jobs:
                 return "❌ No jobs in file."
 
-            # Pick best job (highest score, or first with salary)
-            best_job = None
-            for job in jobs:
-                if job.get('match_score') and int(job['match_score']) >= 80:
-                    best_job = job
-                    break
-            if not best_job:
-                best_job = jobs[0]
+            # === CURATE FIRST, then pick best ===
+            from agents.curator import curate
+            curated_result = curate(jobs)
+            curated_jobs = curated_result.get("top_jobs", [])
+            
+            if not curated_jobs:
+                return "❌ No high-quality jobs found for application generation."
+            
+            # Pick highest-scoring curated job
+            best_job = max(curated_jobs, key=lambda x: x.get('match_score', 0) or 0)
 
             job_title = best_job.get('job_title', 'Software Developer')
             company = best_job.get('company', 'Unknown Company')
             summary = best_job.get('summary', '')
             tech_stack = best_job.get('tech_stack', '')
 
-            print(f"🎯 Selected: {job_title} at {company}")
+            print(f"🎯 Selected: {job_title} at {company} (Score: {best_job.get('match_score', 'N/A')})")
 
             # Generate resume
             from tools.resume_generator import generate_resume_for_job
@@ -350,19 +352,26 @@ def run_simple_scraper():
     print(f"✅ Scraped {len(jobs)} jobs")
 
     if jobs:
-        print(f"💾 Saving to Google Sheets...")
-        append_rows(jobs)
-        print("✅ Saved!")
+        # === CURATE BEFORE SAVING ===
+        result = curate(jobs)
+        curated_jobs = [j for j in result.get("top_jobs", []) if j.get("match_score", 0) >= 70]
+        
+        if curated_jobs:
+            print(f"💾 Saving {len(curated_jobs)} curated jobs to Google Sheets...")
+            append_rows(curated_jobs)
+            print("✅ Saved!")
+            
+            # Generate materials for top curated job
+            best = max(curated_jobs, key=lambda x: x.get('match_score', 0) or 0)
+            print(f"\n🎯 Top job: {best['job_title']} at {best['company']} (Score: {best.get('match_score')})")
+            _generate_materials_for_job(best)
+        else:
+            print("⚠️ No jobs passed curation. Nothing saved.")
+            return True
 
-        # Generate materials for top job
-        best = max(jobs, key=lambda x: x.get('match_score', 0) or 0)
-        print(f"\n🎯 Top job: {best['job_title']} at {best['company']}")
-
-        _generate_materials_for_job(best)
-
-        # Auto-apply if enabled
-        if AUTO_APPLY_ENABLED:
-            _run_auto_apply(jobs[:AUTO_APPLY_LIMIT])
+        # Auto-apply if enabled (only on curated jobs)
+        if AUTO_APPLY_ENABLED and curated_jobs:
+            _run_auto_apply(curated_jobs[:AUTO_APPLY_LIMIT])
 
     return True
 

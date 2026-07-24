@@ -183,6 +183,7 @@ PLAYWRIGHT_HEADLESS=true
 # CV Matching
 CV_PATH=my_cv.pdf
 MIN_MATCH_SCORE=70
+CLEANUP_DAYS=30
 
 # Location / Country Filter
 ALLOWED_COUNTRIES=uk,united kingdom,new zealand,nz,usa,united states

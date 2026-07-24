@@ -1,0 +1,89 @@
+{
+  "name": "Mubashir Nazir",
+  "email": "mubashirahmad0305@gmail.com",
+  "phone": "+919622907883",
+  "location": "Srinagar, India",
+  "years_experience": 3,
+  "skills": [
+    "HTML5",
+    "CSS3",
+    "REST APIs",
+    "JWT",
+    "Passport.js",
+    "Microservices",
+    "RTK Query",
+    "MUI v6",
+    "Zod",
+    "React Hook Form",
+    "ApexCharts",
+    "i18next",
+    "Vite",
+    "Tailwind CSS",
+    "Git",
+    "GitHub",
+    "Postman",
+    "Figma",
+    "Azure Static Web Apps",
+    "ESLint",
+    "Prettier",
+    "Vitest",
+    "Agile",
+    "Scrum",
+    "REST API Design",
+    "Code Review",
+    "Technical Documentation",
+    "Sequelize ORM"
+  ],
+  "frameworks": [
+    "Node.js",
+    "Express.js",
+    "Django",
+    "React.js",
+    "Redux Toolkit",
+    "Next.js"
+  ],
+  "databases": [
+    "PostgreSQL",
+    "MySQL",
+    "MongoDB"
+  ],
+  "languages": [
+    "JavaScript",
+    "TypeScript",
+    "Python"
+  ],
+  "preferred_titles": [
+    "Software Engineer",
+    "Full Stack Developer"
+  ],
+  "experience": [
+    {
+      "title": "Software Engineer",
+      "company": "FastBeetle (Logistics & Delivery Startup)",
+      "duration": "Aug. 2024 \u2013 Apr. 2026",
+      "description": "Architected backend services for Rider, Merchant, and Customer apps using Node.js & Express.js, integrating PhonePe payment gateway for secure real-time transactions. Optimized 5 dashboards (Merchant, Admin, Hub, Support, Accounts) \u2014 reduced average page load time by 70% through query optimization and caching strategies. Engineered Bulk Edit PinZone module automating zone assignments, cutting manual effort by 90% and saving multiple engineer-hours per week. Built OrderSnap.in \u2014 full-stack dropshipping platform using Node.js, Express, React, Redux Toolkit, PostgreSQL & Sequelize with JWT + Passport.js authentication."
+    },
+    {
+      "title": "Full Stack Developer",
+      "company": "ElySpace (Software Agency)",
+      "duration": "Aug. 2023 \u2013 Jul. 2024",
+      "description": "Delivered multiple client SaaS and e-commerce projects using React, Django, and JavaScript with REST API integration and responsive UI/UX. Owned feature delivery end-to-end in Agile sprints \u2014 from requirements and development through to deployment and client handoff. Resolved backend bottlenecks and optimized deployment pipelines, maintaining high availability across concurrent production environments."
+    },
+    {
+      "title": "Full Stack Intern",
+      "company": "Yarikul Infotech",
+      "duration": "Mar. 2023 \u2013 May. 2023",
+      "description": "Built a real-time matrimonial platform using Django & Python with live chat functionality, increasing user engagement by 20%. Developed custom WordPress plugins and a Python-based YouTube downloader utility, expanding the company's product offerings."
+    }
+  ],
+  "education": [
+    {
+      "degree": "B.Tech in Mechanical Engineering",
+      "institution": "University of Kashmir Srinagar",
+      "year": "2023"
+    }
+  ],
+  "seniority": "mid",
+  "_parsed_at": "2026-07-25T02:17:43.167855",
+  "_source_file": "C:\\Users\\Mubashir1\\remote-job-agent\\my_cv.pdf"
+}

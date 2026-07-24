@@ -1,10 +1,11 @@
 """
 agents/auto_applier.py
-Auto-apply agent for high-match jobs.
+Auto-apply agent with tiered strategy, SQLite state tracking, and safety gates.
 
-TWO MODES:
-1. SIMPLE (default): Generate resume + cover letter → open browser → track in sheet
-2. PLAYWRIGHT (optional): Auto-fill forms for Greenhouse/Lever with screenshots
+TIER STRATEGY:
+    dream      → Auto-prepare, notify human, NEVER auto-submit
+    good_fit   → Auto-fill form, pause for human review (default)
+    batch      → Auto-fill + auto-submit (if AUTO_APPLY_CONFIRM=true)
 
 Usage:
     python main.py apply                    # Simple mode
@@ -16,7 +17,9 @@ import json
 import webbrowser
 import re
 import time
-from datetime import datetime
+import random
+import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 from typing import Optional, Dict, List
@@ -32,6 +35,7 @@ AUTO_APPLY_THRESHOLD = int(os.getenv("AUTO_APPLY_THRESHOLD", "70"))
 AUTO_APPLY_LIMIT = int(os.getenv("AUTO_APPLY_LIMIT", "5"))
 AUTO_APPLY_PLAYWRIGHT = os.getenv("AUTO_APPLY_PLAYWRIGHT", "false").lower() == "true"
 AUTO_APPLY_CONFIRM = os.getenv("AUTO_APPLY_CONFIRM", "false").lower() == "true"
+AUTO_APPLY_DAILY_CAP = int(os.getenv("AUTO_APPLY_DAILY_CAP", "5"))  # Hard daily limit for auto-submit
 
 APPLICANT_NAME = os.getenv("APPLICANT_NAME", "Mubashir")
 APPLICANT_EMAIL = os.getenv("APPLICANT_EMAIL", "")
@@ -40,15 +44,138 @@ APPLICANT_LINKEDIN = os.getenv("APPLICANT_LINKEDIN", "")
 APPLICANT_PORTFOLIO = os.getenv("APPLICANT_PORTFOLIO", "")
 APPLICANT_GITHUB = os.getenv("APPLICANT_GITHUB", "")
 
+# TIER THRESHOLDS
+TIER_DREAM_THRESHOLD = int(os.getenv("TIER_DREAM_THRESHOLD", "90"))
+TIER_BATCH_MAX = int(os.getenv("TIER_BATCH_MAX", "75"))
 
 # =============================================================================
-# ATS PLATFORM DETECTION (for Playwright mode)
+# SQLITE STATE DATABASE
+# =============================================================================
+
+DB_PATH = Path("data/job_agent.db")
+
+def _init_db():
+    """Initialize SQLite database for application state tracking."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS applications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_fingerprint TEXT UNIQUE,
+            job_title TEXT,
+            company TEXT,
+            apply_url TEXT,
+            tier TEXT,
+            status TEXT,
+            score INTEGER,
+            resume_path TEXT,
+            cover_letter_path TEXT,
+            package_path TEXT,
+            screenshot_path TEXT,
+            error_log TEXT,
+            applied_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_stats (
+            date TEXT PRIMARY KEY,
+            auto_submitted INTEGER DEFAULT 0,
+            filled_ready INTEGER DEFAULT 0,
+            dream_manual INTEGER DEFAULT 0,
+            errors INTEGER DEFAULT 0
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def _get_db():
+    return sqlite3.connect(DB_PATH)
+
+def _already_applied(job_fingerprint: str) -> bool:
+    """Check if we already have a record for this job."""
+    conn = _get_db()
+    cur = conn.execute("SELECT 1 FROM applications WHERE job_fingerprint = ?", (job_fingerprint,))
+    exists = cur.fetchone() is not None
+    conn.close()
+    return exists
+
+def _get_daily_auto_submit_count() -> int:
+    """How many auto-submits today?"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = _get_db()
+    cur = conn.execute("SELECT auto_submitted FROM daily_stats WHERE date = ?", (today,))
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row else 0
+
+def _increment_daily_stat(column: str):
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = _get_db()
+    conn.execute(f"""
+        INSERT INTO daily_stats (date, {column}) VALUES (?, 1)
+        ON CONFLICT(date) DO UPDATE SET {column} = {column} + 1
+    """, (today,))
+    conn.commit()
+    conn.close()
+
+def _save_application(job: Dict, result: Dict, tier: str):
+    """Persist application state to SQLite."""
+    conn = _get_db()
+    conn.execute("""
+        INSERT OR REPLACE INTO applications 
+        (job_fingerprint, job_title, company, apply_url, tier, status, score,
+         resume_path, cover_letter_path, package_path, screenshot_path, error_log, applied_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        job.get("job_fingerprint", job.get("apply_url", "")),
+        job.get("job_title", ""),
+        job.get("company", ""),
+        job.get("apply_url", ""),
+        tier,
+        result.get("status", "unknown"),
+        job.get("match_score", 0),
+        result.get("resume_path"),
+        result.get("cover_letter_path"),
+        result.get("package_path"),
+        result.get("screenshot_path"),
+        result.get("error"),
+        datetime.now()
+    ))
+    conn.commit()
+    conn.close()
+
+# =============================================================================
+# TIER CLASSIFICATION
+# =============================================================================
+
+def classify_tier(job: Dict) -> str:
+    """Classify job into tier based on match score and other signals."""
+    score = int(job.get("match_score", job.get("score", 0)))
+    
+    if score >= TIER_DREAM_THRESHOLD:
+        return "dream"
+    elif score <= TIER_BATCH_MAX:
+        return "batch"
+    else:
+        return "good_fit"
+
+def get_tier_action(tier: str) -> Dict:
+    """Get action config for a tier."""
+    base = {
+        "dream":      {"auto_open": True,  "auto_fill": False, "auto_submit": False, "notify": True,  "require_confirm": True},
+        "good_fit":   {"auto_open": True,  "auto_fill": True,  "auto_submit": False, "notify": False, "require_confirm": True},
+        "batch":      {"auto_open": True,  "auto_fill": True,  "auto_submit": AUTO_APPLY_CONFIRM, "notify": False, "require_confirm": False},
+    }
+    return base.get(tier, base["good_fit"])
+
+# =============================================================================
+# ATS PLATFORM DETECTION
 # =============================================================================
 
 def detect_ats_platform(url: str) -> str:
     """Detect the application platform from the job URL."""
     url_lower = url.lower()
-    
     if "boards.greenhouse.io" in url_lower or "greenhouse.io" in url_lower:
         return "greenhouse"
     if "jobs.lever.co" in url_lower or "lever.co" in url_lower:
@@ -61,12 +188,12 @@ def detect_ats_platform(url: str) -> str:
         return "ashby"
     if "breezy.hr" in url_lower:
         return "breezy"
-    
+    if "linkedin.com" in url_lower:
+        return "linkedin"
     return "unknown"
 
-
 # =============================================================================
-# PLAYWRIGHT SETUP (lazy import)
+# PLAYWRIGHT SETUP
 # =============================================================================
 
 def _get_playwright():
@@ -76,14 +203,12 @@ def _get_playwright():
     except ImportError:
         return None
 
-
 # =============================================================================
-# GREENHOUSE FORM FILLER
+# FORM FILLERS (Greenhouse + Lever)
 # =============================================================================
 
 def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str], 
                           cover_letter: str, user_profile: Dict) -> Dict:
-    """Fill Greenhouse application form."""
     result = {"status": "unknown", "screenshot_path": None, "error": None}
     
     try:
@@ -91,12 +216,10 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
         page.goto(job_url, wait_until="networkidle", timeout=30000)
         page.wait_for_selector("#application-form, .application-form, form", timeout=10000)
         
-        # Screenshot dir
-        screenshot_dir = "screenshots"
-        os.makedirs(screenshot_dir, exist_ok=True)
+        screenshot_dir = Path("screenshots")
+        screenshot_dir.mkdir(exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Fill fields
         fields = {
             "name": ("input[name='name'], input#first_name, input[name='first_name']", user_profile.get("name", APPLICANT_NAME)),
             "email": ("input[type='email'], input[name='email']", user_profile.get("email", APPLICANT_EMAIL)),
@@ -114,7 +237,6 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
             except Exception as e:
                 print(f"    ⚠️ {field_name} field: {e}")
         
-        # Resume upload
         if resume_path and os.path.exists(resume_path):
             try:
                 file_input = page.locator("input[type='file'][name*='resume'], input[type='file'][name*='cv']").first
@@ -124,7 +246,6 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
             except Exception as e:
                 print(f"    ⚠️ Resume upload: {e}")
         
-        # Cover letter
         if cover_letter:
             try:
                 cl_field = page.locator("textarea[name*='cover'], textarea[name*='letter'], textarea[name*='message']").first
@@ -135,40 +256,43 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
                 print(f"    ⚠️ Cover letter field: {e}")
         
         # Screenshot before submit
-        screenshot_path = f"{screenshot_dir}/greenhouse_{ts}_before_submit.png"
-        page.screenshot(path=screenshot_path, full_page=True)
-        result["screenshot_path"] = screenshot_path
+        screenshot_path = screenshot_dir / f"greenhouse_{ts}_before_submit.png"
+        page.screenshot(path=str(screenshot_path), full_page=True)
+        result["screenshot_path"] = str(screenshot_path)
         print(f"    📸 Screenshot: {screenshot_path}")
         
-        # Submit logic
+        # Check for custom questions (radio buttons, dropdowns, textareas we didn't fill)
+        custom_elements = page.locator(".application-question, .custom-question, [class*='question']").count()
+        if custom_elements > 0:
+            print(f"    ⚠️ Detected {custom_elements} custom questions — needs human review")
+            result["status"] = "custom_questions"
+            return result
+        
         submit_btn = page.locator("input[type='submit'], button[type='submit'], #submit_app").first
         if submit_btn.count() > 0:
-            if AUTO_APPLY_CONFIRM:
-                print(f"    🚀 Auto-submitting...")
-                submit_btn.click()
-                time.sleep(3)
-                result["status"] = "submitted"
-            else:
-                print(f"    ⏸️  Form filled. Set AUTO_APPLY_CONFIRM=true to submit.")
-                result["status"] = "filled_ready"
+            result["status"] = "filled_ready"
         else:
-            result["status"] = "custom_questions"
+            result["status"] = "no_submit_button"
             
     except Exception as e:
         result["status"] = "error"
         result["error"] = str(e)
+        # Screenshot on failure
+        try:
+            fail_dir = Path("screenshots/failures")
+            fail_dir.mkdir(parents=True, exist_ok=True)
+            fail_path = fail_dir / f"greenhouse_{datetime.now().strftime('%Y%m%d_%H%M%S')}_error.png"
+            page.screenshot(path=str(fail_path), full_page=True)
+            result["screenshot_path"] = str(fail_path)
+        except:
+            pass
         print(f"    ❌ Error: {e}")
     
     return result
 
 
-# =============================================================================
-# LEVER FORM FILLER
-# =============================================================================
-
 def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
                      cover_letter: str, user_profile: Dict) -> Dict:
-    """Fill Lever application form."""
     result = {"status": "unknown", "screenshot_path": None, "error": None}
     
     try:
@@ -176,24 +300,22 @@ def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
         page.goto(job_url, wait_until="networkidle", timeout=30000)
         page.wait_for_selector(".application-form, form", timeout=10000)
         
-        screenshot_dir = "screenshots"
-        os.makedirs(screenshot_dir, exist_ok=True)
+        screenshot_dir = Path("screenshots")
+        screenshot_dir.mkdir(exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        # Name (first/last)
+        # Name
         try:
             first = page.locator("input[name='firstName'], input[placeholder*='First']").first
             if first.count() > 0:
                 name_parts = user_profile.get("name", APPLICANT_NAME).split()
                 first.fill(name_parts[0] if name_parts else APPLICANT_NAME)
-                
                 last = page.locator("input[name='lastName'], input[placeholder*='Last']").first
                 if last.count() > 0 and len(name_parts) > 1:
                     last.fill(" ".join(name_parts[1:]))
         except Exception as e:
             print(f"    ⚠️ Name: {e}")
         
-        # Email, phone, linkedin, portfolio
         fields = {
             "email": ("input[type='email']", user_profile.get("email", APPLICANT_EMAIL)),
             "phone": ("input[type='tel']", user_profile.get("phone", APPLICANT_PHONE)),
@@ -209,7 +331,6 @@ def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
             except Exception as e:
                 print(f"    ⚠️ {field_name}: {e}")
         
-        # Resume upload
         if resume_path and os.path.exists(resume_path):
             try:
                 file_input = page.locator("input[type='file']").first
@@ -219,7 +340,6 @@ def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
             except Exception as e:
                 print(f"    ⚠️ Resume upload: {e}")
         
-        # Cover letter
         if cover_letter:
             try:
                 cl_field = page.locator("textarea[name*='cover'], textarea[placeholder*='cover']").first
@@ -229,41 +349,93 @@ def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
             except Exception as e:
                 print(f"    ⚠️ Cover letter: {e}")
         
-        # Screenshot
-        screenshot_path = f"{screenshot_dir}/lever_{ts}_before_submit.png"
-        page.screenshot(path=screenshot_path, full_page=True)
-        result["screenshot_path"] = screenshot_path
+        screenshot_path = screenshot_dir / f"lever_{ts}_before_submit.png"
+        page.screenshot(path=str(screenshot_path), full_page=True)
+        result["screenshot_path"] = str(screenshot_path)
         print(f"    📸 Screenshot: {screenshot_path}")
         
-        # Submit
+        # Check for custom questions
+        custom_elements = page.locator(".custom-question, [data-qa*='question']").count()
+        if custom_elements > 0:
+            print(f"    ⚠️ Detected custom questions — needs human review")
+            result["status"] = "custom_questions"
+            return result
+        
         submit_btn = page.locator("button[type='submit'], .postings-btn").first
         if submit_btn.count() > 0:
-            if AUTO_APPLY_CONFIRM:
-                print(f"    🚀 Auto-submitting...")
-                submit_btn.click()
-                time.sleep(3)
-                result["status"] = "submitted"
-            else:
-                print(f"    ⏸️  Form filled. Set AUTO_APPLY_CONFIRM=true to submit.")
-                result["status"] = "filled_ready"
+            result["status"] = "filled_ready"
         else:
-            result["status"] = "custom_questions"
+            result["status"] = "no_submit_button"
             
     except Exception as e:
         result["status"] = "error"
         result["error"] = str(e)
+        try:
+            fail_dir = Path("screenshots/failures")
+            fail_dir.mkdir(parents=True, exist_ok=True)
+            fail_path = fail_dir / f"lever_{datetime.now().strftime('%Y%m%d_%H%M%S')}_error.png"
+            page.screenshot(path=str(fail_path), full_page=True)
+            result["screenshot_path"] = str(fail_path)
+        except:
+            pass
         print(f"    ❌ Error: {e}")
     
     return result
 
+# =============================================================================
+# EMAIL OUTREACH FALLBACK
+# =============================================================================
+
+def generate_email_outreach(job: Dict, cover_letter: str, resume_path: Optional[str]) -> Optional[str]:
+    """
+    For non-ATS jobs, generate a cold email draft.
+    Returns path to saved email draft.
+    """
+    company = job.get("company", "Company")
+    job_title = job.get("job_title", "Role")
+    apply_url = job.get("apply_url", "")
+    
+    # Try to find careers email
+    careers_email = f"careers@{company.lower().replace(' ', '').replace(',', '')}.com"
+    
+    email_body = f"""Subject: Application for {job_title} — {APPLICANT_NAME}
+
+Dear Hiring Manager at {company},
+
+I came across the {job_title} position and I'm very interested in joining your team.
+
+{cover_letter[:500]}...
+
+I've attached my resume for your review. I'd welcome the opportunity to discuss how my skills align with your needs.
+
+Best regards,
+{APPLICANT_NAME}
+{APPLICANT_EMAIL}
+{APPLICANT_LINKEDIN}
+{APPLICANT_PORTFOLIO}
+"""
+    
+    email_dir = Path("email_drafts")
+    email_dir.mkdir(exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_title = re.sub(r'[\\/*?:"<>|]', "", job_title)[:30]
+    safe_company = re.sub(r'[\\/*?:"<>|]', "", company)[:20]
+    email_path = email_dir / f"{safe_company}_{safe_title}_{ts}.txt"
+    
+    with open(email_path, "w", encoding="utf-8") as f:
+        f.write(f"To: {careers_email}\n")
+        f.write(f"Job URL: {apply_url}\n\n")
+        f.write(email_body)
+    
+    print(f"    📧 Email draft saved: {email_path}")
+    return str(email_path)
 
 # =============================================================================
-# MANUAL APPLY PACKAGE (fallback)
+# APPLY PACKAGE (manual fallback)
 # =============================================================================
 
 def generate_apply_package(job: Dict, resume_path: Optional[str], cover_letter: str,
                            output_folder: str = "apply_packages") -> Optional[str]:
-    """Generate a manual apply package with resume, cover letter, and HTML form."""
     try:
         os.makedirs(output_folder, exist_ok=True)
         
@@ -274,16 +446,13 @@ def generate_apply_package(job: Dict, resume_path: Optional[str], cover_letter: 
         package_path = os.path.join(output_folder, package_name)
         os.makedirs(package_path, exist_ok=True)
         
-        # Copy resume
         import shutil
         if resume_path and os.path.exists(resume_path):
             shutil.copy2(resume_path, os.path.join(package_path, "resume.pdf"))
         
-        # Save cover letter
         with open(os.path.join(package_path, "cover_letter.txt"), "w", encoding="utf-8") as f:
             f.write(cover_letter)
         
-        # JSON form data
         form_data = {
             "job": job,
             "applicant": {
@@ -300,7 +469,6 @@ def generate_apply_package(job: Dict, resume_path: Optional[str], cover_letter: 
         with open(os.path.join(package_path, "form_data.json"), "w", encoding="utf-8") as f:
             json.dump(form_data, f, indent=2)
         
-        # HTML helper
         html = f"""<!DOCTYPE html>
 <html><head><title>Apply: {job.get('job_title')} at {job.get('company')}</title>
 <style>
@@ -340,23 +508,13 @@ a {{ color: #2196F3; }}
         print(f"    ❌ Package error: {e}")
         return None
 
-
 # =============================================================================
 # MAIN AUTO-APPLY FUNCTION
 # =============================================================================
 
 def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
     """
-    Auto-apply to a job.
-
-    Args:
-        job: dict with job details
-        mark_sheet: track in APPLIED sheet
-        open_browser: open URL in browser (simple mode)
-        use_playwright: auto-fill forms (advanced mode)
-    
-    Returns:
-        dict with results
+    Tier-aware auto-apply with safety gates.
     """
     job_title = job.get("job_title", "Unknown Job")
     company = job.get("company", "Unknown Company")
@@ -364,22 +522,42 @@ def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
     tech_stack = job.get("tech_stack", "")
     summary = job.get("summary", "")
     match_score = job.get("match_score", job.get("score", 0))
+    fingerprint = job.get("job_fingerprint", apply_url)
+
+    # === GUARD: Already applied? ===
+    if _already_applied(fingerprint):
+        print(f"⏭️  Already applied to {job_title} at {company}. Skipping.")
+        return {"status": "already_applied", "job_title": job_title, "company": company}
+
+    # === GUARD: Daily cap for auto-submit ===
+    tier = classify_tier(job)
+    tier_action = get_tier_action(tier)
+    
+    if tier == "batch" and tier_action["auto_submit"]:
+        daily_count = _get_daily_auto_submit_count()
+        if daily_count >= AUTO_APPLY_DAILY_CAP:
+            print(f"🚫 Daily auto-submit cap ({AUTO_APPLY_DAILY_CAP}) reached. Switching to review mode.")
+            tier_action["auto_submit"] = False
+            tier_action["require_confirm"] = True
 
     print(f"\n{'='*60}")
-    print(f"🎯 Applying: {job_title} at {company} (Score: {match_score})")
+    print(f"🎯 [{tier.upper()}] {job_title} at {company} (Score: {match_score})")
     print(f"{'='*60}")
+    print(f"   Auto-fill: {tier_action['auto_fill']} | Auto-submit: {tier_action['auto_submit']} | Confirm required: {tier_action['require_confirm']}")
 
     result = {
         "job_title": job_title,
         "company": company,
         "apply_url": apply_url,
         "score": match_score,
+        "tier": tier,
         "resume_path": None,
         "cover_letter_path": None,
         "browser_opened": False,
         "sheet_updated": False,
         "playwright_result": None,
         "package_path": None,
+        "email_draft_path": None,
         "status": "started",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -416,12 +594,25 @@ def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
         print(f"   ❌ Cover letter error: {e}")
         cover_letter = ""
 
-    # Step 3: Apply mode
+    # Step 3: Apply mode based on tier + platform
     platform = detect_ats_platform(apply_url) if apply_url else "unknown"
     
-    if use_playwright and platform in ["greenhouse", "lever"]:
-        # ADVANCED: Playwright form filling
-        print(f"\n🤖 3. Playwright auto-fill mode ({platform})...")
+    # DREAM jobs: Just notify and prepare, never touch the browser
+    if tier == "dream":
+        print(f"\n⭐ 3. DREAM JOB — Preparing package for manual application...")
+        pkg = generate_apply_package(job, result.get("resume_path"), cover_letter)
+        if pkg:
+            result["package_path"] = pkg
+        if apply_url and open_browser:
+            webbrowser.open(apply_url)
+            result["browser_opened"] = True
+        result["status"] = "dream_manual"
+        _increment_daily_stat("dream_manual")
+        print(f"   🔔 Review and apply manually. Package ready.")
+
+    # ATS platforms (Greenhouse/Lever): Playwright or package
+    elif use_playwright and platform in ["greenhouse", "lever"]:
+        print(f"\n🤖 3. Playwright auto-fill ({platform})...")
         sync_playwright = _get_playwright()
         
         if sync_playwright:
@@ -448,53 +639,76 @@ def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
                                                      cover_letter, user_profile)
                     
                     result["playwright_result"] = pw_result
-                    result["status"] = pw_result.get("status", "unknown")
+                    result["screenshot_path"] = pw_result.get("screenshot_path")
+                    
+                    # SUBMIT LOGIC
+                    if pw_result["status"] == "filled_ready" and tier_action["auto_submit"]:
+                        submit_btn = page.locator("input[type='submit'], button[type='submit'], #submit_app, .postings-btn").first
+                        if submit_btn.count() > 0:
+                            print(f"    🚀 Auto-submitting...")
+                            submit_btn.click()
+                            time.sleep(3)
+                            result["status"] = "submitted"
+                            _increment_daily_stat("auto_submitted")
+                    else:
+                        result["status"] = pw_result["status"]
+                        if result["status"] == "filled_ready":
+                            _increment_daily_stat("filled_ready")
+                    
                     browser.close()
                     
             except Exception as e:
                 print(f"   ❌ Playwright failed: {e}")
-                print(f"   📦 Falling back to manual package...")
                 result["status"] = "playwright_failed"
+                _increment_daily_stat("errors")
         else:
-            print(f"   ⚠️ Playwright not installed. Run: pip install playwright && playwright install chromium")
+            print(f"   ⚠️ Playwright not installed.")
             result["status"] = "playwright_not_installed"
     
+    # Non-ATS jobs: Email outreach fallback
+    elif platform in ["unknown", "workday", "workable", "linkedin"]:
+        print(f"\n📧 3. Non-ATS platform ({platform}) — generating email draft...")
+        email_path = generate_email_outreach(job, cover_letter, result.get("resume_path"))
+        if email_path:
+            result["email_draft_path"] = email_path
+            result["status"] = "email_draft"
+        if apply_url and open_browser:
+            webbrowser.open(apply_url)
+            result["browser_opened"] = True
+    
+    # Simple mode: Just open browser + package
     elif open_browser and apply_url:
-        # SIMPLE: Just open browser
         print(f"\n🌐 3. Opening browser: {apply_url}")
         try:
             webbrowser.open(apply_url)
             result["browser_opened"] = True
-            print(f"   ✅ Browser opened")
-            
-            # Also generate apply package for convenience
             pkg = generate_apply_package(job, result.get("resume_path"), cover_letter)
             if pkg:
                 result["package_path"] = pkg
-                
         except Exception as e:
             print(f"   ❌ Browser error: {e}")
     
     else:
-        # No browser, just package
-        print(f"\n📦 3. Generating apply package...")
         pkg = generate_apply_package(job, result.get("resume_path"), cover_letter)
         if pkg:
             result["package_path"] = pkg
             result["status"] = "package_only"
 
-    # Step 4: Track in APPLIED sheet
+    # Step 4: Persist to SQLite
+    _save_application(job, result, tier)
+
+    # Step 5: Track in Google Sheet
     if mark_sheet:
         print(f"\n📊 4. Tracking in Google Sheet...")
         try:
             _track_application(job, result)
             result["sheet_updated"] = True
-            print(f"   ✅ Tracked in APPLIED sheet")
+            print(f"   ✅ Tracked")
         except Exception as e:
             print(f"   ❌ Sheet tracking error: {e}")
 
     print(f"\n{'='*60}")
-    print(f"✅ Done: {job_title} at {company} — Status: {result['status']}")
+    print(f"✅ Done: {job_title} at {company} — Status: {result['status']} | Tier: {tier}")
     print(f"{'='*60}")
 
     return result
@@ -534,46 +748,50 @@ def _track_application(job, apply_result):
 
     worksheet.append_row(row)
 
-
 # =============================================================================
 # BATCH APPLY
 # =============================================================================
 
 def batch_auto_apply(jobs, limit=None, score_threshold=None):
     """
-    Auto-apply to multiple high-scoring jobs.
-    
-    Args:
-        jobs: list of job dicts
-        limit: max jobs to apply (default from env)
-        score_threshold: min score (default from env)
+    Batch apply with deduplication, tiering, and polite delays.
     """
+    _init_db()
     limit = limit or AUTO_APPLY_LIMIT
     score_threshold = score_threshold or AUTO_APPLY_THRESHOLD
     
-    # Filter and sort
-    scored_jobs = sorted(
-        [j for j in jobs if int(j.get("match_score", j.get("score", 0))) >= score_threshold],
-        key=lambda j: int(j.get("match_score", j.get("score", 0))),
-        reverse=True,
-    )
+    # Filter: score + not already applied
+    scored_jobs = []
+    for j in jobs:
+        score = int(j.get("match_score", j.get("score", 0)))
+        fp = j.get("job_fingerprint", j.get("apply_url", ""))
+        if score >= score_threshold and not _already_applied(fp):
+            scored_jobs.append(j)
+    
+    scored_jobs.sort(key=lambda j: int(j.get("match_score", j.get("score", 0))), reverse=True)
 
     print(f"\n{'='*60}")
     print(f"BATCH AUTO-APPLY")
     print(f"Jobs above threshold {score_threshold}: {len(scored_jobs)}")
     print(f"Applying to top {min(limit, len(scored_jobs))}")
+    print(f"Daily auto-submit cap: {AUTO_APPLY_DAILY_CAP} (used: {_get_daily_auto_submit_count()})")
     print(f"{'='*60}")
 
     results = []
     for i, job in enumerate(scored_jobs[:limit], 1):
         print(f"\n--- [{i}/{min(limit, len(scored_jobs))}] ---")
         
-        # Use Playwright if enabled and platform is supported
+        tier = classify_tier(job)
         use_pw = AUTO_APPLY_PLAYWRIGHT and detect_ats_platform(job.get("apply_url", "")) in ["greenhouse", "lever"]
         
         result = auto_apply(job, use_playwright=use_pw)
         results.append(result)
-        time.sleep(3)  # Be polite
+        
+        # Polite delay with jitter (45-120s)
+        if i < len(scored_jobs[:limit]):
+            delay = random.uniform(45, 120)
+            print(f"   ⏳ Waiting {delay:.1f}s before next application...")
+            time.sleep(delay)
 
     # Summary
     print(f"\n{'='*60}")
@@ -581,19 +799,28 @@ def batch_auto_apply(jobs, limit=None, score_threshold=None):
     print(f"{'='*60}")
     
     statuses = {}
+    tiers = {"dream": 0, "good_fit": 0, "batch": 0}
     for r in results:
         s = r["status"]
         statuses[s] = statuses.get(s, 0) + 1
+        tiers[r.get("tier", "unknown")] = tiers.get(r.get("tier", "unknown"), 0) + 1
     
+    print(f"\n  By Status:")
     for status, count in statuses.items():
-        print(f"  {status}: {count}")
+        print(f"    {status}: {count}")
+    
+    print(f"\n  By Tier:")
+    for tier, count in tiers.items():
+        print(f"    {tier}: {count}")
     
     submitted = sum(1 for r in results if r["status"] == "submitted")
-    filled = sum(1 for r in results if r["status"] in ["filled_ready", "package_only", "browser_opened"])
-    errors = sum(1 for r in results if "error" in r["status"] or r["status"] == "playwright_failed")
+    dream_manual = sum(1 for r in results if r["status"] == "dream_manual")
+    filled_ready = sum(1 for r in results if r["status"] in ["filled_ready", "package_only", "browser_opened", "email_draft"])
+    errors = sum(1 for r in results if "error" in r["status"] or r["status"] in ["playwright_failed", "custom_questions"])
     
-    print(f"\n  Submitted: {submitted}")
-    print(f"  Ready for review: {filled}")
-    print(f"  Errors: {errors}")
+    print(f"\n  🚀 Auto-submitted: {submitted}")
+    print(f"  ⭐ Dream jobs (manual): {dream_manual}")
+    print(f"  ⏸️  Ready for review: {filled_ready}")
+    print(f"  ❌ Errors/Blocked: {errors}")
 
     return results

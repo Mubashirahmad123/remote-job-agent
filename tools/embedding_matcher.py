@@ -18,13 +18,13 @@ load_dotenv()
 
 # Graceful import
 try:
-    from sentence_transformers import SentenceTransformer
+    from sentence_transformers import SentenceTransformer  # type: ignore
     SENTENCE_AVAILABLE = True
 except ImportError:
     SENTENCE_AVAILABLE = False
 
 try:
-    import faiss
+    import faiss  # type: ignore
     import numpy as np
     FAISS_AVAILABLE = True
 except ImportError:

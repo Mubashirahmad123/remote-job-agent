@@ -71,7 +71,7 @@ def _parse_date_cell(value):
 def remove_old_jobs_from_sheet(worksheet, days=30):
     """
     Remove jobs older than X days based on posted_date_iso.
-    Keeps header row intact. Rows with missing/unparseable dates are removed.
+    Keeps header row intact. Rows with unparseable/missing dates are kept.
     """
 
     data = worksheet.get_all_values()
@@ -89,36 +89,38 @@ def remove_old_jobs_from_sheet(worksheet, days=30):
 
     cutoff = datetime.now() - timedelta(days=days)
 
-    filtered_rows = []
+    kept = [header]
+    removed = 0
 
     for row in data[1:]:
         try:
             if len(row) <= date_idx:
+                kept.append(row)
                 continue
 
             date_str = row[date_idx].strip() if row[date_idx] else ""
+            if not date_str:
+                kept.append(row)
+                continue
+
             posted_date = _parse_date_cell(date_str)
 
             if posted_date is None:
-                # No valid date → treat as old and remove
+                kept.append(row)
                 continue
 
             if posted_date >= cutoff:
-                filtered_rows.append(row)
+                kept.append(row)
+            else:
+                removed += 1
 
         except Exception:
+            kept.append(row)
             continue
-
-    removed = len(data) - 1 - len(filtered_rows)
 
     if removed > 0:
         worksheet.clear()
-        worksheet.append_row(header)
-
-        if filtered_rows:
-            worksheet.append_rows(filtered_rows)
-
-    if removed > 0:
+        worksheet.append_rows(kept)
         print(f"[CLEANUP] Removed {removed} jobs older than {days} days")
 
 def test_environment():
