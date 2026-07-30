@@ -18,7 +18,7 @@ An automated system that scrapes 30+ remote job boards, matches jobs to your CV 
 | **LLM fallback chain** | ✅ | Gemini → GLM-4 (Zhipu) → Ollama (local) — pipeline never crashes from API quota errors |
 | **Auto-apply pipeline** | ✅ | Generates tailored resume + cover letter, opens apply URL in browser or auto-fills Greenhouse/Lever via Playwright, tracks in APPLIED sheet |
 | **Tailored resume generation** | ✅ | Generates ATS-optimized resume PDF matched to each job's tech stack `python main.py resume` |
-| **Country/location logging** | ✅ | 386-country location tracking with non-blocking allows all regions |
+| **Country/location filter** | ✅ | 452-country detection — blocks jobs from non-whitelisted countries, allows 198 whitelisted terms |
 | **Cross-platform Unicode PDFs** | ✅ | Auto-downloads DejaVu fonts — works on Windows/macOS/Linux; covers accents, Arabic, Cyrillic |
 | Application tracker | ✅ | `track.py` CLI + `tools/application_tracker.py` — mark applied, update status, list, stats, follow-up reminders |
 | Auto-cleanup old jobs | ✅ | Removes jobs older than 30 days from all sheets (including legacy `LIVE Remote Jobs Tracker`) |
@@ -185,7 +185,8 @@ CV_PATH=my_cv.pdf
 MIN_MATCH_SCORE=70
 CLEANUP_DAYS=30
 
-# Location / Country Filter
+# Location / Country Filter (OBSOLETE — use hardcoded ALLOWED_COUNTRY_TERMS in agents/scrapper.py:330)
+# The code ignores this env var. Edit ALLOWED_COUNTRY_TERMS in scrapper.py to change allowed countries.
 ALLOWED_COUNTRIES=uk,united kingdom,new zealand,nz,usa,united states
 
 # LLM Fallback (optional — GLM-4 and Ollama for when Gemini hits rate limits)

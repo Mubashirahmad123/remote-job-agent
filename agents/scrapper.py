@@ -185,7 +185,11 @@ MASTER_BOARDS = {
     "GoRemote": {
         "url": "https://goremote.io/remote-jobs/software-development/",
         "type": "html"
-    }
+    },
+        "YCombinator": {
+        "url": "https://www.workatastartup.com/jobs?remote=true&role=engineering",
+        "type": "html"
+    },
 }
 
 ADDITIONAL_BOARDS = {
@@ -234,12 +238,10 @@ MASTER_BOARDS.update(ADDITIONAL_BOARDS)
 
 TECH_FILTER = r"(?i)(node|django|react|mysql|express|backend|back[- ]?end|frontend|front[- ]?end|full[- ]?stack|javascript|python|php|java|angular|vue|typescript|mongodb|postgresql|sql|html|css|api|rest|graphql|docker|aws|git|web|software|developer|engineer)"
 
-EXP_FILTER = re.compile(r"\b(junior|entry.*level|mid.*level|1-3\s?yr|early.*career|0-2\s?yr|developer|engineer|intern|graduate|associate|trainee|jr)\b", re.I)
+EXP_FILTER = re.compile(r"\b(junior|entry.*level|mid.*level|1-3\s?yr|early.*career|0-2\s?yr|developer|engineer|programmer|intern|graduate|associate|trainee|jr)\b", re.I)
 
 EXCLUDE_FILTER = re.compile(r"\b(senior.*(?:engineer|developer|architect)|lead.*(?:engineer|developer)|principal.*(?:engineer|developer|architect)|engineering.*manager|head.*of.*engineering|staff.*engineer|director.*engineering)\b", re.I)
 
-# FIXED: Removed devops, sre, cloud engineer, platform engineer, site reliability
-# These are NOT web/software dev roles
 DEV_TITLE_FILTER = re.compile(r"""(?ix)
     (
         developer | engineer | programmer | backend | back[-\s]?end |
@@ -252,23 +254,66 @@ DEV_TITLE_FILTER = re.compile(r"""(?ix)
 
 NON_DEV_FILTER = re.compile(r"""(?ix)
     (
+        # Support / IT
+        service\ desk | help\ desk | technical\ support | it\ support |
+        desktop\ support | customer\ support |
+        
+        # Infrastructure / Ops
+        network\ engineer | network\ administrator |
+        systems\ engineer(?!.*software) | system\ engineer(?!.*software) |
+        platform\ engineer(?!.*software) | production\ engineer(?!.*software) |
+        
+        # Security
+        cybersecurity | infosec | penetration\ tester |
+        security\ engineer(?!.*software|application) |
+        
+        # Data / ML / AI
+        data\ scientist | data\ analyst | data\ engineer(?!.*software) |
+        ml\ engineer | machine\ learning | deep\ learning |
+        ai\ engineer | ai\ researcher | nlp\ engineer | computer\ vision |
+        data\ science | ai\ ml |
+        
+        # QA / Testing
+        qa\ engineer | qa\ tester | test\ engineer | automation\ tester |
+        manual\ tester | quality\ assurance | qa\ automation | test\ automation |
+        
+        # Business / CRM / ERP
+        salesforce | sap | netsuite | dynamics\s*365 | d365 |
+        servicenow | workday | sharepoint | mulesoft |
+        
+        # Integration / ETL / Legacy
+        etl\ engineer | mainframe | cobol | as400 | rpg\ developer |
+        
+        # Non-software engineering
+        manufacturing | fabrication | welding | aeronautical |
+        aerospace\ engineer | civil\ engineer | mechanical\ engineer |
+        electrical\ engineer(?!.*software) | comint | cesm | cecm |
+        
+        # Non-dev roles
         marketing | sales | designer | copywriter | accountant | finance |
-        recruiter | human\ resources | customer\ success | customer\ support |
+        recruiter | human\ resources | customer\ success |
         content\ writer | seo | social\ media | product\ manager |
-        project\ manager | data\ analyst | business\ analyst |
-        operations\ manager | office\ manager | graphic\ design |
-        ui\ designer | ux\ designer | illustrator | virtual\ assistant |
-        community\ manager | account\ executive | business\ development |
-        ml\ engineer | machine\ learning | ai\ engineer | ai\ developer |
-        ai\ specialist | network\ engineer | data\ scientist | data\ science |
-        ai\ ml | deep\ learning | nlp\ engineer | computer\ vision |
-        data\ engineer | devops | sre | site\ reliability | cloud\ architect |
-        platform\ engineer | security\ engineer | qa\ engineer | test\ engineer |
-        automation\ engineer | salesforce | sap | blockchain | solidity |
-        smart\ contract | game\ developer | game | embedded | firmware |
-        hardware
+        project\ manager | business\ analyst | operations\ manager |
+        office\ manager | graphic\ design | ui\ designer | ux\ designer |
+        illustrator | virtual\ assistant | community\ manager |
+        account\ executive | business\ development |
+        scrum\ master | product\ owner | technical\ writer | documentation |
+        tutor | instructor | teacher | lecturer |
+        
+        # Game / Embedded / Hardware
+        game\ developer | game\ designer | unity\ developer | unreal\ engine |
+        embedded | firmware | hardware\ engineer | chip\ design | vlsi |
+        
+        # Blockchain
+        blockchain | solidity | smart\ contract |
+        
+        # DevOps / SRE
+        devops | sre | site\ reliability | cloud\ architect |
+        
+        # Vague / low-quality
+        volunteer | internship(?!.*developer)
     )
-""")
+""", re.I)
 
 SENIORITY_FILTER = re.compile(r"""(?ix)
     \b(
@@ -279,90 +324,312 @@ SENIORITY_FILTER = re.compile(r"""(?ix)
 
 
 # =============================================================================
-# LOCATION / COUNTRY FILTER — NO BLOCKING, ALL COUNTRIES ALLOWED
+# LOCATION / COUNTRY FILTER — COMPREHENSIVE
 # =============================================================================
 
-# Countries we track for tagging/logging. We do NOT block any country.
+# Your whitelist (what you WANT to see)
 ALLOWED_COUNTRY_TERMS = [
-    "worldwide", "global", "anywhere", "remote", "anywhere in the world",
-    "uk", "united kingdom", "london", "england", "scotland", "wales", "britain",
-    "new zealand", "nz", "auckland", "wellington",
-    "usa", "united states", "us", "america", "north america",
-    "canada", "toronto", "vancouver", "montreal",
-    "australia", "sydney", "melbourne", "brisbane", "perth",
+    # Region keywords
+    "worldwide", "global", "anywhere", "anywhere in the world",
+    "remote", "fully remote", "remote first", "distributed team",
+    "eu timezone", "europe", "eu", "european union", "emea", "emea remote",
+    "cet", "cest", "eet", "gmt", "utc",
+    "apac", "asia pacific", "latam", "latin america",
+    "north america", "na remote", "us timezone", "est", "pst", "cst", "mst",
+    
+    # UK & Ireland
+    "uk", "united kingdom", "london", "england", "scotland", "wales", "britain", 
+    "ireland", "ireland republic", "dublin", "northern ireland",
+    
+    # Tier 1: High-volume English-friendly EU
+    "germany", "deutschland", "berlin", "munich", "hamburg", "cologne",
+    "netherlands", "nederland", "amsterdam", "rotterdam", "the hague",
+    "sweden", "sverige", "stockholm", "gothenburg",
+    "denmark", "danmark", "copenhagen",
+    "norway", "norge", "oslo",
+    "finland", "suomi", "helsinki",
+    "poland", "polska", "warsaw", "krakow", "wroclaw", "poznan", "gdansk",
+    "portugal", "lisbon", "porto",
+    "estonia", "eesti", "tallinn",
+    "spain", "espana", "barcelona", "madrid", "valencia", "seville",
+    
+    # Tier 2: Good but smaller / language barriers
+    "france", "frankreich", "paris", "lyon", "marseille",
+    "belgium", "belgie", "brussels", "antwerp",
+    "italy", "italia", "milan", "rome", "turin", "bologna",
+    "czech republic", "czechia", "prague", "brno",
+    "romania", "românia", "bucharest", "cluj", "timisoara",
+    "lithuania", "lietuva", "vilnius",
+    "latvia", "latvija", "riga",
+    "slovenia", "ljubljana",
+    "croatia", "zagreb",
+    "serbia", "belgrade",
+    "hungary", "budapest",
+    "slovakia", "bratislava",
+    "bulgaria", "sofia",
+    "greece", "athens",
+    
+    # Tier 3: High salary, low volume
+    "switzerland", "swiss", "schweiz", "zurich", "geneva", "basel",
+    "austria", "österreich", "vienna", "graz", "linz",
+    "luxembourg",
+    
+    # India
+    "india", "indian", "bangalore", "bengaluru", "mumbai", "delhi",
+    "hyderabad", "chennai", "pune", "kolkata", "gurgaon", "noida",
+    "ahmedabad", "jaipur",
+    
+    # APAC
+    "australia", "sydney", "melbourne", "brisbane", "perth", "adelaide",
+    "new zealand", "nz", "auckland", "wellington", "christchurch",
+    "singapore",
+    
+    # Americas
+    "canada", "toronto", "vancouver", "montreal", "ottawa", "calgary",
+    "mexico", "mexico city", "guadalajara",
+    "brazil", "brasil", "sao paulo", "rio de janeiro",
+    "argentina", "buenos aires",
+    "chile", "santiago",
+    "colombia", "bogota", "medellin",
+    
+    # Middle East / Africa
+    "uae", "dubai", "united arab emirates", "abu dhabi",
+    "south africa", "cape town", "johannesburg",
+    
+    # Turkey (your home base)
     "turkey", "türkiye", "istanbul", "ankara", "izmir",
-    "europe", "eu", "european union",
-    "germany", "france", "netherlands", "spain", "italy", "portugal", "ireland",
-    "sweden", "norway", "denmark", "finland", "belgium", "switzerland", "austria",
-    "poland", "czech republic", "czechia", "hungary", "slovakia", "lithuania",
-    "latvia", "estonia", "croatia", "serbia", "slovenia", "bosnia", "north macedonia",
-    "albania", "moldova", "georgia", "armenia", "azerbaijan", "kazakhstan",
-    "uzbekistan", "kyrgyzstan", "tajikistan", "turkmenistan", "mongolia",
-    "nepal", "bhutan", "myanmar", "laos", "cambodia", "brunei", "timor-leste",
-    "papua new guinea", "fiji", "solomon islands", "vanuatu", "samoa", "tonga",
-    "kiribati", "tuvalu", "nauru", "palau", "marshall islands", "micronesia",
-    "guam", "northern mariana islands", "american samoa", "puerto rico",
-    "us virgin islands", "british virgin islands", "cayman islands", "bermuda",
-    "bahamas", "barbados", "jamaica", "trinidad and tobago", "guyana", "suriname",
-    "belize", "costa rica", "panama", "guatemala", "honduras", "el salvador",
-    "nicaragua", "dominican republic", "haiti", "cuba", "venezuela", "ecuador",
-    "peru", "bolivia", "paraguay", "uruguay", "chile", "argentina", "brazil",
-    "mexico", "colombia", "south africa", "nigeria", "kenya", "egypt", "morocco",
-    "ghana", "ethiopia", "tanzania", "uganda", "zambia", "zimbabwe", "botswana",
-    "namibia", "madagascar", "mozambique", "angola", "cameroon", "ivory coast",
-    "senegal", "tunisia", "algeria", "libya", "sudan", "south sudan", "rwanda",
-    "burundi", "malawi", "lesotho", "eswatini", "seychelles", "mauritius",
-    "comoros", "djibouti", "eritrea", "somalia", "chad", "central african republic",
-    "gabon", "equatorial guinea", "sao tome and principe", "republic of the congo",
-    "democratic republic of the congo", "benin", "togo", "burkina faso", "mali",
-    "niger", "mauritania", "guinea", "guinea-bissau", "sierra leone", "liberia",
-    "gambia", "cape verde", "sao tome and principe", "greenland", "faroe islands",
-    "svalbard", "iceland", "malta", "cyprus", "liechtenstein", "andorra", "monaco",
-    "san marino", "vatican city", "switzerland", "austria", "germany", "france",
-    "netherlands", "belgium", "luxembourg", "spain", "portugal", "italy", "greece",
-    "ireland", "norway", "sweden", "denmark", "finland", "estonia", "latvia",
-    "lithuania", "poland", "czech republic", "czechia", "slovakia", "hungary",
-    "romania", "bulgaria", "croatia", "slovenia", "serbia", "bosnia and herzegovina",
-    "montenegro", "north macedonia", "albania", "kosovo", "moldova", "ukraine",
-    "belarus", "russia", "georgia", "armenia", "azerbaijan", "turkey", "türkiye",
-    "israel", "palestine", "jordan", "lebanon", "syria", "iraq", "iran", "saudi arabia",
-    "yemen", "oman", "uae", "qatar", "bahrain", "kuwait", "afghanistan", "pakistan",
-    "india", "nepal", "bhutan", "bangladesh", "sri lanka", "maldives", "myanmar",
-    "thailand", "laos", "cambodia", "vietnam", "malaysia", "singapore", "brunei",
-    "indonesia", "philippines", "timor-leste", "papua new guinea", "australia",
-    "new zealand", "fiji", "solomon islands", "vanuatu", "samoa", "tonga", "kiribati",
-    "tuvalu", "nauru", "palau", "marshall islands", "micronesia", "guam",
-    "northern mariana islands", "american samoa", "puerto rico", "us virgin islands",
-    "british virgin islands", "cayman islands", "bermuda", "bahamas", "barbados",
-    "jamaica", "trinidad and tobago", "guyana", "suriname", "belize", "costa rica",
-    "panama", "guatemala", "honduras", "el salvador", "nicaragua", "dominican republic",
-    "haiti", "cuba", "venezuela", "ecuador", "peru", "bolivia", "paraguay", "uruguay",
-    "chile", "argentina", "brazil", "mexico", "colombia", "south africa", "nigeria",
-    "kenya", "egypt", "morocco", "ethiopia", "tanzania", "uganda", "zambia",
-    "zimbabwe", "botswana", "namibia", "madagascar", "mozambique", "angola",
-    "cameroon", "ivory coast", "senegal", "tunisia", "algeria", "libya", "sudan",
-    "south sudan", "rwanda", "burundi", "malawi", "lesotho", "eswatini", "seychelles",
-    "mauritius", "comoros", "djibouti", "eritrea", "somalia", "chad",
-    "central african republic", "gabon", "equatorial guinea", "sao tome and principe",
-    "republic of the congo", "democratic republic of the congo", "benin", "togo",
-    "burkina faso", "mali", "niger", "mauritania", "guinea", "guinea-bissau",
-    "sierra leone", "liberia", "gambia", "cape verde", "sao tome and principe",
-    "greenland", "faroe islands", "svalbard", "iceland", "malta", "cyprus",
-    "liechtenstein", "andorra", "monaco", "san marino", "vatican city"
 ]
 
-# NO DISALLOWED LIST — we don't block any country
-# This list is only for tagging/logging purposes
-
-def is_allowed_location(job):
-    """Always returns True — we don't block any country.
+# Comprehensive list of ALL countries and common aliases for detection
+# This is used to detect "India" even if India is NOT in your allowlist
+ALL_COUNTRY_NAMES = {
+    # Major non-allowed countries (common in remote job spam)
+    "india", "indian", "bangalore", "bengaluru", "mumbai", "delhi", "hyderabad", "chennai", "pune", "kolkata",
+    "gurgaon", "noida", "ahmedabad", "jaipur",
+    "pakistan", "karachi", "lahore", "islamabad",
+    "bangladesh", "dhaka",
+    "philippines", "manila", "cebu",
+    "china", "chinese", "beijing", "shanghai", "shenzhen", "guangzhou",
+    "russia", "russian", "moscow", "st. petersburg", "saint petersburg",
+    "ukraine", "ukrainian", "kyiv", "kiev", "kharkiv", "lviv", "odesa",
+    "belarus", "minsk",
+    "nigeria", "lagos", "abuja",
+    "kenya", "nairobi",
+    "egypt", "cairo",
+    "morocco", "casablanca", "rabat",
+    "vietnam", "vietnamese", "hanoi", "ho chi minh",
+    "indonesia", "jakarta", "bali",
+    "thailand", "bangkok",
+    "malaysia", "kuala lumpur",
+    "sri lanka", "colombo",
+    "nepal", "kathmandu",
     
-    Kept for:
-    1. Logging which country a job is from
-    2. Future filtering if needed
-    3. Consistency with codebase
+    # US & Americas (if not in your allowlist, these block)
+    "usa", "us", "united states", "america", "american", 
+    "new york", "san francisco", "los angeles", "chicago", "seattle", "austin", "boston", "denver",
+    "atlanta", "miami", "dallas", "houston", "phoenix", "philadelphia",
+    "silicon valley", "bay area", "sf", "nyc", "la",
+    
+    # UK & Ireland
+    "uk", "united kingdom", "london", "england", "scotland", "wales", "britain", 
+    "northern ireland", "ireland", "dublin", "galway", "cork", "limerick", "belfast",
+    "edinburgh", "glasgow", "manchester", "birmingham", "leeds", "liverpool", "bristol",
+    
+    # EU - Western
+    "germany", "deutschland", "berlin", "munich", "hamburg", "cologne", "frankfurt", "stuttgart", "dusseldorf",
+    "netherlands", "nederland", "amsterdam", "rotterdam", "the hague", "utrecht", "eindhoven",
+    "france", "frankreich", "paris", "lyon", "marseille", "toulouse", "nice", "nantes", "strasbourg",
+    "belgium", "belgie", "brussels", "antwerp", "ghent", "bruges",
+    "austria", "österreich", "vienna", "graz", "linz", "salzburg", "innsbruck",
+    "switzerland", "swiss", "schweiz", "zurich", "geneva", "basel", "bern", "lausanne",
+    "luxembourg",
+    
+    # EU - Nordic
+    "sweden", "sverige", "stockholm", "gothenburg", "malmo", "uppsala",
+    "denmark", "danmark", "copenhagen", "aarhus", "odense",
+    "norway", "norge", "oslo", "bergen", "trondheim", "stavanger",
+    "finland", "suomi", "helsinki", "espoo", "tampere", "vantaa", "turku",
+    "iceland", "reykjavik",
+    
+    # EU - Central & Eastern
+    "poland", "polska", "warsaw", "krakow", "wroclaw", "poznan", "gdansk", "lodz", "katowice",
+    "czech republic", "czechia", "prague", "brno", "ostrava", "plzen",
+    "hungary", "budapest", "debrecen", "szeged",
+    "slovakia", "bratislava", "kosice",
+    "slovenia", "ljubljana", "maribor",
+    "croatia", "zagreb", "split", "rijeka",
+    "estonia", "eesti", "tallinn", "tartu",
+    "latvia", "latvija", "riga",
+    "lithuania", "lietuva", "vilnius", "kaunas",
+    "romania", "românia", "bucharest", "cluj", "timisoara", "iasi", "brasov",
+    "bulgaria", "sofia", "plovdiv", "varna",
+    "serbia", "belgrade", "novi sad", "nis",
+    "bosnia", "sarajevo", "banja luka",
+    "north macedonia", "skopje",
+    "albania", "tirana",
+    "montenegro", "podgorica",
+    "moldova", "chisinau",
+    "greece", "athens", "thessaloniki", "patras",
+    
+    # EU - Southern
+    "spain", "espana", "barcelona", "madrid", "valencia", "seville", "malaga", "bilbao",
+    "portugal", "lisbon", "porto", "braga", "coimbra", "faro",
+    "italy", "italia", "milan", "rome", "turin", "bologna", "florence", "naples", "genoa", "venice",
+    "malta", "valletta",
+    "cyprus", "nicosia", "limassol",
+    
+    # Other Europe
+    "turkey", "türkiye", "istanbul", "ankara", "izmir", "antalya", "bursa",
+    
+    # APAC
+    "australia", "sydney", "melbourne", "brisbane", "perth", "adelaide", "canberra",
+    "new zealand", "nz", "auckland", "wellington", "christchurch", "hamilton",
+    "singapore",
+    "japan", "tokyo", "osaka", "yokohama", "nagoya", "sapporo", "fukuoka",
+    "south korea", "korea", "seoul", "busan", "incheon",
+    "taiwan", "taipei", "kaohsiung",
+    "hong kong",
+    
+    # Americas
+    "canada", "toronto", "vancouver", "montreal", "ottawa", "calgary", "edmonton", "quebec",
+    "mexico", "mexico city", "guadalajara", "monterrey", "tijuana",
+    "brazil", "brasil", "sao paulo", "rio de janeiro", "brasilia", "salvador", "fortaleza", "belo horizonte",
+    "argentina", "buenos aires", "cordoba", "rosario",
+    "chile", "santiago", "valparaiso",
+    "colombia", "bogota", "medellin", "cali", "cartagena",
+    "peru", "lima",
+    "uruguay", "montevideo",
+    "costa rica", "san jose",
+    
+    # Middle East / Africa
+    "uae", "dubai", "abu dhabi", "sharjah", "ajman",
+    "united arab emirates",
+    "saudi arabia", "riyadh", "jeddah", "mecca", "medina",
+    "qatar", "doha",
+    "kuwait", "kuwait city",
+    "bahrain", "manama",
+    "oman", "muscat",
+    "israel", "tel aviv", "jerusalem", "haifa",
+    "jordan", "amman",
+    "lebanon", "beirut",
+    "south africa", "cape town", "johannesburg", "durban", "pretoria", "port elizabeth",
+    "egypt", "cairo", "alexandria",
+    "morocco", "casablanca", "rabat", "marrakesh", "fes", "tangier",
+    "tunisia", "tunis",
+    "algeria", "algiers",
+    "ghana", "accra",
+    "ethiopia", "addis ababa",
+    "tanzania", "dar es salaam",
+    "uganda", "kampala",
+    "zimbabwe", "harare",
+    
+    # South Asia
+    "afghanistan", "kabul",
+    "iran", "tehran", "isfahan", "mashhad",
+    "iraq", "baghdad",
+    "syria", "damascus",
+    "yemen", "sanaa",
+    "uzbekistan", "tashkent",
+    "kazakhstan", "almaty", "astana",
+    "azerbaijan", "baku",
+    "georgia", "tbilisi",
+    "armenia", "yerevan",
+    
+    # Southeast Asia
+    "indonesia", "jakarta", "surabaya", "bandung", "bali", "medan",
+    "malaysia", "kuala lumpur", "george town", "johor bahru",
+    "thailand", "bangkok", "chiang mai", "phuket",
+    "vietnam", "hanoi", "ho chi minh city", "saigon", "da nang",
+    "philippines", "manila", "cebu", "davao",
+    "myanmar", "yangon",
+    "cambodia", "phnom penh",
+    "laos", "vientiane",
+}
+
+# Location signals that mean "no specific country restriction"
+LOCATION_POSITIVE_SIGNALS = {
+    "worldwide", "global", "anywhere", "anywhere in the world",
+    "remote", "fully remote", "100% remote", "remote first", "distributed team",
+    "distributed", "location independent", "digital nomad",
+    "eu timezone", "europe", "eu", "european union", "emea", "emea remote",
+    "apac", "asia pacific", "latam", "latin america",
+    "north america", "na remote", "us timezone", "est", "pst", "cst", "mst",
+    "cet", "cest", "eet", "gmt", "utc",
+    "no timezone", "any timezone", "timezone flexible", "flexible timezone",
+    "work from anywhere", "work from home", "wfh",
+}
+
+
+def _extract_countries_from_text(text: str) -> set:
+    """Extract all country/city mentions from text using comprehensive dictionary."""
+    if not text:
+        return set()
+    text_lower = text.lower()
+    found = set()
+    for country in ALL_COUNTRY_NAMES:
+        # Use word boundaries for short terms, substring for longer ones
+        if len(country) <= 4:
+            pattern = r'\b' + re.escape(country) + r'\b'
+            if re.search(pattern, text_lower):
+                found.add(country)
+        else:
+            if country in text_lower:
+                found.add(country)
+    return found
+
+
+def is_allowed_location(job: dict) -> bool:
     """
+    Location filter with proper blocking logic.
+    
+    Rules:
+    1. If job has positive remote signals and NO explicit country → ALLOW
+    2. If job mentions specific countries:
+       - If ANY mentioned country is in ALLOWED_COUNTRY_TERMS → ALLOW
+       - If ALL mentioned countries are NOT in ALLOWED_COUNTRY_TERMS → BLOCK
+    3. If no country info at all → ALLOW (can't determine, don't block)
+    """
+    # Combine all text fields that might contain location info
+    text = f"{job.get('timezone', '')} {job.get('summary', '')} {job.get('job_title', '')} {job.get('company', '')}"
+    text_lower = text.lower()
+    
+    # Check for explicit positive remote signals
+    has_positive_signal = any(signal in text_lower for signal in LOCATION_POSITIVE_SIGNALS)
+    
+    # Extract ALL country mentions (using comprehensive dictionary)
+    detected_countries = _extract_countries_from_text(text)
+    
+    # If no countries detected, rely on positive signals or pass through
+    if not detected_countries:
+        return True  # Can't determine location, don't block
+    
+    # Check which detected countries are in our allowlist
+    allowed_detected = {c for c in detected_countries if c in ALLOWED_COUNTRY_TERMS}
+    blocked_detected = detected_countries - allowed_detected
+    
+    # If we found explicit countries and NONE are allowed → BLOCK
+    if detected_countries and not allowed_detected:
+        return False
+    
+    # At least one allowed country was found → ALLOW
     return True
+
+
+def extract_location_tags(job):
+    """Extract location tags from job text for logging/sorting."""
+    text = f"{job.get('timezone','')} {job.get('summary','')} {job.get('job_title','')}".lower()
+    found = []
+    for term in ALLOWED_COUNTRY_TERMS:
+        if term.lower() in text:
+            found.append(term)
+    # Deduplicate while preserving order
+    seen = set()
+    unique = []
+    for item in found:
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
+    return unique
 
 
 def is_valid_dev_job(job):
@@ -380,7 +647,6 @@ def is_valid_dev_job(job):
         return False
     if tech_stack and NON_DEV_FILTER.search(tech_stack):
         return False
-    # REMOVED: location check — all countries allowed
 
     return True
 
@@ -707,6 +973,135 @@ def parse_json_adzuna(board, data, debug=False):
 # =============================================================================
 # HTML PARSERS
 # =============================================================================
+
+def parse_html_ycombinator(html, board_name="YCombinator"):
+    """Parse YC Work at a Startup job board."""
+    soup = BeautifulSoup(html, "html.parser")
+    results = []
+    
+    # YC uses a modern React-rendered layout — try multiple selectors
+    selectors = [
+        'div[class*="JobCard"]',
+        'div[class*="job-card"]',
+        'div[class*="JobListing"]',
+        'div[class*="job-listing"]',
+        '[class*="Job"]',  # fallback
+    ]
+    
+    job_elements = []
+    for selector in selectors:
+        job_elements = soup.select(selector)
+        if job_elements:
+            print(f"  Found {len(job_elements)} YC elements with selector: {selector}")
+            break
+    
+    # If React hydration fails, try JSON embedded in script tags
+    if not job_elements:
+        scripts = soup.find_all("script", type="application/json")
+        for script in scripts:
+            try:
+                data = json.loads(script.string)
+                # YC embeds jobs in nested JSON under __APOLLO_STATE__ or similar
+                jobs_data = _extract_yc_jobs_from_json(data)
+                if jobs_data:
+                    return jobs_data
+            except (json.JSONDecodeError, AttributeError):
+                continue
+    
+    for element in job_elements[:50]:
+        try:
+            title_selectors = ['h3', 'h2', 'a[class*="title"]', '[class*="title"]', 'a[href*="/jobs/"]']
+            title = ""
+            link = ""
+            
+            for ts in title_selectors:
+                title_elem = element.select_one(ts)
+                if title_elem:
+                    title = clean_text(title_elem)
+                    if title_elem.name == 'a' and title_elem.get('href'):
+                        link = title_elem['href']
+                    break
+            
+            if not title or len(title) < 3:
+                continue
+                
+            if EXCLUDE_FILTER.search(title):
+                continue
+                
+            if not re.search(TECH_FILTER, title):
+                continue
+                
+            if not (EXP_FILTER.search(title) or 
+                    any(word in title.lower() for word in ['developer', 'engineer', 'programmer'])):
+                continue
+            
+            # Company name
+            company = "Unknown"
+            company_elem = element.select_one('[class*="company"], [class*="startup"]')
+            if company_elem:
+                company = clean_text(company_elem)
+            
+            # Location / remote tag
+            location = "Remote"
+            loc_elem = element.select_one('[class*="location"], [class*="remote"]')
+            if loc_elem:
+                location = clean_text(loc_elem)
+            
+            # Fix relative links
+            if link and not link.startswith('http'):
+                link = "https://www.workatastartup.com" + link
+            
+            results.append({
+                "job_title": title,
+                "company": company,
+                "salary": "",
+                "tech_stack": ", ".join(re.findall(TECH_FILTER, title)[:5]),
+                "timezone": location,
+                "apply_url": link or "",
+                "summary": f"YC-backed startup via Work at a Startup",
+                "posted_date_iso": normalize_date(None),
+                "source": board_name
+            })
+            
+        except Exception as e:
+            continue
+    
+    print(f"  ✅ YCombinator: Extracted {len(results)} jobs")
+    return results
+
+
+def _extract_yc_jobs_from_json(data):
+    """Fallback: extract jobs from YC's embedded JSON state."""
+    results = []
+    try:
+        # Traverse nested dicts looking for job objects
+        def traverse(obj):
+            if isinstance(obj, dict):
+                if obj.get("title") and obj.get("companyName"):
+                    title = obj.get("title", "")
+                    if not EXCLUDE_FILTER.search(title) and re.search(TECH_FILTER, title):
+                        results.append({
+                            "job_title": title,
+                            "company": obj.get("companyName", "Unknown"),
+                            "salary": obj.get("salary", "") or "",
+                            "tech_stack": ", ".join(re.findall(TECH_FILTER, title)[:5]),
+                            "timezone": obj.get("location", "Remote") or "Remote",
+                            "apply_url": "https://www.workatastartup.com" + obj.get("slug", ""),
+                            "summary": obj.get("description", "YC startup")[:200],
+                            "posted_date_iso": normalize_date(obj.get("createdAt")),
+                            "source": "YCombinator"
+                        })
+                for v in obj.values():
+                    traverse(v)
+            elif isinstance(obj, list):
+                for item in obj:
+                    traverse(item)
+        
+        traverse(data)
+    except Exception:
+        pass
+    
+    return results
 
 def parse_html_weworkremotely(html):
     soup = BeautifulSoup(html, "html.parser")
@@ -1280,6 +1675,8 @@ def fetch_jobs_from_board(name, info, debug=False):
                 return parse_html_generic(html, name, base_url)
             elif name == "JustRemote":
                return parse_html_justremote(html, base_url, name)
+            elif name == "YCombinator":
+                return parse_html_ycombinator(html, base_url, name)
             else:
                 return parse_html_generic(html, name, base_url)
         else:
@@ -1364,6 +1761,11 @@ def scrape_all(debug=False):
 
     total_before_filter = len(jobs)
     jobs = [job for job in jobs if is_valid_dev_job(job)]
+    
+    # Add location tags for all jobs
+    for job in jobs:
+        job["location_tags"] = extract_location_tags(job)
+    
     print(f"Filtered dev jobs: {total_before_filter} total -> {len(jobs)} valid developer jobs")
 
     print(f"\n=== SCRAPING SUMMARY ===")
@@ -1411,5 +1813,6 @@ if __name__ == "__main__":
             print(f"Title: {job['job_title']}")
             print(f"Company: {job['company']}")
             print(f"Tech: {job['tech_stack']}")
+            print(f"Location Tags: {job.get('location_tags', [])}")
             print(f"URL: {job['apply_url']}")
         print(f"Total jobs found: {len(jobs)}")

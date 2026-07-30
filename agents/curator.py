@@ -17,6 +17,7 @@ load_dotenv()
 # IMPORTS
 # =============================================================================
 
+from agents.scrapper import is_allowed_location
 from tools.sheet_writer import append_rows, get_all_rows, get_sheet, get_or_create_worksheet
 from tools.cv_parser import parse_cv
 from tools.deduplicator import filter_already_seen, load_seen_hashes, save_seen_hashes
@@ -300,10 +301,17 @@ def curate(raw_jobs: list) -> dict:
     fp_duplicates = before_fp - len(unique_jobs)
     print(f"   Fingerprint duplicates: {fp_duplicates} | Remaining: {len(unique_jobs)}")
 
+    # ── Country / Location filter ──
+    print("\n🌍 Country filter...")
+    before_country = len(unique_jobs)
+    unique_jobs = [job for job in unique_jobs if is_allowed_location(job)]
+    country_filtered = before_country - len(unique_jobs)
+    print(f"   Filtered by country: {country_filtered} | Remaining: {len(unique_jobs)}")
+
     if not unique_jobs:
         return {
             "status": "warning",
-            "message": "All jobs were duplicates",
+            "message": "All jobs were duplicates or filtered by country",
             "stats": {
                 "original_jobs": len(raw_jobs),
                 "url_duplicates": duplicates,
