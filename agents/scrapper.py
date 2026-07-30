@@ -370,7 +370,7 @@ ALLOWED_COUNTRY_TERMS = [
     "greece", "athens",
     
     # Tier 3: High salary, low volume
-    "switzerland", "swiss", "schweiz", "zurich", "geneva", "basel",
+    "switzerland", "swiss", "schweiz", "zurich", "geneva", "basel", "bern",
     "austria", "österreich", "vienna", "graz", "linz",
     "luxembourg",
     
@@ -384,6 +384,13 @@ ALLOWED_COUNTRY_TERMS = [
     "new zealand", "nz", "auckland", "wellington", "christchurch",
     "singapore",
     
+    # United States
+    "usa", "united states", "america", "american", "us",
+    "new york", "nyc", "san francisco", "bay area", "silicon valley",
+    "los angeles", "la", "chicago", "seattle", "austin", "boston",
+    "denver", "atlanta", "miami", "dallas", "houston", "phoenix",
+    "philadelphia", "portland", "san diego", "washington dc",
+    
     # Americas
     "canada", "toronto", "vancouver", "montreal", "ottawa", "calgary",
     "mexico", "mexico city", "guadalajara",
@@ -394,6 +401,11 @@ ALLOWED_COUNTRY_TERMS = [
     
     # Middle East / Africa
     "uae", "dubai", "united arab emirates", "abu dhabi",
+    "saudi arabia", "riyadh",
+    "qatar", "doha",
+    "kuwait",
+    "bahrain",
+    "oman",
     "south africa", "cape town", "johannesburg",
     
     # Turkey (your home base)
@@ -429,10 +441,11 @@ ALL_COUNTRY_NAMES = {
     "new york", "san francisco", "los angeles", "chicago", "seattle", "austin", "boston", "denver",
     "atlanta", "miami", "dallas", "houston", "phoenix", "philadelphia",
     "silicon valley", "bay area", "sf", "nyc", "la",
+    "san diego", "portland", "washington dc",
     
     # UK & Ireland
     "uk", "united kingdom", "london", "england", "scotland", "wales", "britain", 
-    "northern ireland", "ireland", "dublin", "galway", "cork", "limerick", "belfast",
+    "northern ireland", "ireland", "ireland republic", "dublin", "galway", "cork", "limerick", "belfast",
     "edinburgh", "glasgow", "manchester", "birmingham", "leeds", "liverpool", "bristol",
     
     # EU - Western
@@ -567,14 +580,9 @@ def _extract_countries_from_text(text: str) -> set:
     text_lower = text.lower()
     found = set()
     for country in ALL_COUNTRY_NAMES:
-        # Use word boundaries for short terms, substring for longer ones
-        if len(country) <= 4:
-            pattern = r'\b' + re.escape(country) + r'\b'
-            if re.search(pattern, text_lower):
-                found.add(country)
-        else:
-            if country in text_lower:
-                found.add(country)
+        pattern = r'(?<![a-z])' + re.escape(country) + r'(?![a-z])'
+        if re.search(pattern, text_lower):
+            found.add(country)
     return found
 
 
@@ -974,7 +982,7 @@ def parse_json_adzuna(board, data, debug=False):
 # HTML PARSERS
 # =============================================================================
 
-def parse_html_ycombinator(html, board_name="YCombinator"):
+def parse_html_ycombinator(html, base_url=None, board_name="YCombinator"):
     """Parse YC Work at a Startup job board."""
     soup = BeautifulSoup(html, "html.parser")
     results = []
@@ -1762,11 +1770,15 @@ def scrape_all(debug=False):
     total_before_filter = len(jobs)
     jobs = [job for job in jobs if is_valid_dev_job(job)]
     
+    # === COUNTRY FILTER ===
+    country_before = len(jobs)
+    jobs = [job for job in jobs if is_allowed_location(job)]
+    country_blocked = country_before - len(jobs)
+    print(f"🌍 Country filter: blocked {country_blocked} jobs | remaining: {len(jobs)}")
+    
     # Add location tags for all jobs
     for job in jobs:
         job["location_tags"] = extract_location_tags(job)
-    
-    print(f"Filtered dev jobs: {total_before_filter} total -> {len(jobs)} valid developer jobs")
 
     print(f"\n=== SCRAPING SUMMARY ===")
     print(f"✅ Working scrapers ({len(working_scrapers)}): {working_scrapers}")
