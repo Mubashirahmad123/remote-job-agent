@@ -71,7 +71,7 @@ def _parse_date_cell(value):
 def remove_old_jobs_from_sheet(worksheet, days=30):
     """
     Remove jobs older than X days based on posted_date_iso.
-    Keeps header row intact. Rows with missing/unparseable dates are removed.
+    Keeps header row intact. Rows with unparseable/missing dates are kept.
     """
 
     data = worksheet.get_all_values()
@@ -89,36 +89,38 @@ def remove_old_jobs_from_sheet(worksheet, days=30):
 
     cutoff = datetime.now() - timedelta(days=days)
 
-    filtered_rows = []
+    kept = [header]
+    removed = 0
 
     for row in data[1:]:
         try:
             if len(row) <= date_idx:
+                kept.append(row)
                 continue
 
             date_str = row[date_idx].strip() if row[date_idx] else ""
+            if not date_str:
+                kept.append(row)
+                continue
+
             posted_date = _parse_date_cell(date_str)
 
             if posted_date is None:
-                # No valid date → treat as old and remove
+                kept.append(row)
                 continue
 
             if posted_date >= cutoff:
-                filtered_rows.append(row)
+                kept.append(row)
+            else:
+                removed += 1
 
         except Exception:
+            kept.append(row)
             continue
-
-    removed = len(data) - 1 - len(filtered_rows)
 
     if removed > 0:
         worksheet.clear()
-        worksheet.append_row(header)
-
-        if filtered_rows:
-            worksheet.append_rows(filtered_rows)
-
-    if removed > 0:
+        worksheet.append_rows(kept)
         print(f"[CLEANUP] Removed {removed} jobs older than {days} days")
 
 def test_environment():
@@ -667,25 +669,19 @@ def _format_single_worksheet(ws):
             col_letter = chr(ord("A") + idx)
             ws.format(f"{col_letter}2:{col_letter}{num_rows}", {"wrapStrategy": "WRAP"})
 
-    # 4. Hyperlink apply_url column (replace URL with "Apply ->" link)
+    # 4. Style apply_url as a clickable link (keep original URL, just format as link)
     url_idx = col_names.get("apply_url")
     if url_idx is not None:
         url_letter = chr(ord("A") + url_idx)
-        url_values = ws.col_values(url_idx + 1)
-        cells_to_update = []
-        for i, url in enumerate(url_values[1:], start=2):
-            if url and isinstance(url, str) and url.startswith("http"):
-                escaped_url = url.replace('"', '""')
-                cells_to_update.append(
-                    gspread.Cell(i, url_idx + 1, f'=HYPERLINK("{escaped_url}", "Apply ->")')
-                )
-        if cells_to_update:
-            ws.update_cells(cells_to_update, value_input_option="USER_ENTERED")
-            ws.format(f"{url_letter}2:{url_letter}{num_rows}", {
-                "textFormat": {"foregroundColor": {"red": 0.15, "green": 0.39, "blue": 0.92}, "fontSize": 10},
-                "horizontalAlignment": "CENTER",
-                "verticalAlignment": "MIDDLE",
-            })
+        ws.format(f"{url_letter}2:{url_letter}{num_rows}", {
+            "textFormat": {
+                "foregroundColor": {"red": 0.15, "green": 0.39, "blue": 0.92},
+                "fontSize": 10,
+                "underline": True,
+            },
+            "horizontalAlignment": "LEFT",
+            "verticalAlignment": "MIDDLE",
+        })
 
     # 5. Color-coded rows by match_score
     score_idx = col_names.get("match_score")

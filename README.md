@@ -7,13 +7,19 @@ An automated system that scrapes 30+ remote job boards, matches jobs to your CV 
 ## Features
 
 | Feature | Status | Description |
-|---|---|---|
+|---|---|---|---|---|
 | Multi-source scraping | ✅ | 45+ job boards via APIs, HTML parsing, Playwright stealth, JobSpy, and Crawl4AI |
-| Dev-only job filter | ✅ | Strips non-dev, senior/lead, and irrelevant roles automatically |
+| **Smart job filters** | ✅ | Only web/software dev roles — excludes ML, AI, Network, DevOps, SRE, Security, QA, Game, Blockchain, Embedded, Salesforce, and senior/lead roles |
 | CV-based job matching | ✅ | Parses your PDF/DOCX CV via Gemini, local keyword scoring (no API calls per job) |
+| **Semantic job matching** | ✅ | Optional FAISS + sentence-transformers for cosine-similarity scoring (catches synonyms) — `pip install sentence-transformers faiss-cpu` |
 | Duplicate detection | ✅ | MD5 fingerprinting prevents duplicate entries across runs |
 | Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS — with colored score bands, hyperlinks, frozen headers |
-| AI cover letters | ✅ | Generates job-specific cover letters with PDF export |
+| **AI cover letters with role detection** | ✅ | Detects backend/frontend/fullstack/mobile role from job title and tailors tone, skills, and experience accordingly |
+| **LLM fallback chain** | ✅ | Gemini → GLM-4 (Zhipu) → Ollama (local) — pipeline never crashes from API quota errors |
+| **Auto-apply pipeline** | ✅ | Generates tailored resume + cover letter, opens apply URL in browser or auto-fills Greenhouse/Lever via Playwright, tracks in APPLIED sheet |
+| **Tailored resume generation** | ✅ | Generates ATS-optimized resume PDF matched to each job's tech stack `python main.py resume` |
+| **Country/location filter** | ✅ | 452-country detection — blocks jobs from non-whitelisted countries, allows 198 whitelisted terms |
+| **Cross-platform Unicode PDFs** | ✅ | Auto-downloads DejaVu fonts — works on Windows/macOS/Linux; covers accents, Arabic, Cyrillic |
 | Application tracker | ✅ | `track.py` CLI + `tools/application_tracker.py` — mark applied, update status, list, stats, follow-up reminders |
 | Auto-cleanup old jobs | ✅ | Removes jobs older than 30 days from all sheets (including legacy `LIVE Remote Jobs Tracker`) |
 | Sheet formatting (Google Sheets) | ✅ | Auto-applies colored score bands, clickable hyperlinks, wrapped text, column widths via Google Sheets API |
@@ -74,6 +80,40 @@ You can also set `RUN_MODE` in `.env`:
 - `crewai` (default) — CrewAI pipeline: scrape + curate → cover letter (2 agents)
 - `simple` — Direct scrape → sheets without CrewAI
 - `test` — Test individual tools
+- `apply` — Auto-apply to top matching jobs
+- `resume` — Generate tailored resumes for top jobs
+
+### Auto-Apply
+
+The auto-apply agent generates a tailored resume + cover letter, then applies in one of two modes:
+
+**Simple mode** (default) — opens the apply URL in your browser and creates an apply package:
+```bash
+python main.py apply
+```
+
+**Playwright mode** — automatically fills Greenhouse/Lever application forms:
+```bash
+# Fill forms + take screenshots (review before submitting)
+AUTO_APPLY_PLAYWRIGHT=true python main.py apply
+
+# Full auto-submit (confirms — use with caution)
+AUTO_APPLY_PLAYWRIGHT=true AUTO_APPLY_CONFIRM=true python main.py apply
+```
+
+The Playwright mode:
+- Detects the ATS platform (Greenhouse, Lever, Workday, Workable, Ashby, Breezy)
+- Fills name, email, phone, LinkedIn, portfolio
+- Uploads generated resume PDF
+- Pastes tailored cover letter
+- Takes a screenshot before submission
+- Optionally submits the form (with `AUTO_APPLY_CONFIRM=true`)
+
+An **apply package** is always created in `apply_packages/` with:
+- `resume.pdf` — tailored resume
+- `cover_letter.txt` — tailored cover letter
+- `form_data.json` — all application data
+- `index.html` — helper page with copy-to-clipboard buttons
 
 ---
 
@@ -85,22 +125,29 @@ remote-job-agent/
 │   ├── __init__.py
 │   ├── scrapper.py           # 45+ job board scrapers (API, HTML, RSS)
 │   ├── curator.py            # Dedup, CV matching, quality ranking, sheet save
-│   └── gemini_tools.py       # Gemini cover letter generation, markdown extraction
+│   ├── gemini_tools.py       # Cover letters with LLM fallback (Gemini→GLM→Ollama)
+│   └── auto_applier.py       # Auto-apply: resume + cover letter + Playwright form fill
 ├── tools/
 │   ├── __init__.py
 │   ├── cv_parser.py           # PDF/DOCX CV → structured profile via Gemini
 │   ├── cv_matcher.py          # Local keyword job scoring (no API calls)
 │   ├── deduplicator.py        # MD5 fingerprint duplicate detection
+│   ├── embedding_matcher.py   # Optional FAISS semantic scoring (Phase 2)
+│   ├── font_utils.py          # Cross-platform Unicode PDF font resolution (auto-downloads DejaVu)
 │   ├── sheet_writer.py        # Google Sheets dashboard (5 tabs) + 30-day auto-cleanup
+│   ├── resume_generator.py    # AI-tailored resume PDF per job
 │   ├── jobspy_scraper.py      # LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter
 │   ├── playwright_scraper.py  # Stealth browser scraping (WWR, Remote.co, Wellfound, NoDesk)
 │   ├── crawl4ai_scraper.py    # AI-native Crawl4AI scraper for JustRemote
 │   ├── scraper_utils.py       # Text cleaning, date parsing utilities
 │   └── application_tracker.py # APPLIED sheet management (mark, update, list, stats)
+├── apply_packages/           # Auto-generated apply packages (resume + cover letter + form data)
+├── cover_letters/            # Generated PDF cover letters
+├── resumes/                  # Generated tailored PDF resumes
+├── screenshots/              # Playwright screenshots before form submission
 ├── clean_jobs.py             # Excel cleanup: extract company, strip HTML, dedup tags, remove senior roles
 ├── format_jobs_xlsx.py       # Professional Excel formatter (colored bands, hyperlinks, frozen header)
 ├── track.py                  # Application tracker CLI (mark applied, status, list, stats, followups)
-├── cover_letters/            # Generated PDF cover letters
 ├── main.py                   # CrewAI pipeline entry point
 ├── Run.py                    # Universal start script (Win/Mac/Linux)
 ├── scheduler.py              # Cron-based scheduler (Mon/Thu)
@@ -124,7 +171,7 @@ GOOGLE_SHEETS_ID=your_sheet_id
 GOOGLE_SERVICE_ACCOUNT=keys.json
 GEMINI_API_KEY=your_key
 MODEL=gemini/gemini-2.5-flash
-RUN_MODE=crewai
+RUN_MODE=crewai          # crewai | simple | test | apply | resume
 
 # Job Scraping
 ADZUNA_APP_ID=your_id
@@ -136,6 +183,35 @@ PLAYWRIGHT_HEADLESS=true
 # CV Matching
 CV_PATH=my_cv.pdf
 MIN_MATCH_SCORE=70
+CLEANUP_DAYS=30
+
+# Location / Country Filter (OBSOLETE — use hardcoded ALLOWED_COUNTRY_TERMS in agents/scrapper.py:330)
+# The code ignores this env var. Edit ALLOWED_COUNTRY_TERMS in scrapper.py to change allowed countries.
+ALLOWED_COUNTRIES=uk,united kingdom,new zealand,nz,usa,united states
+
+# LLM Fallback (optional — GLM-4 and Ollama for when Gemini hits rate limits)
+GLM_API_KEY=
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1
+
+# Auto-Apply
+AUTO_APPLY_ENABLED=false  # auto-apply after pipeline
+AUTO_APPLY_THRESHOLD=70   # minimum match score
+AUTO_APPLY_LIMIT=5        # max jobs per run
+AUTO_APPLY_PLAYWRIGHT=false  # true = fill forms; false = open browser
+AUTO_APPLY_CONFIRM=false     # true = submit (DANGER); false = fill & review
+
+# Your Profile (for auto-fill)
+APPLICANT_NAME=Your Name
+APPLICANT_EMAIL=your@email.com
+APPLICANT_PHONE=+1234567890
+APPLICANT_LINKEDIN=https://linkedin.com/in/yourprofile
+APPLICANT_PORTFOLIO=https://yourportfolio.com
+APPLICANT_GITHUB=https://github.com/yourprofile
+
+# Embedding Matcher (optional — install sentence-transformers + faiss-cpu)
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+CV_EMBEDDINGS_PATH=cv_embeddings.pkl
 ```
 
 ---
@@ -149,11 +225,12 @@ MIN_MATCH_SCORE=70
   agents/scrapper.py     ◄── API calls, HTML parse, Playwright, JobSpy, Crawl4AI
      │                   ──   (called by merged Scraper+Curator agent)
      ▼
-  agents/curator.py       ◄── Dedup → CV score (local) → quality rank → Sheets
+  agents/curator.py       ◄── Dedup → CV score (local + optional semantic) → quality rank → Sheets
      │                    ──   (called by merged Scraper+Curator agent)
      ├─ tools/deduplicator.py    (MD5 fingerprinting)
      ├─ tools/cv_parser.py       (Gemini CV → profile)
      ├─ tools/cv_matcher.py      (Local keyword scoring, no API calls)
+     ├─ tools/embedding_matcher.py  (Optional FAISS semantic scoring, Phase 2)
       └─ tools/sheet_writer.py    (Google Sheets dashboard + cleanup + formatting)
      │
      ▼
@@ -261,6 +338,9 @@ python -c "from tools.cv_parser import parse_cv; profile = parse_cv('my_cv.pdf')
 
 # Test cover letter
 python -c "from agents.gemini_tools import generate_cover_letter; cl = generate_cover_letter('Full Stack Developer', 'Acme Corp', 'Node.js React role', 'Mubashir'); print(cl[:200])"
+
+# Build CV embeddings for semantic matching
+python -c "from tools.embedding_matcher import build_cv_index; build_cv_index(open('my_cv.pdf','rb').read().decode('utf-8','ignore'))"
 ```
 
 ---

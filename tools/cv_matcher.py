@@ -1,252 +1,349 @@
 """
-cv_matcher.py — Local job scoring engine (no API calls, no rate limits)
-
-Scores jobs 0-100 against your CV profile using a weighted keyword algorithm.
-Gemini is NOT used here — it's reserved for CV parsing (once/week) and cover letters (on demand).
-
-Scoring breakdown:
-  Title match        → 25 pts
-  Skill match        → 30 pts  (scales with number of matched skills)
-  Seniority check    → 20 pts  (full points if NOT senior/lead/etc)
-  Remote confirmed   → 15 pts
-  Salary listed      →  5 pts
-  Timezone fit       →  5 pts
-  ─────────────────────────────
-  Max                → 100 pts
+tools/cv_matcher.py
+Local keyword-based job scoring with fuzzy matching and synonym expansion.
+No API calls — runs entirely offline.
 """
 
 import re
-from typing import Optional
+from typing import Dict, List, Set
+from pathlib import Path
+import json
 
-NON_DEV_TERMS = [
-    "marketing", "sales", "accountant", "recruiter", "hr", "human resources",
-    "designer", "graphic designer", "ui designer", "ux designer",
-    "customer support", "customer success", "seo", "content writer",
-    "copywriter", "social media", "product manager", "project manager",
-    "business analyst",
+# =============================================================================
+# SYNONYM & EXPANSION MAPS
+# =============================================================================
+
+SKILL_SYNONYMS = {
+    # Languages
+    "python": ["python", "python3", "py", "django", "flask", "fastapi"],
+    "javascript": ["javascript", "js", "es6", "typescript", "ts", "node", "nodejs", "node.js"],
+    "typescript": ["typescript", "ts", "angular", "react", "vue", "nextjs", "next.js"],
+    "java": ["java", "spring", "springboot", "spring-boot", "jvm", "kotlin"],
+    "go": ["go", "golang"],
+    "ruby": ["ruby", "rails", "ruby on rails", "ror"],
+    "php": ["php", "laravel", "symfony", "wordpress"],
+    "c++": ["c++", "cpp", "qt", "cmake"],
+    "c#": ["c#", "csharp", ".net", "dotnet", "asp.net"],
+    "rust": ["rust", "cargo"],
+    
+    # Frontend
+    "react": ["react", "reactjs", "react.js", "nextjs", "next.js", "gatsby", "redux"],
+    "vue": ["vue", "vuejs", "vue.js", "nuxt", "nuxtjs"],
+    "angular": ["angular", "angularjs", "angular.js"],
+    
+    # Backend / Frameworks
+    "django": ["django", "django-rest-framework", "drf"],
+    "flask": ["flask"],
+    "fastapi": ["fastapi"],
+    "spring": ["spring", "springboot", "spring-boot", "spring cloud"],
+    "express": ["express", "expressjs", "express.js"],
+    "rails": ["rails", "ruby on rails", "ror"],
+    "laravel": ["laravel"],
+    "dotnet": [".net", "dotnet", "asp.net", "asp.net core", ".net core"],
+    
+    # Databases
+    "postgresql": ["postgresql", "postgres", "psql", "pg"],
+    "mysql": ["mysql", "mariadb", "sql"],
+    "mongodb": ["mongodb", "mongo", "nosql"],
+    "redis": ["redis", "redis cache"],
+    "sqlite": ["sqlite"],
+    
+    # DevOps / Cloud (if user has these)
+    "docker": ["docker", "containerization", "containers"],
+    "aws": ["aws", "amazon web services", "ec2", "s3", "lambda", "cloudwatch"],
+    "gcp": ["gcp", "google cloud", "google cloud platform"],
+    "azure": ["azure", "microsoft azure"],
+    "kubernetes": ["kubernetes", "k8s", "helm"],
+    "terraform": ["terraform", "iac", "infrastructure as code"],
+    "ci/cd": ["ci/cd", "github actions", "gitlab ci", "jenkins", "travis"],
+    
+    # Mobile
+    "react native": ["react native", "react-native", "rn"],
+    "flutter": ["flutter", "dart"],
+    "ios": ["ios", "swift", "objective-c", "objectivec"],
+    "android": ["android", "kotlin", "java"],
+    
+    # General
+    "rest api": ["rest", "restful", "api", "graphql", "json", "openapi", "swagger"],
+    "git": ["git", "github", "gitlab", "bitbucket", "version control"],
+    "agile": ["agile", "scrum", "kanban"],
+    "testing": ["testing", "jest", "pytest", "unittest", "tdd", "unit test", "integration test"],
+}
+
+# =============================================================================
+# REJECTION KEYWORDS (non-dev roles to exclude)
+# =============================================================================
+
+REJECTION_PATTERNS = [
+    # Non-dev roles
+    r"\bservice desk\b", r"\bhelp desk\b", r"\bit support\b", r"\btechnical support\b",
+    r"\bcustomer support\b", r"\bsystems engineer\b(?!.*software)",  # systems engineer but not software systems
+    r"\bnetwork engineer\b", r"\bnetwork administrator\b",
+    r"\bsecurity engineer\b", r"\bcybersecurity\b", r"\bpenetration tester\b",
+    r"\bdevops\b", r"\bsre\b", r"\bsite reliability\b",
+    r"\bdata scientist\b", r"\bdata analyst\b", r"\bml engineer\b", r"\bmachine learning\b",
+    r"\bai engineer\b", r"\bai researcher\b", r"\bdeep learning\b", r"\bnlp engineer\b",
+    r"\bqa engineer\b", r"\btest engineer\b", r"\bautomation tester\b", r"\bmanual tester\b",
+    r"\bquality assurance\b",
+    r"\bgame developer\b", r"\bgame designer\b", r"\bunity developer\b", r"\bunreal engine\b",
+    r"\bembedded\b", r"\bfirmware\b", r"\bhardware\b", r"\bchip design\b", r"\bvlsi\b",
+    r"\bsalesforce\b", r"\bapex\b", r"\bvisualforce\b", r"\bsalesforce developer\b",
+    r"\bnetsuite\b", r"\bdynamics 365\b", r"\bd365\b", r"\bsap\b", r"\berp\b",
+    r"\bservicenow\b", r"\bworkday\b", r"\bsharepoint\b",
+    r"\bmulesoft\b", r"\bintegration engineer\b", r"\betl\b", r"\bdata engineer\b(?!.*software)",
+    r"\bmainframe\b", r"\bcobol\b", r"\bas400\b", r"\brpg\b",
+    r"\bmanufacturing\b", r"\bfabrication\b", r"\bwelding\b", r"\baeronautical\b",
+    r"\bcomint\b", r"\bcesm\b", r"\bcecm\b",  # military/intel systems
+    r"\bproduction engineer\b(?!.*software)", r"\bplatform engineer\b(?!.*software)",
+    r"\bscrum master\b", r"\bproduct owner\b", r"\bproject manager\b", r"\bprogram manager\b",
+    r"\btechnical writer\b", r"\bdocumentation\b",
+    r"\bux designer\b", r"\bui designer\b", r"\bgraphic designer\b", r"\bproduct designer\b",
+    r"\bdigital marketing\b", r"\bseo\b", r"\bcontent\b", r"\bsocial media\b",
+    r"\bsolutions architect\b(?!.*software)", r"\benterprise architect\b",
+    r"\bconsultant\b", r"\bstrategy\b", r"\banalyst\b(?!.*software|systems)",
+    
+    # Seniority gates (optional — remove if you want senior roles)
+    r"\bprincipal\b", r"\bstaff engineer\b", r"\bdistinguished\b", r"\bfellow\b",
+    r"\bcto\b", r"\bvp of engineering\b", r"\bhead of engineering\b",
+    r"\bdirector of engineering\b", r"\bsenior director\b",
+    
+    # Non-standard dev
+    r"\btutor\b", r"\binstructor\b", r"\bteacher\b", r"\blecturer\b",
+    r"\bfreelance\b.*\bdeveloper\b",  # vague freelance gigs
+    r"\bintern\b",  # remove if you want internships
+    r"\bvolunteer\b",
 ]
 
-SENIOR_TERMS = [
-    "senior", "sr.", "sr ", "lead", "principal", "architect",
-    "director", "manager", "head of", "vp ", "vice president",
-    "chief", "cto", "ceo", "staff engineer", "distinguished",
-]
+# =============================================================================
+# SCORING ENGINE
+# =============================================================================
 
-REMOTE_TERMS = [
-    "remote", "work from home", "wfh", "fully remote", "100% remote",
-    "distributed team", "anywhere",
-]
+class CVMatcher:
+    def __init__(self, cv_profile: Dict):
+        self.cv_profile = cv_profile
+        self.cv_skills = self._extract_cv_skills()
+        self.cv_title_keywords = self._extract_title_keywords()
+        
+    def _extract_cv_skills(self) -> Set[str]:
+        """Extract and normalize all skills from CV profile."""
+        skills = set()
+        
+        # Direct skills
+        for skill in self.cv_profile.get("skills", []):
+            skills.add(self._normalize(skill))
+        
+        # Frameworks count as skills too
+        for fw in self.cv_profile.get("frameworks", []):
+            skills.add(self._normalize(fw))
+        
+        # Databases
+        for db in self.cv_profile.get("databases", []):
+            skills.add(self._normalize(db))
+        
+        # Languages
+        for lang in self.cv_profile.get("languages", []):
+            skills.add(self._normalize(lang))
+        
+        # Infer from experience descriptions
+        for exp in self.cv_profile.get("experience", []):
+            desc = exp.get("description", "")
+            for skill in self._extract_skills_from_text(desc):
+                skills.add(skill)
+        
+        return skills
+    
+    def _extract_title_keywords(self) -> Set[str]:
+        """Extract role keywords from CV (e.g., 'backend', 'frontend', 'fullstack')."""
+        titles = self.cv_profile.get("preferred_titles", [])
+        text = " ".join(titles).lower()
+        keywords = set()
+        for word in ["backend", "frontend", "fullstack", "full stack", "web", "software", "mobile", "api"]:
+            if word in text:
+                keywords.add(word.replace(" ", ""))
+        return keywords
+    
+    @staticmethod
+    def _normalize(text: str) -> str:
+        """Normalize a skill string."""
+        return re.sub(r"[^a-z0-9+#]", "", text.lower().replace(".", "").replace(" ", ""))
+    
+    def _extract_skills_from_text(self, text: str) -> List[str]:
+        """Extract known skills from free text."""
+        text_lower = text.lower()
+        found = []
+        for skill, synonyms in SKILL_SYNONYMS.items():
+            for syn in synonyms:
+                if syn in text_lower:
+                    found.append(skill)
+                    break
+        return found
+    
+    def _job_text_to_skills(self, job_text: str) -> Set[str]:
+        """Extract all skills mentioned in job text."""
+        text_lower = job_text.lower()
+        found = set()
+        for skill, synonyms in SKILL_SYNONYMS.items():
+            for syn in synonyms:
+                if syn in text_lower:
+                    found.add(skill)
+                    break
+        return found
+    
+    def should_reject(self, job: Dict) -> tuple[bool, str]:
+        """
+        Returns (should_reject, reason).
+        True if job is NOT a software/web dev role.
+        """
+        title = job.get("job_title", "").lower()
+        company = job.get("company", "").lower()
+        summary = job.get("summary", "").lower()
+        tech_stack = job.get("tech_stack", "").lower()
+        
+        combined = f"{title} {company} {summary} {tech_stack}"
+        
+        for pattern in REJECTION_PATTERNS:
+            if re.search(pattern, combined, re.IGNORECASE):
+                return True, f"Rejected by pattern: {pattern}"
+        
+        # Must contain at least one dev indicator
+        dev_indicators = [
+            "developer", "engineer", "programmer", "software", "web", "backend", 
+            "frontend", "fullstack", "full stack", "web developer", "software engineer",
+            "application developer", "web engineer", "software developer"
+        ]
+        if not any(ind in combined for ind in dev_indicators):
+            return True, "No dev role indicators found"
+        
+        return False, ""
+    
+    def score(self, job: Dict) -> Dict:
+        """
+        Score a job against the CV.
+        Returns dict with score (0-100) and match details.
+        """
+        title = job.get("job_title", "")
+        summary = job.get("summary", "")
+        tech_stack = job.get("tech_stack", "")
+        
+        job_text = f"{title} {summary} {tech_stack}".lower()
+        
+        # Extract skills from job
+        job_skills = self._job_text_to_skills(job_text)
+        
+        if not job_skills:
+            return {"score": 0, "match_reason": "No recognizable tech skills in job"}
+        
+        # Calculate overlap
+        cv_skills = self.cv_skills
+        
+        # Direct matches
+        direct_matches = cv_skills & job_skills
+        
+        # Expanded matches (synonym-based)
+        expanded_matches = set()
+        for cv_skill in cv_skills:
+            if cv_skill in SKILL_SYNONYMS:
+                # Check if any synonym of cv_skill appears in job
+                for syn in SKILL_SYNONYMS[cv_skill]:
+                    if syn in job_text:
+                        expanded_matches.add(cv_skill)
+                        break
+        
+        all_matches = direct_matches | expanded_matches
+        
+        # Score calculation
+        if not job_skills:
+            score = 0
+        else:
+            # Base: % of job skills covered by CV
+            coverage = len(all_matches) / len(job_skills)
+            
+            # Bonus: exact matches are weighted higher
+            exact_bonus = len(direct_matches) * 3
+            
+            # Title alignment bonus
+            title_bonus = 0
+            job_title_norm = title.lower()
+            for kw in self.cv_title_keywords:
+                if kw in job_title_norm.replace(" ", ""):
+                    title_bonus += 10
+            
+            # Seniority alignment
+            seniority_bonus = 0
+            cv_seniority = self.cv_profile.get("seniority", "mid").lower()
+            if cv_seniority in job_title_norm:
+                seniority_bonus = 5
+            
+            # Calculate final score (0-100)
+            score = min(100, int(coverage * 60 + exact_bonus + title_bonus + seniority_bonus))
+        
+        # Build match reason
+        matched_skills = sorted(all_matches)[:10]
+        match_reason = f"Matched: {', '.join(matched_skills)}" if matched_skills else "Weak skill overlap"
+        
+        return {
+            "score": score,
+            "match_reason": match_reason,
+            "cv_skills_found": len(cv_skills),
+            "job_skills_found": len(job_skills),
+            "overlap": len(all_matches),
+            "direct_matches": sorted(direct_matches),
+            "expanded_matches": sorted(expanded_matches - direct_matches),
+        }
 
-ONSITE_TERMS = [
-    "onsite", "on-site", "on site", "hybrid", "in-office", "in office",
-    "relocation", "must be located", "must reside", "office required",
-    "security clearance", "clearance required", "ts/sci",
-]
 
-GOOD_TIMEZONE_TERMS = [
-    "europe", "eu", "uk", "gmt", "cet", "utc", "worldwide", "global",
-    "anywhere", "async", "flexible", "overlap not required",
-]
+# =============================================================================
+# PUBLIC API
+# =============================================================================
 
-BAD_TIMEZONE_TERMS = [
-    "us only", "usa only", "north america only", "pst only", "est only",
-    "must overlap us", "us hours",
-]
-
-
-def _normalize(text: str) -> str:
-    return re.sub(r"\s+", " ", str(text or "").lower().strip())
-
-
-def _all_text(job: dict) -> str:
-    fields = [
-        job.get("job_title", ""),
-        job.get("company", ""),
-        job.get("tech_stack", ""),
-        job.get("summary", ""),
-        job.get("timezone", ""),
-        job.get("salary", ""),
-    ]
-    return _normalize(" ".join(str(f) for f in fields))
+def score_job(cv_profile: Dict, job: Dict) -> Dict:
+    """Score a single job. Returns job dict with score fields added."""
+    matcher = CVMatcher(cv_profile)
+    
+    # First: rejection check
+    rejected, reason = matcher.should_reject(job)
+    if rejected:
+        job["match_score"] = 0
+        job["match_reason"] = f"REJECTED: {reason}"
+        job["rejected"] = True
+        return job
+    
+    # Then: scoring
+    result = matcher.score(job)
+    job["match_score"] = result["score"]
+    job["match_reason"] = result["match_reason"]
+    job["rejected"] = False
+    job["_match_details"] = result  # For debugging
+    
+    return job
 
 
-def _score_title(job: dict, cv_profile: dict) -> tuple[int, Optional[str]]:
-    """25 pts — exact preferred title match, 12 for generic dev title."""
-    title = _normalize(job.get("job_title", ""))
-    preferred = [_normalize(t) for t in cv_profile.get("preferred_titles", [])]
-
-    for pref in preferred:
-        if pref in title:
-            return 25, f"title match: {pref}"
-
-    generic_dev = ["developer", "engineer", "programmer", "dev "]
-    for term in generic_dev:
-        if term in title:
-            return 12, "generic dev title"
-
-    return 0, None
-
-
-def _score_skills(job: dict, cv_profile: dict) -> tuple[int, Optional[str]]:
-    """30 pts max — scales with number of matched skills (8/14/20/25/30)."""
-    full_text = _all_text(job)
-
-    your_skills = (
-        cv_profile.get("skills", []) +
-        cv_profile.get("frameworks", []) +
-        cv_profile.get("databases", []) +
-        cv_profile.get("languages", [])
-    )
-
-    your_skills = list(dict.fromkeys(_normalize(s) for s in your_skills if s))
-
-    matched = []
-    for skill in your_skills:
-        pattern = r"(?<!\w)" + re.escape(skill) + r"(?!\w)"
-        if re.search(pattern, full_text):
-            matched.append(skill)
-
-    count = len(matched)
-    if count == 0:
-        return 0, None
-    elif count == 1:
-        pts = 8
-    elif count == 2:
-        pts = 14
-    elif count == 3:
-        pts = 20
-    elif count == 4:
-        pts = 25
-    else:
-        pts = 30
-
-    return pts, f"skills: {', '.join(matched[:4])}"
-
-
-def _score_seniority(job: dict) -> tuple[int, Optional[str]]:
-    """20 pts — full points if NOT senior/lead/manager."""
-    title = _normalize(job.get("job_title", ""))
-    for term in SENIOR_TERMS:
-        if term in title:
-            return 0, f"seniority flag: {term}"
-    return 20, "mid/junior level"
-
-
-def _score_remote(job: dict) -> tuple[int, Optional[str]]:
-    """15 pts — confirmed remote, 0 if onsite/hybrid, 7 if unclear."""
-    full_text = _all_text(job)
-    for term in ONSITE_TERMS:
-        if term in full_text:
-            return 0, f"onsite/hybrid: {term}"
-    for term in REMOTE_TERMS:
-        if term in full_text:
-            return 15, "remote confirmed"
-    return 7, "remote unclear"
-
-
-def _score_salary(job: dict) -> tuple[int, Optional[str]]:
-    """5 pts — salary listed."""
-    salary = str(job.get("salary", "") or "").strip()
-    if salary and salary not in ("", "None", "N/A", "0"):
-        return 5, f"salary: {salary[:30]}"
-    return 0, None
-
-
-def _score_timezone(job: dict) -> tuple[int, Optional[str]]:
-    """5 pts — good timezone overlap for India (UTC+5:30)."""
-    full_text = _all_text(job)
-    for term in BAD_TIMEZONE_TERMS:
-        if term in full_text:
-            return 0, f"timezone: {term}"
-    for term in GOOD_TIMEZONE_TERMS:
-        if term in full_text:
-            return 5, f"timezone: {term}"
-    return 2, "timezone: not specified"
-
-
-def score_job(job: dict, cv_profile: dict) -> tuple[int, str]:
-    """
-    Score a job 0-100 against the candidate CV profile.
-    Returns (score, reason_string). No API calls — instant, free, no rate limits.
-    """
-    title = _normalize(job.get("job_title", ""))
-
-    # Hard filter — non-dev roles always score 0, skip everything else
-    if any(term in title for term in NON_DEV_TERMS):
-        return 0, "non-dev role"
-
-    components = [
-        _score_title(job, cv_profile),
-        _score_skills(job, cv_profile),
-        _score_seniority(job),
-        _score_remote(job),
-        _score_salary(job),
-        _score_timezone(job),
-    ]
-
-    total = 0
-    reasons = []
-    for pts, reason in components:
-        total += pts
-        if reason:
-            reasons.append(reason)
-
-    # max possible: 25+30+20+15+5+5 = 100, no clipping needed now
-    final_score = min(total, 100)
-    reason_str = " | ".join(reasons) if reasons else "no strong match"
-
-    return final_score, reason_str
-
-
-def batch_score_jobs(jobs: list[dict], cv_profile: dict) -> list[dict]:
-    """
-    Score a list of jobs, attach match_score + match_reason, return sorted descending.
-    Thresholds: Top >=80, Good 60-79, Potential 45-59, Reject <45.
-    """
-    print(f"⚡ Scoring {len(jobs)} jobs locally (no API calls)...")
-
+def score_jobs(cv_profile: Dict, jobs: List[Dict]) -> List[Dict]:
+    """Score all jobs, filter out rejected, sort by score descending."""
+    scored = []
+    rejected_count = 0
+    low_match_count = 0
+    
     for job in jobs:
-        score, reason = score_job(job, cv_profile)
-        job["match_score"] = score
-        job["match_reason"] = reason
-
-    scored = sorted(jobs, key=lambda j: int(j.get("match_score", 0)), reverse=True)
-
-    top = sum(1 for j in scored if int(j.get("match_score", 0)) >= 80)
-    good = sum(1 for j in scored if 60 <= int(j.get("match_score", 0)) < 80)
-    potential = sum(1 for j in scored if 45 <= int(j.get("match_score", 0)) < 60)
-    reject = sum(1 for j in scored if int(j.get("match_score", 0)) < 45)
-
-    print(f"✅ Scoring complete:")
-    print(f"   🔥 Top match    (≥80):   {top}")
-    print(f"   ✅ Good match   (60-79): {good}")
-    print(f"   🟡 Potential    (45-59): {potential}")
-    print(f"   ❌ Reject       (<45):   {reject}")
-
+        scored_job = score_job(cv_profile, job)
+        
+        if scored_job.get("rejected"):
+            rejected_count += 1
+            continue
+        
+        score = scored_job.get("match_score", 0)
+        if score >= 70:
+            scored.append(scored_job)
+        else:
+            low_match_count += 1
+            # Still keep low matches for debugging, but mark them
+            scored_job["_below_threshold"] = True
+            scored.append(scored_job)
+    
+    # Sort: high matches first, then by score
+    scored.sort(key=lambda j: j.get("match_score", 0), reverse=True)
+    
+    print(f"\n📊 Scoring results:")
+    print(f"   Rejected: {rejected_count} | Low match (<70): {low_match_count} | Passed (≥70): {len([j for j in scored if not j.get('_below_threshold')])}")
+    
     return scored
-
-
-if __name__ == "__main__":
-    sample_profile = {
-        "name": "Mubashir",
-        "years_experience": 3,
-        "skills": ["javascript", "typescript", "node.js", "express", "react", "redux", "postgresql", "mongodb", "python"],
-        "frameworks": ["express.js", "django", "next.js"],
-        "databases": ["postgresql", "mongodb"],
-        "languages": ["javascript", "typescript", "python"],
-        "preferred_titles": ["backend developer", "full stack developer", "node.js developer", "software engineer"],
-        "seniority": "mid",
-    }
-
-    test_jobs = [
-        {"job_title": "Backend Developer", "company": "Acme Remote", "tech_stack": "Node.js, Express, PostgreSQL, AWS", "summary": "Mid-level backend developer, fully remote EU team.", "timezone": "Europe/UTC overlap", "salary": "$60,000 - $80,000"},
-        {"job_title": "Senior Full Stack Engineer", "company": "Big Corp", "tech_stack": "React, Node.js, MongoDB", "summary": "Senior engineer needed. Must be located in US. Hybrid work.", "timezone": "EST", "salary": ""},
-        {"job_title": "Full Stack Developer", "company": "Startup", "tech_stack": "React, Django, Python, PostgreSQL", "summary": "Remote-first, async-friendly team.", "timezone": "Global", "salary": "$50,000"},
-        {"job_title": "Marketing Manager", "company": "Brand Co", "tech_stack": "", "summary": "Lead our campaigns.", "timezone": "US only", "salary": "$45,000"},
-        {"job_title": "Angular/NodeJS Developer", "company": "EuroTech", "tech_stack": "Angular, Node.js, Express, MySQL", "summary": "Remote role, EU timezone preferred.", "timezone": "CET", "salary": ""},
-    ]
-
-    results = batch_score_jobs(test_jobs, sample_profile)
-    print("\n─── Results ───")
-    for job in results:
-        print(f"  {job['match_score']:3d} | {job['job_title']:<35} | {job['match_reason']}")
