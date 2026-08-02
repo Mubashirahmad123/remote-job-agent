@@ -233,6 +233,17 @@ def curate(raw_jobs: list) -> dict:
     print(f"🔍 CURATING {len(raw_jobs)} RAW JOBS")
     print(f"{'='*60}")
 
+        # === SANITIZE: Convert None values to empty strings ===
+    STRING_FIELDS = [
+        "job_title", "company", "summary", "timezone", "tech_stack",
+        "apply_url", "salary", "posted_date_iso", "source", "location",
+        "job_type", "match_reason"
+    ]
+    for job in raw_jobs:
+        for field in STRING_FIELDS:
+            if job.get(field) is None:
+                job[field] = ""
+
     if not raw_jobs:
         return {
             "status": "error",

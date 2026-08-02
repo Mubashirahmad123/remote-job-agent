@@ -13,24 +13,36 @@ import json
 # SYNONYM & EXPANSION MAPS
 # =============================================================================
 
+_SYNONYM_PATTERNS = {}  # cache compiled regexes so we don't recompile per job
+
+def _syn_pattern(syn: str) -> re.Pattern:
+    if syn not in _SYNONYM_PATTERNS:
+        _SYNONYM_PATTERNS[syn] = re.compile(rf"\b{re.escape(syn)}\b", re.IGNORECASE)
+    return _SYNONYM_PATTERNS[syn]
+
 SKILL_SYNONYMS = {
-    # Languages
-    "python": ["python", "python3", "py", "django", "flask", "fastapi"],
-    "javascript": ["javascript", "js", "es6", "typescript", "ts", "node", "nodejs", "node.js"],
-    "typescript": ["typescript", "ts", "angular", "react", "vue", "nextjs", "next.js"],
-    "java": ["java", "spring", "springboot", "spring-boot", "jvm", "kotlin"],
-    "go": ["go", "golang"],
-    "ruby": ["ruby", "rails", "ruby on rails", "ror"],
-    "php": ["php", "laravel", "symfony", "wordpress"],
-    "c++": ["c++", "cpp", "qt", "cmake"],
-    "c#": ["c#", "csharp", ".net", "dotnet", "asp.net"],
-    "rust": ["rust", "cargo"],
-    
+    # Languages (language names/dialects only — NOT frameworks built on them)
+    "python": ["python", "python3", "py"],
+    "javascript": ["javascript", "js", "es6", "node", "nodejs", "node.js"],
+    "typescript": ["typescript", "ts"],
+    "java": ["java", "jvm"],
+    "go": ["golang", "go lang"],
+    "ruby": ["ruby"],
+    "php": ["php"],
+    "c++": ["c++", "cpp"],
+    "c#": ["c#", "csharp"],
+    "rust": ["rust"],
+    "kotlin": ["kotlin"],
+    "swift": ["swift"],
+
     # Frontend
-    "react": ["react", "reactjs", "react.js", "nextjs", "next.js", "gatsby", "redux"],
-    "vue": ["vue", "vuejs", "vue.js", "nuxt", "nuxtjs"],
+    "react": ["react", "reactjs", "react.js"],
+    "nextjs": ["nextjs", "next.js", "gatsby"],
+    "redux": ["redux"],
+    "vue": ["vue", "vuejs", "vue.js"],
+    "nuxt": ["nuxt", "nuxtjs"],
     "angular": ["angular", "angularjs", "angular.js"],
-    
+
     # Backend / Frameworks
     "django": ["django", "django-rest-framework", "drf"],
     "flask": ["flask"],
@@ -39,16 +51,22 @@ SKILL_SYNONYMS = {
     "express": ["express", "expressjs", "express.js"],
     "rails": ["rails", "ruby on rails", "ror"],
     "laravel": ["laravel"],
+    "symfony": ["symfony"],
+    "wordpress": ["wordpress"],
     "dotnet": [".net", "dotnet", "asp.net", "asp.net core", ".net core"],
-    
+    "qt": ["qt"],
+    "cmake": ["cmake"],
+    "cargo": ["cargo"],
+
     # Databases
     "postgresql": ["postgresql", "postgres", "psql", "pg"],
-    "mysql": ["mysql", "mariadb", "sql"],
+    "mysql": ["mysql", "mariadb"],
+    "sql": ["sql"],
     "mongodb": ["mongodb", "mongo", "nosql"],
     "redis": ["redis", "redis cache"],
     "sqlite": ["sqlite"],
-    
-    # DevOps / Cloud (if user has these)
+
+    # DevOps / Cloud
     "docker": ["docker", "containerization", "containers"],
     "aws": ["aws", "amazon web services", "ec2", "s3", "lambda", "cloudwatch"],
     "gcp": ["gcp", "google cloud", "google cloud platform"],
@@ -56,15 +74,15 @@ SKILL_SYNONYMS = {
     "kubernetes": ["kubernetes", "k8s", "helm"],
     "terraform": ["terraform", "iac", "infrastructure as code"],
     "ci/cd": ["ci/cd", "github actions", "gitlab ci", "jenkins", "travis"],
-    
+
     # Mobile
-    "react native": ["react native", "react-native", "rn"],
+    "react native": ["react native", "react-native"],
     "flutter": ["flutter", "dart"],
-    "ios": ["ios", "swift", "objective-c", "objectivec"],
-    "android": ["android", "kotlin", "java"],
-    
+    "ios": ["ios", "objective-c", "objectivec"],
+    "android": ["android"],
+
     # General
-    "rest api": ["rest", "restful", "api", "graphql", "json", "openapi", "swagger"],
+    "rest api": ["rest", "restful", "graphql", "openapi", "swagger"],
     "git": ["git", "github", "gitlab", "bitbucket", "version control"],
     "agile": ["agile", "scrum", "kanban"],
     "testing": ["testing", "jest", "pytest", "unittest", "tdd", "unit test", "integration test"],
@@ -164,40 +182,43 @@ class CVMatcher:
     
     @staticmethod
     def _normalize(text: str) -> str:
-        """Normalize a skill string."""
-        return re.sub(r"[^a-z0-9+#]", "", text.lower().replace(".", "").replace(" ", ""))
+     """Normalize a skill string. Keeps spaces so multi-word skills
+     (e.g. 'react native', 'rest api', 'ci/cd') still match dictionary keys."""
+     text = text.lower().strip()
+     text = text.replace(".", "")
+     text = re.sub(r"\s+", " ", text)          # collapse multiple spaces into one
+     return re.sub(r"[^a-z0-9+#/ ]", "", text)  # keep letters, digits, +, #, /, and single spaces
     
     def _extract_skills_from_text(self, text: str) -> List[str]:
-        """Extract known skills from free text."""
-        text_lower = text.lower()
-        found = []
-        for skill, synonyms in SKILL_SYNONYMS.items():
-            for syn in synonyms:
-                if syn in text_lower:
-                    found.append(skill)
-                    break
-        return found
+     text_lower = text.lower()
+     found = []
+     for skill, synonyms in SKILL_SYNONYMS.items():
+        for syn in synonyms:
+            if _syn_pattern(syn).search(text_lower):
+                found.append(skill)
+                break      
+     return found
+
     
     def _job_text_to_skills(self, job_text: str) -> Set[str]:
-        """Extract all skills mentioned in job text."""
-        text_lower = job_text.lower()
-        found = set()
-        for skill, synonyms in SKILL_SYNONYMS.items():
-            for syn in synonyms:
-                if syn in text_lower:
-                    found.add(skill)
-                    break
-        return found
+     text_lower = job_text.lower()
+     found = set()
+     for skill, synonyms in SKILL_SYNONYMS.items():
+        for syn in synonyms:
+            if _syn_pattern(syn).search(text_lower):
+                found.add(skill)
+                break
+     return found
     
     def should_reject(self, job: Dict) -> tuple[bool, str]:
         """
         Returns (should_reject, reason).
         True if job is NOT a software/web dev role.
         """
-        title = job.get("job_title", "").lower()
-        company = job.get("company", "").lower()
-        summary = job.get("summary", "").lower()
-        tech_stack = job.get("tech_stack", "").lower()
+        title = (job.get("job_title") or "").lower()
+        company = (job.get("company") or "").lower()
+        summary = (job.get("summary") or "").lower()
+        tech_stack = (job.get("tech_stack") or "").lower()
         
         combined = f"{title} {company} {summary} {tech_stack}"
         
@@ -217,13 +238,9 @@ class CVMatcher:
         return False, ""
     
     def score(self, job: Dict) -> Dict:
-        """
-        Score a job against the CV.
-        Returns dict with score (0-100) and match details.
-        """
-        title = job.get("job_title", "")
-        summary = job.get("summary", "")
-        tech_stack = job.get("tech_stack", "")
+        title = job.get("job_title") or ""
+        summary = job.get("summary") or ""
+        tech_stack = job.get("tech_stack") or ""
         
         job_text = f"{title} {summary} {tech_stack}".lower()
         
@@ -242,12 +259,11 @@ class CVMatcher:
         # Expanded matches (synonym-based)
         expanded_matches = set()
         for cv_skill in cv_skills:
-            if cv_skill in SKILL_SYNONYMS:
-                # Check if any synonym of cv_skill appears in job
-                for syn in SKILL_SYNONYMS[cv_skill]:
-                    if syn in job_text:
-                        expanded_matches.add(cv_skill)
-                        break
+           if cv_skill in SKILL_SYNONYMS:
+            for syn in SKILL_SYNONYMS[cv_skill]:
+               if _syn_pattern(syn).search(job_text):
+                expanded_matches.add(cv_skill)
+                break
         
         all_matches = direct_matches | expanded_matches
         

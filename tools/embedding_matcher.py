@@ -146,9 +146,9 @@ def score_semantic(job: dict, cv_embeddings: dict) -> float:
 
     # Build job text
     job_text = " ".join([
-        job.get("job_title", ""),
-        job.get("summary", ""),
-        job.get("tech_stack", ""),
+        job.get("job_title") or "",
+        job.get("summary") or "",
+        job.get("tech_stack") or "",
     ])
 
     if not job_text.strip():
