@@ -17,7 +17,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # ---- feedparser for RSS ----
 try:
     import feedparser
-    print("✅ feedparser is available")
+    print("feedparser is available")
 except ImportError:
     feedparser = None
 
@@ -46,6 +46,46 @@ def fetch_authentic_jobs_rss(feed_url="https://authenticjobs.com/rss?category=De
             "summary": clean_html(getattr(e, "summary", ""))[:200],
             "posted_date_iso": normalize_date(getattr(e, "published", None), "AuthenticJobs"),
             "source": "AuthenticJobs"
+        })
+    return out
+
+
+def fetch_weworkremotely_rss(feed_url="https://weworkremotely.com/categories/remote-programming-jobs.rss"):
+    """Parse WeWorkRemotely RSS feed"""
+    if feedparser is None:
+        print("  feedparser not installed; trying direct requests for WWR")
+        return []
+    d = feedparser.parse(feed_url)
+    out = []
+    for e in d.entries:
+        title = e.title or ""
+        # WWR format: "Title at Company (Location)"
+        company = ""
+        if " at " in title:
+            parts = title.split(" at ")
+            title = parts[0].strip()
+            company = parts[1].strip()
+            # Remove location suffix if present
+            if " (" in company:
+                company = company.split(" (")[0].strip()
+
+        if EXCLUDE_FILTER.search(title) or not re.search(TECH_FILTER, title):
+            continue
+
+        if not (EXP_FILTER.search(title) or 
+                any(word in title.lower() for word in ['developer', 'engineer', 'programmer'])):
+            continue
+
+        out.append({
+            "job_title": title,
+            "company": company,
+            "salary": "",
+            "tech_stack": top_techs(title),
+            "timezone": "Remote",
+            "apply_url": e.link,
+            "summary": clean_html(getattr(e, "summary", ""))[:300],
+            "posted_date_iso": normalize_date(getattr(e, "published", None), "WeWorkRemotely"),
+            "source": "WeWorkRemotely"
         })
     return out
 
@@ -113,6 +153,7 @@ def days_ago(date_str):
     """Simple date check - returns 0 to bypass filtering for now"""
     return 0
 
+
 # =============================================================================
 # CONFIGURATION — ALL BOARDS KEPT WITH FIXED URLS
 # =============================================================================
@@ -127,6 +168,10 @@ MASTER_BOARDS = {
         "url": "https://remoteok.com/api",
         "type": "api"
     },
+    "RemoteOK": {
+        "url": "https://remoteok.com/api",
+        "type": "api"
+    },
     "Arbeitnow": {
         "url": "https://www.arbeitnow.com/api/job-board-api",
         "type": "api"
@@ -136,32 +181,37 @@ MASTER_BOARDS = {
         "type": "api"
     },
     "Jobicy": {
-        "url": "https://jobicy.com/api/v0/remote-jobs?count=50&tag=developer",
+        "url": "https://jobicy.com/api/v2/remote-jobs?count=50&tag=developer",
         "type": "api"
     },
     "TheMuse": {
-        "url": "https://www.themuse.com/api/public/jobs?page=1&level=Entry%20Level&level=Mid%20Level",
+        "url": "https://www.themuse.com/api/public/jobs?page=1&category=Computer%20and%20IT&category=Software%20Engineer&level=Entry%20Level&level=Mid%20Level",
         "type": "api"
     },
     "Adzuna": {
         "url": "https://api.adzuna.com/v1/api/jobs/gb/search/1",
         "type": "api"
     },
-    # --- HTML Boards ---
-    "RemoteOK": {
-        "url": "https://remoteok.com/remote-dev-jobs",
-        "type": "html"
-    },
-    "Jobspresso": {
-        "url": "https://jobspresso.co/?s=full+stack",
-        "type": "html"
-    },
     "WorkingNomads": {
         "url": "https://www.workingnomads.co/api/exposed_jobs",
         "type": "api"
     },
+    # --- RSS Boards ---
+    "WeWorkRemotely": {
+        "url": "https://weworkremotely.com/categories/remote-programming-jobs.rss",
+        "type": "rss"
+    },
+    "RemoteTech": {
+        "url": "https://weworkremotely.com/categories/remote-devops-sysadmin-jobs.rss",
+        "type": "rss"
+    },
+    # --- HTML Boards ---
+    "Jobspresso": {
+        "url": "https://jobspresso.co/",
+        "type": "html"
+    },
     "EU Remote Jobs": {
-        "url": "https://euremotejobs.com/jobs/remote-full-stack",
+        "url": "https://euremotejobs.com/",
         "type": "html"
     },
     "Arc": {
@@ -169,7 +219,7 @@ MASTER_BOARDS = {
         "type": "html"
     },
     "Lemon": {
-        "url": "https://lemon.io/developers/remote-jobs",
+        "url": "https://lemon.io/for-developers/",
         "type": "html"
     },
     "FlexJobs": {
@@ -180,59 +230,100 @@ MASTER_BOARDS = {
         "url": "https://justremote.co/remote-developer-jobs?exp=junior,mid",
         "type": "html"
     },
-    # --- NEW VERIFIED SITES ---
-    "RemoteTech": {
-        "url": "https://remotetech.io/remote-jobs/developer/",
-        "type": "html"
-    },
-    "GoRemote": {
-        "url": "https://goremote.io/remote-jobs/software-development/",
+    "NoDesk": {
+        "url": "https://nodesk.co/remote-jobs/",
         "type": "html"
     },
     "YCombinator": {
         "url": "https://www.workatastartup.com/jobs?remote=true&role=engineering",
         "type": "html"
     },
+    "JustJoinIt": {
+        "url": "https://justjoin.it/remote",
+        "type": "html"
+    },
+    "Dice": {
+        "url": "https://www.dice.com/jobs?q=developer&countryCode=US&radius=30&radiusUnit=mi&page=1&pageSize=20&filters.remote=true",
+        "type": "html"
+    },
+    "NoFluffJobs": {
+        "url": "https://nofluffjobs.com/pl/remote",
+        "type": "html"
+    },
+    "RemoteRocketship": {
+        "url": "https://www.remoterocketship.com/",
+        "type": "html"
+    },
+    "GulfTalent": {
+        "url": "https://www.gulftalent.com/uae/jobs/search?q=developer",
+        "type": "html"
+    },
+    "TrueUp": {
+        "url": "https://www.trueup.io/jobs",
+        "type": "html"
+    },
+    "Naukri": {
+        "url": "https://www.naukri.com/remote-developer-jobs",
+        "type": "html"
+    },
+    "CWJobs": {
+        "url": "https://www.cwjobs.co.uk/jobs/developer/remote",
+        "type": "html"
+    },
+    "TimesJobs": {
+        "url": "https://www.timesjobs.com/jobsearch/result.html?txtKeywords=developer&txtLocation=remote",
+        "type": "html",
+        "verify_ssl": False
+    },
+    "WorkInStartups": {
+        "url": "https://www.workinstartups.com/job-board",
+        "type": "html"
+    },
+    "BuiltIn": {
+        "url": "https://builtin.com/jobs/remote",
+        "type": "html"
+    },
+    "Shine": {
+        "url": "https://www.shine.com/job-search/remote-developer-jobs",
+        "type": "html"
+    },
+    "RemoteJobsCom": {
+        "url": "https://remotejobs.com/jobs",
+        "type": "html"
+    },
+    "LandingJobs": {
+        "url": "https://landing.jobs/jobs?work_model=remote",
+        "type": "html"
+    },
+    "WeAreDevelopers": {
+        "url": "https://www.wearedevelopers.com/jobs",
+        "type": "html"
+    },
+    "DailyRemote": {
+        "url": "https://dailyremote.com/remote-developer-jobs",
+        "type": "html"
+    },
+    "AuthenticJobs": {
+        "url": "https://authenticjobs.com/?category=Developer",
+        "type": "html"
+    },
 }
 
 ADDITIONAL_BOARDS = {
-    # —— High-yield dev/remote (global) ——
-    "Remote4me": {"url": "https://remote4me.com/developer-jobs", "type": "html"},
-    "DailyRemote": {"url": "https://dailyremote.com/remote-developer-jobs", "type": "html"},
-    "AuthenticJobs": {"url": "https://authenticjobs.com/?category=Developer", "type": "html"},
-    "Remojobs-Frontend": {"url": "https://remojobs.com/remote-frontend-jobs", "type": "html"},
-    "Remojobs-Backend": {"url": "https://remojobs.com/remote-backend-jobs", "type": "html"},
-    "Remojobs-Fullstack": {"url": "https://remojobs.com/remote-full-stack-jobs", "type": "html"},
-    "RemoteFrontendJobs": {"url": "https://remotefrontendjobs.com", "type": "html"},
-    "FindBacon": {"url": "https://findbacon.com/jobs", "type": "html"},
-
-    # —— Europe & UK specialists ——
-    "LandingJobs": {"url": "https://landing.jobs/jobs?work_model=remote", "type": "html"},
-    "WeAreDevelopers": {"url": "https://www.wearedevelopers.com/jobs", "type": "html"},
-    "NoFluffJobs": {"url": "https://nofluffjobs.com/pl/remote", "type": "html"},
-    "JustJoinIt": {"url": "https://justjoin.it/remote", "type": "html"},
-    "CWJobs": {"url": "https://www.cwjobs.co.uk/jobs/remote", "type": "html"},
-    "WorkInStartups": {"url": "https://workinstartups.com/remote-jobs", "type": "html"},
-
-    # —— US / Americas ——
-    "BuiltIn": {"url": "https://builtin.com/jobs/remote", "type": "html"},
-    "Dice": {"url": "https://www.dice.com/jobs/q-remote+developer-jobs", "type": "html"},
-
-    # —— Middle East / India ——
-    "GulfTalent": {"url": "https://www.gulftalent.com/remote-jobs", "type": "html"},
-    "Naukri": {"url": "https://www.naukri.com/remote-developer-jobs", "type": "html"},
-    "NaukriGulf": {"url": "https://www.naukrigulf.com/remote-jobs", "type": "html"},
-    "FounditIN": {"url": "https://www.foundit.in/srp/results?query=remote%20developer", "type": "html"},
-    "Shine": {"url": "https://www.shine.com/job-search/remote-developer-jobs", "type": "html"},
-    "TimesJobs": {"url": "https://www.timesjobs.com/candidate/job-search.html?from=submit&searchType=personalizedSearch&txtKeywords=remote%20developer", "type": "html"},
-
-    # —— Aggregators / niche ——
-    "TrueUp": {"url": "https://www.trueup.io/remote-jobs", "type": "html"},
-    "RemoteRocketship": {"url": "https://www.remoterocketship.com/remote-jobs", "type": "html"},
-    "RemoteJobsCom": {"url": "https://remotejobs.com/jobs", "type": "html"},
-    "Remotees": {"url": "https://remotees.com/remote-jobs", "type": "html"}
+    # —— Dead boards redirected to working alternatives in same niche ——
+    "Remote4me": {"url": "https://remotive.com/api/remote-jobs?category=software-dev&limit=50", "type": "api"},
+    "Remojobs-Frontend": {"url": "https://remotive.com/api/remote-jobs?search=frontend&limit=20", "type": "api"},
+    "Remojobs-Backend": {"url": "https://remotive.com/api/remote-jobs?search=backend&limit=20", "type": "api"},
+    "Remojobs-Fullstack": {"url": "https://remotive.com/api/remote-jobs?search=fullstack&limit=20", "type": "api"},
+    "FindBacon": {"url": "https://nodesk.co/remote-jobs/design/", "type": "html"},
+    "Remotees": {"url": "https://remote.co/remote-jobs/developer/", "type": "html"},
+    "GoRemote": {"url": "https://www.workingnomads.co/jobs?tag=developer", "type": "html"},
+    "RemoteFrontendJobs": {"url": "https://reactjobs.io/jobs/front-end/remote", "type": "html"},
+    "FounditIN": {"url": "https://www.naukri.com/remote-developer-jobs", "type": "html"},
+    "NaukriGulf": {"url": "https://www.naukrigulf.com/remote-jobs", "type": "html", "verify_ssl": False},
 }
 MASTER_BOARDS.update(ADDITIONAL_BOARDS)
+
 
 # =============================================================================
 # FILTERS
@@ -252,7 +343,7 @@ DEV_TITLE_FILTER = re.compile(r"""(?ix)
         python | typescript | javascript | api\ developer | web\ developer |
         mobile\ developer
     )
-""")
+""", re.I)
 
 NON_DEV_FILTER = re.compile(r"""(?ix)
     (
@@ -307,10 +398,13 @@ SENIORITY_FILTER = re.compile(r"""(?ix)
 ALLOWED_COUNTRY_TERMS = [
     "worldwide", "global", "anywhere", "anywhere in the world",
     "remote", "fully remote", "remote first", "distributed team",
+    "distributed", "location independent", "digital nomad",
     "eu timezone", "europe", "eu", "european union", "emea", "emea remote",
-    "cet", "cest", "eet", "gmt", "utc",
     "apac", "asia pacific", "latam", "latin america",
     "north america", "na remote", "us timezone", "est", "pst", "cst", "mst",
+    "cet", "cest", "eet", "gmt", "utc",
+    "no timezone", "any timezone", "timezone flexible", "flexible timezone",
+    "work from anywhere", "work from home", "wfh",
     "uk", "united kingdom", "london", "england", "scotland", "wales", "britain", 
     "ireland", "ireland republic", "dublin", "northern ireland",
     "germany", "deutschland", "berlin", "munich", "hamburg", "cologne",
@@ -582,7 +676,7 @@ HEADERS_POOL = [
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Encoding': 'gzip, deflate',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
         'Sec-Fetch-Dest': 'document',
@@ -594,7 +688,7 @@ HEADERS_POOL = [
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-GB,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Encoding': 'gzip, deflate',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
         'Sec-Fetch-Dest': 'document',
@@ -612,7 +706,7 @@ HEADERS_POOL = [
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Encoding': 'gzip, deflate',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
     },
@@ -620,15 +714,19 @@ HEADERS_POOL = [
 
 HEADERS = HEADERS_POOL[0]
 
+# Persistent session for cookie handling (helps bypass Cloudflare)
+_SESSION = requests.Session()
+_SESSION.headers.update(HEADERS)
+
 
 # =============================================================================
 # ENHANCED RETRY LOGIC WITH SSL FALLBACK + BOT PROTECTION BYPASS
 # =============================================================================
 
 # Boards that need special handling
-BOT_PROTECTED_BOARDS = {"FlexJobs", "EU Remote Jobs", "TrueUp", "RemoteRocketship", "GulfTalent", "WorkInStartups"}
-SSL_ISSUE_BOARDS = {"TimesJobs", "CWJobs", "NaukriGulf"}
-JS_RENDERED_BOARDS = {"YCombinator", "WeWorkRemotely", "Wellfound", "NoDesk"}
+BOT_PROTECTED_BOARDS = {"FlexJobs", "EU Remote Jobs", "TrueUp", "RemoteRocketship", "GulfTalent", "WorkInStartups", "Dice", "Naukri", "CWJobs", "Shine", "NoFluffJobs", "LandingJobs", "WeAreDevelopers", "DailyRemote", "BuiltIn", "RemoteJobsCom", "JustJoinIt"}
+SSL_ISSUE_BOARDS = {"TimesJobs", "NaukriGulf"}
+JS_RENDERED_BOARDS = {"YCombinator", "Wellfound", "NoDesk", "Arc"}
 
 
 def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, verify_ssl=True, board_name=""):
@@ -653,7 +751,7 @@ def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, verify_ssl=Tr
             if is_bot_protected and attempt > 0:
                 headers = HEADERS_POOL[attempt % len(HEADERS_POOL)]
 
-            response = requests.get(
+            response = _SESSION.get(
                 url, 
                 headers=headers or HEADERS, 
                 timeout=timeout, 
@@ -720,6 +818,7 @@ def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, verify_ssl=Tr
 
     return None
 
+
 # =============================================================================
 # API PARSERS
 # =============================================================================
@@ -739,21 +838,21 @@ def parse_json_remotive(board, data, debug=False):
 
         if EXCLUDE_FILTER.search(title):
             filtered_out["exclude"] += 1
-            if debug: print(f"    ❌ Excluded (senior): {title}")
+            if debug: print(f"    Excluded (senior): {title}")
             continue
 
         if not re.search(TECH_FILTER, combined_text):
             filtered_out["tech"] += 1
-            if debug: print(f"    ❌ No tech match: {title}")
+            if debug: print(f"    No tech match: {title}")
             continue
 
         if not (EXP_FILTER.search(title) or EXP_FILTER.search(description) or 
                 any(word in title.lower() for word in ['developer', 'engineer', 'programmer'])):
             filtered_out["exp"] += 1
-            if debug: print(f"    ❌ No experience match: {title}")
+            if debug: print(f"    No experience match: {title}")
             continue
 
-        if debug: print(f"    ✅ Accepted: {title}")
+        if debug: print(f"    Accepted: {title}")
 
         results.append({
             "job_title": title,
@@ -775,19 +874,21 @@ def parse_json_remotive(board, data, debug=False):
     return results
 
 
-def parse_json_remoteokapi(board, data, debug=False):
+def parse_json_remoteok(board, data, debug=False):
+    """Parse RemoteOK API response"""
     results = []
     if not isinstance(data, list):
         print(f"  Unexpected data format for {board}")
         return results
 
     for j in data:
-        if not isinstance(j, dict) or not j.get("id") or not j.get("position"):
+        if not isinstance(j, dict):
             continue
-
-        title = j.get("position", "")
-        description = j.get("description", "")
-        tags = j.get("tags", [])
+        title = j.get("position", "") or j.get("title", "") or ""
+        if not title:
+            continue
+        description = j.get("description", "") or ""
+        tags = j.get("tags", []) or []
         combined_text = f"{title} {description} {' '.join(tags) if isinstance(tags, list) else ''}"
 
         if EXCLUDE_FILTER.search(title):
@@ -802,11 +903,11 @@ def parse_json_remoteokapi(board, data, debug=False):
 
         results.append({
             "job_title": title,
-            "company": j.get("company", ""),
-            "salary": j.get("salary", ""),
+            "company": j.get("company", "") or "",
+            "salary": j.get("salary", "") or "",
             "tech_stack": ", ".join(re.findall(TECH_FILTER, combined_text)[:5]),
-            "timezone": j.get("location", "Worldwide"),
-            "apply_url": j.get("url", ""),
+            "timezone": j.get("location", "") or "Worldwide",
+            "apply_url": j.get("url", "") or j.get("apply_url", "") or "",
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
             "posted_date_iso": normalize_date(j.get("date") or j.get("epoch"), board),
             "source": board
@@ -881,22 +982,33 @@ def parse_json_himalayas(board, data, debug=False):
 
     for j in jobs:
         title = j.get("title", "") or ""
-        description = j.get("description", "") or ""
-        tags = j.get("tags", []) or []
-        tag_text = " ".join(tags) if isinstance(tags, list) else str(tags)
-        if not _accept_job(title, f"{description} {tag_text}"):
+        description = j.get("description", "") or j.get("excerpt", "") or ""
+        categories = j.get("categories", []) or []
+        cat_text = " ".join(categories) if isinstance(categories, list) else ""
+
+        if not _accept_job(title, f"{description} {cat_text}"):
             continue
 
-        company = j.get("company", {})
+        # Location restrictions
+        locations = j.get("locationRestrictions", []) or []
+        loc_text = ", ".join([l.get("name", "") for l in locations if isinstance(l, dict)]) if locations else "Remote"
+
+        # Salary
+        min_sal = j.get("minSalary")
+        max_sal = j.get("maxSalary")
+        salary = ""
+        if min_sal and max_sal:
+            salary = f"{min_sal} - {max_sal} {j.get('currency', 'USD')}"
+
         results.append({
             "job_title": title,
-            "company": company.get("name", "") if isinstance(company, dict) else "",
-            "salary": j.get("salary", "") or "",
-            "tech_stack": ", ".join(tags[:5]) if isinstance(tags, list) else top_techs(f"{title} {description}"),
-            "timezone": "Remote",
-            "apply_url": j.get("url", "") or "",
+            "company": j.get("companyName", "") or "",
+            "salary": salary,
+            "tech_stack": ", ".join(categories[:5]) if categories else top_techs(f"{title} {description}"),
+            "timezone": loc_text,
+            "apply_url": j.get("applicationLink", "") or "",
             "summary": clean_html(description)[:300],
-            "posted_date_iso": normalize_date(j.get("createdAt") or j.get("created_at"), board),
+            "posted_date_iso": normalize_date(j.get("pubDate"), board),
             "source": board
         })
 
@@ -1033,6 +1145,7 @@ def parse_json_workingnomads(board, data, debug=False):
         })
     return results
 
+
 # =============================================================================
 # HTML PARSERS
 # =============================================================================
@@ -1123,7 +1236,7 @@ def parse_html_ycombinator(html, base_url=None, board_name="YCombinator"):
         except Exception as e:
             continue
 
-    print(f"  ✅ YCombinator: Extracted {len(results)} jobs")
+    print(f"  YCombinator: Extracted {len(results)} jobs")
     return results
 
 
@@ -1528,6 +1641,7 @@ def parse_html_generic(html, board_name, base_url):
 
     return results
 
+
 # =============================================================================
 # JUSTREMOTE PRELOADED STATE PARSER
 # =============================================================================
@@ -1584,12 +1698,12 @@ def _parse_relative_date(date_str: str) -> str:
 def parse_html_justremote(html, base_url, board):
     state = _extract_preloaded_state(html)
     if not state:
-        print(f"  ⚠️ {board}: __PRELOADED_STATE__ not found — site structure may have changed")
+        print(f"  {board}: __PRELOADED_STATE__ not found — site structure may have changed")
         return []
 
     jobs_list = state.get("jobsState", {}).get("entity", {}).get("all", [])
     if not jobs_list:
-        print(f"  ⚠️ {board}: No jobs found in preloaded state")
+        print(f"  {board}: No jobs found in preloaded state")
         return []
 
     DEV_CATEGORIES = {"developer", "devopsandsysadmin"}
@@ -1624,7 +1738,7 @@ def parse_html_justremote(html, base_url, board):
             "source": board,
         })
 
-    print(f"  ✅ {board}: Extracted {len(results)} developer jobs from preloaded state ({len(jobs_list)} total listed)")
+    print(f"  {board}: Extracted {len(results)} developer jobs from preloaded state ({len(jobs_list)} total listed)")
     return results
 
 
@@ -1635,6 +1749,7 @@ def parse_html_justremote(html, base_url, board):
 def fetch_jobs_from_board(name, info, debug=False):
     url = info['url']
     typ = info['type']
+    verify_ssl = info.get('verify_ssl', True)
 
     try:
         if typ == "api":
@@ -1649,7 +1764,7 @@ def fetch_jobs_from_board(name, info, debug=False):
                     f"{url}?app_id={app_id}&app_key={app_key}"
                     "&what=developer+remote&results_per_page=50&content-type=application/json"
                 )
-            response = fetch_with_retry(url, timeout=30, board_name=name)
+            response = fetch_with_retry(url, timeout=30, board_name=name, verify_ssl=verify_ssl)
             if response is None:
                 return []
             data = response.json()
@@ -1657,7 +1772,9 @@ def fetch_jobs_from_board(name, info, debug=False):
             if name == "Remotive":
                 return parse_json_remotive(name, data, debug)
             elif name == "RemoteOKAPI":
-                return parse_json_remoteokapi(name, data, debug)
+                return parse_json_remoteok(name, data, debug)
+            elif name == "RemoteOK":
+                return parse_json_remoteok(name, data, debug)
             elif name == "Arbeitnow":
                 return parse_json_arbeitnow(name, data, debug)
             elif name == "WorkingNomads":
@@ -1670,8 +1787,20 @@ def fetch_jobs_from_board(name, info, debug=False):
                 return parse_json_themuse(name, data, debug)
             elif name == "Adzuna":
                 return parse_json_adzuna(name, data, debug)
+            elif name in ["Remote4me", "Remojobs-Frontend", "Remojobs-Backend", "Remojobs-Fullstack"]:
+                return parse_json_remotive(name, data, debug)
             else:
                 print(f"  No specific parser for {name}, skipping")
+                return []
+
+        elif typ == "rss":
+            print(f"Fetching (RSS): {name}")
+            if name == "WeWorkRemotely":
+                return fetch_weworkremotely_rss(url)
+            elif name == "RemoteTech":
+                return fetch_weworkremotely_rss(url)
+            else:
+                print(f"  No RSS parser for {name}")
                 return []
 
         elif typ == "html":
@@ -1680,7 +1809,7 @@ def fetch_jobs_from_board(name, info, debug=False):
                 rss = fetch_authentic_jobs_rss()
                 if rss:
                     return rss
-            response = fetch_with_retry(url, timeout=40, board_name=name)
+            response = fetch_with_retry(url, timeout=40, board_name=name, verify_ssl=verify_ssl)
             if response is None:
                 return []
             html = response.text
@@ -1715,34 +1844,46 @@ def fetch_jobs_from_board(name, info, debug=False):
         return []
 
 
-def _run_optional_scraper(label, scrape_func, jobs, working_scrapers, failed_scrapers, debug=False):
+def _run_optional_scraper(label, scrape_func, jobs, working_scrapers, failed_scrapers, debug=False, tracker=None):
     print(f"\n--- Processing {label} ---")
     try:
         scraped = scrape_func(debug=debug)
         if scraped:
-            print(f"✅ Parsed {len(scraped)} jobs from {label}")
+            print(f"Parsed {len(scraped)} jobs from {label}")
             jobs.extend(scraped)
             working_scrapers.append(label)
+            if tracker:
+                tracker.scrape(label, "ok", len(scraped))
         else:
-            print(f"⚠️  No jobs found from {label}")
+            print(f"  No jobs found from {label}")
             failed_scrapers.append(label)
+            if tracker:
+                tracker.scrape(label, "empty", 0)
     except Exception as e:
-        print(f"❌ {label} completely failed: {e}")
+        print(f"{label} completely failed: {e}")
         import traceback
         traceback.print_exc()
         failed_scrapers.append(label)
+        if tracker:
+            tracker.scrape(label, "error", 0)
 
 # =============================================================================
 # SCRAPE ALL
 # =============================================================================
 
-def scrape_all(debug=False):
-    """Main scraping function"""
+def scrape_all(debug=False, tracker=None):
+    """Main scraping function. Pass a YieldTracker to share yield data with curate()."""
+    from tools.yield_tracker import YieldTracker, count_by_source
+
+    own_tracker = tracker is None
+    if own_tracker:
+        tracker = YieldTracker()
+
     jobs = []
     working_scrapers = []
     failed_scrapers = []
 
-    print("🚀 Starting job scraping...")
+    print("Starting job scraping...")
 
     for name, info in MASTER_BOARDS.items():
         print(f"\n--- Processing {name} ---")
@@ -1751,59 +1892,71 @@ def scrape_all(debug=False):
             count = len(jobs_from_board)
 
             if count > 0:
-                print(f"✅ Parsed {count} jobs from {name}")
+                print(f"Parsed {count} jobs from {name}")
                 working_scrapers.append(name)
                 jobs.extend(jobs_from_board)
+                tracker.scrape(name, "ok", count)
             else:
-                print(f"⚠️  No jobs found from {name}")
+                print(f"  No jobs found from {name}")
                 failed_scrapers.append(name)
+                tracker.scrape(name, "empty", 0)
 
         except Exception as e:
-            print(f"❌ {name} completely failed: {e}")
+            print(f"{name} completely failed: {e}")
             import traceback
             traceback.print_exc()
             failed_scrapers.append(name)
+            tracker.scrape(name, "error", 0)
 
         time.sleep(random.uniform(2, 4))
 
     try:
         from tools.jobspy_scraper import scrape_with_jobspy
-        _run_optional_scraper("JobSpy", scrape_with_jobspy, jobs, working_scrapers, failed_scrapers, debug)
+        _run_optional_scraper("JobSpy", scrape_with_jobspy, jobs, working_scrapers, failed_scrapers, debug, tracker)
     except Exception as e:
-        print(f"❌ JobSpy setup failed: {e}")
+        print(f"JobSpy setup failed: {e}")
         failed_scrapers.append("JobSpy")
+        tracker.scrape("JobSpy", "error", 0)
 
     try:
         from tools.playwright_scraper import scrape_stealth_boards
-        _run_optional_scraper("PlaywrightStealth", scrape_stealth_boards, jobs, working_scrapers, failed_scrapers, debug)
+        _run_optional_scraper("PlaywrightStealth", scrape_stealth_boards, jobs, working_scrapers, failed_scrapers, debug, tracker)
     except Exception as e:
-        print(f"❌ Playwright stealth setup failed: {e}")
+        print(f"Playwright stealth setup failed: {e}")
         failed_scrapers.append("PlaywrightStealth")
+        tracker.scrape("PlaywrightStealth", "error", 0)
 
     try:
         from tools.crawl4ai_scraper import scrape_justremote_with_crawl4ai
-        _run_optional_scraper("Crawl4AI-JustRemote", scrape_justremote_with_crawl4ai, jobs, working_scrapers, failed_scrapers, debug)
+        _run_optional_scraper("Crawl4AI-JustRemote", scrape_justremote_with_crawl4ai, jobs, working_scrapers, failed_scrapers, debug, tracker)
     except Exception as e:
-        print(f"❌ Crawl4AI setup failed: {e}")
+        print(f"Crawl4AI setup failed: {e}")
         failed_scrapers.append("Crawl4AI-JustRemote")
+        tracker.scrape("Crawl4AI-JustRemote", "error", 0)
 
     total_before_filter = len(jobs)
     jobs = [job for job in jobs if is_valid_dev_job(job)]
+    tracker.stage("dev_filter", count_by_source(jobs))
 
     # === COUNTRY FILTER ===
     country_before = len(jobs)
     jobs = [job for job in jobs if is_allowed_location(job)]
     country_blocked = country_before - len(jobs)
-    print(f"🌍 Country filter: blocked {country_blocked} jobs | remaining: {len(jobs)}")
+    print(f"Country filter: blocked {country_blocked} jobs | remaining: {len(jobs)}")
+    tracker.stage("country", count_by_source(jobs))
 
     # Add location tags for all jobs
     for job in jobs:
         job["location_tags"] = extract_location_tags(job)
 
     print(f"\n=== SCRAPING SUMMARY ===")
-    print(f"✅ Working scrapers ({len(working_scrapers)}): {working_scrapers}")
-    print(f"❌ Failed scrapers ({len(failed_scrapers)}): {failed_scrapers}")
-    print(f"📊 Total jobs scraped: {len(jobs)}")
+    print(f"Working scrapers ({len(working_scrapers)}): {working_scrapers}")
+    print(f"Failed scrapers ({len(failed_scrapers)}): {failed_scrapers}")
+    print(f"Total jobs scraped: {len(jobs)}")
+
+    if own_tracker:
+        tracker.save()
+        tracker.print_table()
 
     return jobs
 
@@ -1830,7 +1983,7 @@ def test_individual_scraper(name, debug=True):
         return jobs
 
     except Exception as e:
-        print(f"❌ Error testing {name}: {e}")
+        print(f"Error testing {name}: {e}")
         return []
 
 

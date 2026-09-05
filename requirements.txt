@@ -6,7 +6,7 @@ feedparser==6.0.11
 
 # AI / CrewAI
 crewai==1.14.7
-google-generativeai>=0.8.5
+google-genai>=1.0.0
 zhipuai>=2.1.0
 # Job scraping
 python-jobspy==1.1.4

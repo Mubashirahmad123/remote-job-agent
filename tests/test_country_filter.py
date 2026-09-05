@@ -100,6 +100,9 @@ class TestCountryFilter:
             "asia pacific", "european union",
             "remote", "fully remote", "remote first", "distributed team",
             "worldwide", "global", "anywhere", "anywhere in the world",
+            "distributed", "digital nomad", "location independent",
+            "work from anywhere", "work from home", "wfh",
+            "no timezone", "any timezone", "timezone flexible", "flexible timezone",
         }
         missing = geo_terms - ALL_COUNTRY_NAMES
         assert not missing, f"Missing from ALL_COUNTRY_NAMES: {missing}"

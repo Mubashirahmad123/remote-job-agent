@@ -24,16 +24,23 @@ GLM_API_KEY = os.getenv("GLM_API_KEY", "")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
 
-# Try to import Gemini
+# Try to import Gemini (new SDK first, legacy fallback)
 try:
-    import google.generativeai as genai
-    if GEMINI_API_KEY:
-        genai.configure(api_key=GEMINI_API_KEY)
-        GEMINI_AVAILABLE = True
-    else:
-        GEMINI_AVAILABLE = False
+    from google import genai as _genai_new
+    _GENAI_CLIENT = _genai_new.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+    GEMINI_AVAILABLE = _GENAI_CLIENT is not None
+    _USE_NEW_GENAI = True
 except ImportError:
-    GEMINI_AVAILABLE = False
+    _USE_NEW_GENAI = False
+    try:
+        import google.generativeai as genai
+        if GEMINI_API_KEY:
+            genai.configure(api_key=GEMINI_API_KEY)
+            GEMINI_AVAILABLE = True
+        else:
+            GEMINI_AVAILABLE = False
+    except ImportError:
+        GEMINI_AVAILABLE = False
 
 # Try to import GLM
 try:
@@ -54,8 +61,10 @@ def _call_gemini(prompt: str, model_name: str = "gemini-2.5-flash") -> str:
     """Call Gemini. Returns text or raises exception on failure."""
     if not GEMINI_AVAILABLE:
         raise Exception("Gemini not available")
-    model = genai.GenerativeModel(model_name)
-    response = model.generate_content(prompt)
+    if _USE_NEW_GENAI:
+        response = _GENAI_CLIENT.models.generate_content(model=model_name, contents=prompt)
+    else:
+        response = genai.GenerativeModel(model_name).generate_content(prompt)
     if response and response.text:
         return response.text.strip()
     raise Exception("Gemini returned empty response")

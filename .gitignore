@@ -15,6 +15,7 @@ test_scrape_output.txt
 install.log
 
 # Generated artifacts
+logs/
 resumes/
 cover_letters/
 apply_packages/

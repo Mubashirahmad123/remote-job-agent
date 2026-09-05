@@ -348,12 +348,17 @@ def run_simple_scraper():
         print("❌ Google Sheets connection failed!")
         return False
 
-    jobs = scrape_all(debug=False)
+    from tools.yield_tracker import YieldTracker
+    tracker = YieldTracker()
+
+    jobs = scrape_all(debug=False, tracker=tracker)
     print(f"✅ Scraped {len(jobs)} jobs")
 
     if jobs:
         # === CURATE BEFORE SAVING ===
-        result = curate(jobs)
+        result = curate(jobs, tracker=tracker)
+        tracker.save()
+        tracker.print_table()
         curated_jobs = [j for j in result.get("top_jobs", []) if j.get("match_score", 0) >= 70]
         
         if curated_jobs:
