@@ -524,6 +524,8 @@ def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
     match_score = job.get("match_score", job.get("score", 0))
     fingerprint = job.get("job_fingerprint", apply_url)
 
+    _init_db()
+
     # === GUARD: Already applied? ===
     if _already_applied(fingerprint):
         print(f"⏭️  Already applied to {job_title} at {company}. Skipping.")

@@ -10,9 +10,13 @@ PRODUCTION_ROADMAP.md
 
 # Scraped / cached runtime data
 scraped_jobs.json
+fresh_scrape.json
 seen_jobs.json
 test_scrape_output.txt
 install.log
+*.log
+scrape_save_tmp.py
+*_tmp.py
 
 # Generated artifacts
 logs/
