@@ -25,14 +25,21 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
 
 try:
-    import google.generativeai as genai
-    if GEMINI_API_KEY:
-        genai.configure(api_key=GEMINI_API_KEY)
-        GEMINI_AVAILABLE = True
-    else:
-        GEMINI_AVAILABLE = False
+    from google import genai as _genai_new
+    _GENAI_CLIENT = _genai_new.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+    GEMINI_AVAILABLE = _GENAI_CLIENT is not None
+    _USE_NEW_GENAI = True
 except ImportError:
-    GEMINI_AVAILABLE = False
+    _USE_NEW_GENAI = False
+    try:
+        import google.generativeai as genai
+        if GEMINI_API_KEY:
+            genai.configure(api_key=GEMINI_API_KEY)
+            GEMINI_AVAILABLE = True
+        else:
+            GEMINI_AVAILABLE = False
+    except ImportError:
+        GEMINI_AVAILABLE = False
 
 try:
     from zhipuai import ZhipuAI
@@ -50,8 +57,10 @@ except ImportError:
 def _call_gemini(prompt: str) -> str:
     if not GEMINI_AVAILABLE:
         raise Exception("Gemini not available")
-    model = genai.GenerativeModel("gemini-2.5-flash")
-    response = model.generate_content(prompt)
+    if _USE_NEW_GENAI:
+        response = _GENAI_CLIENT.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    else:
+        response = genai.GenerativeModel("gemini-2.5-flash").generate_content(prompt)
     if response and response.text:
         return response.text.strip()
     raise Exception("Empty response")

@@ -21,6 +21,7 @@ from agents.scrapper import is_allowed_location
 from tools.sheet_writer import append_rows, get_all_rows, get_sheet, get_or_create_worksheet
 from tools.cv_parser import parse_cv
 from tools.deduplicator import filter_already_seen, load_seen_hashes, save_seen_hashes
+from tools.yield_tracker import YieldTracker, count_by_source
 
 # Try to import semantic matcher (Phase 2 feature)
 try:
@@ -225,13 +226,29 @@ def _generate_fingerprint(job: dict) -> str:
 # MAIN CURATION
 # =============================================================================
 
-def curate(raw_jobs: list) -> dict:
+def curate(raw_jobs: list, tracker=None) -> dict:
     """
     Curates raw job data: dedup → filter → score → rank → save.
+    Pass a YieldTracker to share per-board yield data with scrape_all().
     """
+    own_tracker = tracker is None
+    if own_tracker:
+        tracker = YieldTracker()
+    tracker.stage("curated_in", count_by_source(raw_jobs))
     print(f"\n{'='*60}")
     print(f"🔍 CURATING {len(raw_jobs)} RAW JOBS")
     print(f"{'='*60}")
+
+        # === SANITIZE: Convert None values to empty strings ===
+    STRING_FIELDS = [
+        "job_title", "company", "summary", "timezone", "tech_stack",
+        "apply_url", "salary", "posted_date_iso", "source", "location",
+        "job_type", "match_reason"
+    ]
+    for job in raw_jobs:
+        for field in STRING_FIELDS:
+            if job.get(field) is None:
+                job[field] = ""
 
     if not raw_jobs:
         return {
@@ -300,6 +317,7 @@ def curate(raw_jobs: list) -> dict:
     unique_jobs = filter_already_seen(unique_jobs, seen_hashes)
     fp_duplicates = before_fp - len(unique_jobs)
     print(f"   Fingerprint duplicates: {fp_duplicates} | Remaining: {len(unique_jobs)}")
+    tracker.stage("post_dedup", count_by_source(unique_jobs))
 
     # ── Country / Location filter ──
     print("\n🌍 Country filter...")
@@ -307,6 +325,7 @@ def curate(raw_jobs: list) -> dict:
     unique_jobs = [job for job in unique_jobs if is_allowed_location(job)]
     country_filtered = before_country - len(unique_jobs)
     print(f"   Filtered by country: {country_filtered} | Remaining: {len(unique_jobs)}")
+    tracker.stage("post_country", count_by_source(unique_jobs))
 
     if not unique_jobs:
         return {
@@ -435,7 +454,11 @@ def curate(raw_jobs: list) -> dict:
     try:
         append_rows(ranked_jobs)
         save_seen_hashes(seen_hashes)
-        
+        tracker.stage("saved", count_by_source(ranked_jobs))
+        if own_tracker:
+            tracker.save()
+            tracker.print_table()
+
         success_msg = f"Added {len(ranked_jobs)} jobs to sheet"
         print(f"✅ {success_msg}")
         

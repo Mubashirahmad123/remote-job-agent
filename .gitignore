@@ -1,16 +1,39 @@
+# Secrets & API keys (NEVER commit)
 .env
+keys.json
 key.json
+key.example.json
+
+# Personal data
 my_cv.pdf
-seen_jobs.json
 PRODUCTION_ROADMAP.md
 
+# Scraped / cached runtime data
+scraped_jobs.json
+seen_jobs.json
+test_scrape_output.txt
+install.log
+
+# Generated artifacts
+logs/
+resumes/
+cover_letters/
+apply_packages/
+email_drafts/
+screenshots/
+cache/
+data/
+
+# Optional semantic embeddings
+*.pkl
+cv_embeddings.pkl
 
 # Python
 venv/
 .env/
 __pycache__/
 *.pyc
-
+.pytest_cache/
 
 # VS Code
 .vscode/
