@@ -10,6 +10,7 @@ PRODUCTION_ROADMAP.md
 
 # Scraped / cached runtime data
 scraped_jobs.json
+curated_jobs.json
 fresh_scrape.json
 seen_jobs.json
 test_scrape_output.txt

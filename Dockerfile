@@ -10,6 +10,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Install OS build dependencies, fonts for Unicode PDF generation, and utilities
+# tzdata provides /usr/share/zoneinfo so TZ=Asia/Kolkata works in scheduler
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
@@ -17,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
     git \
+    tzdata \
     fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
