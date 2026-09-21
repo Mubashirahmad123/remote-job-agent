@@ -368,6 +368,21 @@ def run_simple_scraper():
         curated_jobs = [j for j in result.get("top_jobs", []) if j.get("match_score", 0) >= 70]
 
         if curated_jobs:
+            # Cache curated output so standalone `apply` / `resume` modes work
+            # across separate `docker compose run` containers (same as crewai path).
+            curated_path = BASE_DIR / "curated_jobs.json"
+            try:
+                from datetime import datetime, timezone
+                payload = {
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
+                    "source_count": len(jobs),
+                    "jobs": curated_jobs,
+                }
+                with open(curated_path, 'w', encoding='utf-8') as f:
+                    json.dump(payload, f, indent=2, ensure_ascii=False)
+                print(f"✅ Curated cache written to {curated_path} ({len(curated_jobs)} jobs)")
+            except Exception as e:
+                print(f"⚠️ Curated cache write failed: {e}")
             # Already persisted by curate() Step 6 — no second append_rows here.
             # Generate materials for top curated job
             best = max(curated_jobs, key=lambda x: x.get('match_score', 0) or 0)

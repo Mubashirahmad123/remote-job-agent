@@ -79,18 +79,25 @@ def update_status(sheets_client, apply_url: str, new_status: str, notes: str = "
     sheet = get_applied_sheet(sheets_client)
     rows = sheet.get_all_values()
 
-    # Find column indices from header
-    headers = rows[0]
-    url_col   = headers.index("apply_url") + 1      # 1-indexed for gspread
-    status_col = headers.index("status") + 1
-    notes_col  = headers.index("notes") + 1
-    updated_col = headers.index("last_updated") + 1
+    if not rows:
+        return False
+
+    # Find column indices from header (case/whitespace tolerant, no crash on missing)
+    headers = [h.strip().lower() for h in rows[0]]
+    col = {name: idx + 1 for idx, name in enumerate(headers)}  # 1-indexed for gspread
+    url_col = col.get("apply_url")
+    status_col = col.get("status")
+    notes_col = col.get("notes")
+    updated_col = col.get("last_updated")
+
+    if not url_col or not status_col or not updated_col:
+        return False
 
     for i, row in enumerate(rows[1:], start=2):  # start=2 because row 1 is header
         if len(row) > url_col - 1 and row[url_col - 1] == apply_url:
             sheet.update_cell(i, status_col, new_status)
             sheet.update_cell(i, updated_col, datetime.now().strftime("%Y-%m-%d %H:%M"))
-            if notes:
+            if notes and notes_col:
                 existing_notes = row[notes_col - 1] if len(row) >= notes_col else ""
                 new_notes = f"{existing_notes} | {notes}".strip(" |")
                 sheet.update_cell(i, notes_col, new_notes)
@@ -107,29 +114,35 @@ def get_stats(sheets_client) -> dict:
     if len(rows) <= 1:
         return {"total": 0, "by_status": {}, "this_week": 0, "response_rate": "0%"}
 
-    headers = rows[0]
+    headers = [h.strip().lower() for h in rows[0]]
     data = rows[1:]
 
-    status_col  = headers.index("status")
-    date_col    = headers.index("applied_date")
+    status_col = headers.index("status") if "status" in headers else -1
+    date_col = -1
+    for col_name in ["applied_date", "applied_at", "date", "created_at", "scraped_at"]:
+        if col_name in headers:
+            date_col = headers.index(col_name)
+            break
 
     status_counts = {}
     this_week = 0
     now = datetime.now()
 
     for row in data:
-        if not row or len(row) <= status_col:
+        if not row:
             continue
-        status = row[status_col] if len(row) > status_col else "unknown"
+        status = row[status_col] if (status_col != -1 and len(row) > status_col and row[status_col]) else "unknown"
         status_counts[status] = status_counts.get(status, 0) + 1
 
         # Count applications in the last 7 days
-        try:
-            applied_date = datetime.strptime(row[date_col][:10], "%Y-%m-%d")
-            if (now - applied_date).days <= 7:
-                this_week += 1
-        except Exception:
-            pass
+        if date_col != -1 and len(row) > date_col and row[date_col]:
+            try:
+                date_str = str(row[date_col]).strip()[:10]
+                applied_date = datetime.strptime(date_str, "%Y-%m-%d")
+                if (now - applied_date).days <= 7:
+                    this_week += 1
+            except Exception:
+                pass
 
     total = len(data)
     responded = sum(v for k, v in status_counts.items() if k in {"interviewing", "offer", "rejected"})

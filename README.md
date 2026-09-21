@@ -335,12 +335,12 @@ The application includes a production-grade container setup with pre-installed P
    - `.env` (API keys and configuration)
    - `keys.json` (Google Cloud Service Account)
    - `my_cv.pdf` (Your CV)
-   - `seen_jobs.json` and `scraped_jobs.json` must exist as **files** (both are gitignored, so a fresh clone won't have them — Docker would otherwise create directories at those paths and the app would crash):
+   - `seen_jobs.json`, `scraped_jobs.json` and `curated_jobs.json` must exist as **files** (all are gitignored, so a fresh clone won't have them — Docker would otherwise create directories at those paths and the app would crash):
    ```bash
    # Linux / Mac
-   touch seen_jobs.json scraped_jobs.json && echo '{}' > seen_jobs.json && echo '[]' > scraped_jobs.json
+   touch seen_jobs.json scraped_jobs.json curated_jobs.json && echo '{}' > seen_jobs.json && echo '[]' > scraped_jobs.json && echo '[]' > curated_jobs.json
    # Windows (PowerShell)
-   '{}' | Out-File -Encoding utf8 seen_jobs.json; '[]' | Out-File -Encoding utf8 scraped_jobs.json
+   '{}' | Out-File -Encoding utf8 seen_jobs.json; '[]' | Out-File -Encoding utf8 scraped_jobs.json; '[]' | Out-File -Encoding utf8 curated_jobs.json
    ```
 
 2. **Run the 24/7 background scheduler daemon:**

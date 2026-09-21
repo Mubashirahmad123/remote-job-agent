@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       - PLAYWRIGHT_HEADLESS=true
+      - TZ=${TZ:-Asia/Kolkata}
     volumes:
       # .env as a file: main.py/Run.py exit(1) when /app/.env is missing —
       # env_file alone only injects vars, it does not create the file.
@@ -19,6 +20,7 @@ services:
       - ./logs:/app/logs
       - ./seen_jobs.json:/app/seen_jobs.json
       - ./scraped_jobs.json:/app/scraped_jobs.json
+      - ./curated_jobs.json:/app/curated_jobs.json
       - ./apply_packages:/app/apply_packages
       - ./resumes:/app/resumes
       - ./cover_letters:/app/cover_letters
@@ -34,6 +36,7 @@ services:
       - .env
     environment:
       - PLAYWRIGHT_HEADLESS=true
+      - TZ=${TZ:-Asia/Kolkata}
     volumes:
       # Same reason as scheduler: main.py requires the .env file on disk.
       - ./.env:/app/.env:ro
@@ -43,6 +46,7 @@ services:
       - ./logs:/app/logs
       - ./seen_jobs.json:/app/seen_jobs.json
       - ./scraped_jobs.json:/app/scraped_jobs.json
+      - ./curated_jobs.json:/app/curated_jobs.json
       - ./apply_packages:/app/apply_packages
       - ./resumes:/app/resumes
       - ./cover_letters:/app/cover_letters
