@@ -55,15 +55,24 @@ python Run.py --setup
 python Run.py
 ```
 
-Or step by step:
+Or step by step with `uv` (recommended — avoids dependency resolution conflicts with Crawl4AI/CrewAI):
 
 ```bash
+# 1. Install uv (if not already installed)
+pip install uv
+
+# 2. Create and activate virtual environment
 python -m venv venv
 .\venv\Scripts\activate    # Windows
 # source venv/bin/activate  # Mac/Linux
+
+# 3. Fast, conflict-free install of dependencies
 uv pip install -r requirements.txt
+
+# 4. Install Chromium browser for scraping & auto-apply
 playwright install chromium
-python -m crawl4ai.install
+
+# 5. Run the agent
 python main.py
 ```
 
@@ -315,6 +324,7 @@ The application includes a production-grade container setup with pre-installed P
 
 ### Why Use Docker?
 - **Zero Browser Setup Issues:** Automatically installs all 30+ Debian shared libraries required by headless Chromium.
+- **Fast & Conflict-Free Builds:** Uses Astral `uv` for 10x faster package installation without resolver conflicts.
 - **24/7 Unattended Scheduling:** Deploy to any Linux cloud VM (e.g. Hetzner, DigitalOcean, AWS) without keeping your personal computer running.
 - **Strict Security:** Secrets (`.env`, `keys.json`, `my_cv.pdf`) are never baked into image layers; they are excluded via `.dockerignore` and mounted as read-only at runtime.
 - **Data Persistence:** Scraped job caches, deduplication hashes (`seen_jobs.json`), the application tracker database (`data/job_agent.db`), logs, and generated resumes persist across container restarts via host volume bindings.

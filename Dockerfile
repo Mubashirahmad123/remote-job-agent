@@ -20,9 +20,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv for fast, reliable dependency resolution
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Install Playwright browser and all system OS dependencies
 # (crawl4ai has no `install` module in 0.3.x — `python -m crawl4ai.install`
