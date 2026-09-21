@@ -36,6 +36,18 @@ AUTO_APPLY_LIMIT = int(os.getenv("AUTO_APPLY_LIMIT", "5"))
 AUTO_APPLY_PLAYWRIGHT = os.getenv("AUTO_APPLY_PLAYWRIGHT", "false").lower() == "true"
 AUTO_APPLY_CONFIRM = os.getenv("AUTO_APPLY_CONFIRM", "false").lower() == "true"
 AUTO_APPLY_DAILY_CAP = int(os.getenv("AUTO_APPLY_DAILY_CAP", "5"))  # Hard daily limit for auto-submit
+PLAYWRIGHT_HEADLESS = os.getenv("PLAYWRIGHT_HEADLESS", "false").lower() == "true"
+
+def _is_container() -> bool:
+    return os.path.exists("/.dockerenv") or os.environ.get("DOCKER_CONTAINER") == "1"
+
+def _safe_open_browser(url: str) -> bool:
+    if _is_container():
+        return False
+    try:
+        return webbrowser.open(url)
+    except Exception:
+        return False
 
 APPLICANT_NAME = os.getenv("APPLICANT_NAME", "Mubashir")
 APPLICANT_EMAIL = os.getenv("APPLICANT_EMAIL", "")
@@ -524,6 +536,8 @@ def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
     match_score = job.get("match_score", job.get("score", 0))
     fingerprint = job.get("job_fingerprint", apply_url)
 
+    _init_db()
+
     # === GUARD: Already applied? ===
     if _already_applied(fingerprint):
         print(f"⏭️  Already applied to {job_title} at {company}. Skipping.")
@@ -604,8 +618,7 @@ def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
         if pkg:
             result["package_path"] = pkg
         if apply_url and open_browser:
-            webbrowser.open(apply_url)
-            result["browser_opened"] = True
+            result["browser_opened"] = _safe_open_browser(apply_url)
         result["status"] = "dream_manual"
         _increment_daily_stat("dream_manual")
         print(f"   🔔 Review and apply manually. Package ready.")
@@ -618,7 +631,7 @@ def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
         if sync_playwright:
             try:
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=False)
+                    browser = p.chromium.launch(headless=(PLAYWRIGHT_HEADLESS or _is_container()))
                     page = browser.new_page(viewport={"width": 1280, "height": 900})
                     
                     user_profile = {
@@ -673,15 +686,13 @@ def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
             result["email_draft_path"] = email_path
             result["status"] = "email_draft"
         if apply_url and open_browser:
-            webbrowser.open(apply_url)
-            result["browser_opened"] = True
+            result["browser_opened"] = _safe_open_browser(apply_url)
     
     # Simple mode: Just open browser + package
     elif open_browser and apply_url:
         print(f"\n🌐 3. Opening browser: {apply_url}")
         try:
-            webbrowser.open(apply_url)
-            result["browser_opened"] = True
+            result["browser_opened"] = _safe_open_browser(apply_url)
             pkg = generate_apply_package(job, result.get("resume_path"), cover_letter)
             if pkg:
                 result["package_path"] = pkg

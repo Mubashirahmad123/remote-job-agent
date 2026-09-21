@@ -6,7 +6,6 @@ Curates raw job data: dedup → filter → score → rank → save to sheet.
 import os
 import json
 import re
-import hashlib
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
@@ -20,15 +19,16 @@ load_dotenv()
 from agents.scrapper import is_allowed_location
 from tools.sheet_writer import append_rows, get_all_rows, get_sheet, get_or_create_worksheet
 from tools.cv_parser import parse_cv
-from tools.deduplicator import filter_already_seen, load_seen_hashes, save_seen_hashes
+from tools.deduplicator import load_seen_hashes, save_seen_hashes
 from tools.yield_tracker import YieldTracker, count_by_source
 
 # Try to import semantic matcher (Phase 2 feature)
 try:
-    from tools.embedding_matcher import score_semantic, load_cv_embeddings
+    from tools.embedding_matcher import score_semantic, load_cv_embeddings, CV_EMBEDDINGS_PATH
     SEMANTIC_AVAILABLE = True
 except ImportError:
     SEMANTIC_AVAILABLE = False
+    CV_EMBEDDINGS_PATH = None
 
 # =============================================================================
 # CONFIGURATION
@@ -66,7 +66,10 @@ if cv_path:
             if SEMANTIC_AVAILABLE:
                 try:
                     CV_EMBEDDINGS = load_cv_embeddings()
-                    print("✅ Semantic matching enabled")
+                    if CV_EMBEDDINGS:
+                        print("✅ Semantic matching enabled")
+                    else:
+                        print(f"⚠️ Semantic matching disabled: no embeddings file at {CV_EMBEDDINGS_PATH}")
                 except Exception as e:
                     print(f"⚠️ Semantic matching disabled: {e}")
         except Exception as e:
@@ -217,9 +220,14 @@ def cleanup_sheet(days: int = 30):
 # =============================================================================
 
 def _generate_fingerprint(job: dict) -> str:
-    """Generate unique fingerprint for deduplication."""
-    key = f"{job.get('job_title', '')}|{job.get('company', '')}|{job.get('apply_url', '')}"
-    return hashlib.md5(key.encode()).hexdigest()[:16]
+    """Generate unique fingerprint for deduplication.
+
+    Single source of truth: delegates to tools.deduplicator.job_fingerprint
+    (lowercased, URL-normalized, full MD5). Kept as a wrapper so existing
+    imports keep working.
+    """
+    from tools.deduplicator import job_fingerprint as _dedup_fp
+    return _dedup_fp(job)
 
 
 # =============================================================================
@@ -311,10 +319,21 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     print(f"   Original: {len(raw_jobs)} | Duplicates: {duplicates} | Unique: {len(unique_jobs)}")
 
     # ── Step 3: Fingerprint deduplication ──
+    # NOTE: non-mutating check here. seen_hashes is only updated for jobs
+    # that actually pass scoring (Step 6), so rejected/low-match jobs can
+    # be re-scored on a later run after matcher improvements.
     print("\n🔄 Fingerprint deduplication...")
+    from tools.deduplicator import job_fingerprint
     seen_hashes = load_seen_hashes()
     before_fp = len(unique_jobs)
-    unique_jobs = filter_already_seen(unique_jobs, seen_hashes)
+    still_new = []
+    for job in unique_jobs:
+        fp = job.get("job_fingerprint") or job_fingerprint(job)
+        if fp in seen_hashes or fp in existing_fingerprints:
+            continue
+        job["job_fingerprint"] = fp
+        still_new.append(job)
+    unique_jobs = still_new
     fp_duplicates = before_fp - len(unique_jobs)
     print(f"   Fingerprint duplicates: {fp_duplicates} | Remaining: {len(unique_jobs)}")
     tracker.stage("post_dedup", count_by_source(unique_jobs))
@@ -349,7 +368,8 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     scored_jobs = []
     
     for job in unique_jobs:
-        job["job_fingerprint"] = _generate_fingerprint(job)
+        if not job.get("job_fingerprint"):
+            job["job_fingerprint"] = _generate_fingerprint(job)
         job["status"] = "NEW"
         
         # === REJECTION CHECK (uses cv_matcher.py) ===
@@ -364,6 +384,7 @@ def curate(raw_jobs: list, tracker=None) -> dict:
         # === CV SCORING (uses cv_matcher.py) ===
         keyword_score = 0
         semantic_score = 0
+        semantic_computed = False
         match_reason = "No CV matching"
         
         if CV_MATCHING_ENABLED and CV_PROFILE:
@@ -377,27 +398,40 @@ def curate(raw_jobs: list, tracker=None) -> dict:
             if SEMANTIC_AVAILABLE and CV_EMBEDDINGS:
                 try:
                     semantic_score = score_semantic(job, CV_EMBEDDINGS)
-                except Exception:
-                    pass
+                    semantic_computed = True
+                except Exception as e:
+                    print(f"   ⚠️ Semantic scoring failed for {job.get('job_title', '')[:40]}: {e}")
         
-        # Freshness boost
+        # Freshness boost (ranking only — never gates the threshold)
         freshness = _calculate_freshness_boost(job.get("posted_date_iso", ""))
-        
-        # Combine scores
-        final_score = (KEYWORD_WEIGHT * keyword_score) + (SEMANTIC_WEIGHT * semantic_score) + freshness
-        
-        job["match_score"] = round(final_score, 1)
+
+        # Combine scores with renormalization: when semantic didn't run
+        # (disabled, no embeddings, or exception), keyword score carries
+        # full weight instead of being dragged down by 0.4 * 0. A real
+        # computed 0.0 still blends in — it's informative, not missing.
+        semantic_active = bool(SEMANTIC_AVAILABLE and CV_EMBEDDINGS and semantic_computed)
+        if semantic_active:
+            total_w = KEYWORD_WEIGHT + SEMANTIC_WEIGHT
+            base_score = ((KEYWORD_WEIGHT * keyword_score) + (SEMANTIC_WEIGHT * semantic_score)) / total_w if total_w else keyword_score
+        else:
+            base_score = keyword_score
+
+        final_score = base_score + freshness
+
+        job["match_score"] = round(base_score, 1)
+        job["ranking_score"] = round(final_score, 1)
         job["keyword_score"] = round(keyword_score, 1)
-        job["semantic_score"] = round(semantic_score, 1) if semantic_score else ""
+        job["semantic_score"] = round(semantic_score, 1) if semantic_computed else ""
+        job["semantic_computed"] = semantic_computed
         job["match_reason"] = match_reason
         job["freshness_boost"] = freshness
         
-        if final_score < MIN_SCORE:
+        if base_score < MIN_SCORE:
             low_match += 1
-            print(f"   ⚠️ LOW MATCH ({final_score:.0f}): {job.get('job_title', '')[:50]}")
+            print(f"   ⚠️ LOW MATCH ({base_score:.0f}+{freshness:+d}): {job.get('job_title', '')[:50]}")
             continue
-        
-        print(f"   ✅ MATCH ({final_score:.0f}): {job.get('job_title', '')[:50]}")
+
+        print(f"   ✅ MATCH ({base_score:.0f}+{freshness:+d}): {job.get('job_title', '')[:50]}")
         scored_jobs.append(job)
     
     print(f"\n📊 Scoring results:")
@@ -428,7 +462,7 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     
     def rank_score(job):
         score = 0
-        match = job.get("match_score")
+        match = job.get("ranking_score", job.get("match_score"))
         if match and isinstance(match, (int, float)):
             score += match * 2
         if job.get("salary") and str(job.get("salary")).strip():
@@ -453,6 +487,9 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     print(f"\n💾 Saving {len(ranked_jobs)} jobs to Google Sheet...")
     try:
         append_rows(ranked_jobs)
+        for job in ranked_jobs:
+            if job.get("job_fingerprint"):
+                seen_hashes.add(job["job_fingerprint"])
         save_seen_hashes(seen_hashes)
         tracker.stage("saved", count_by_source(ranked_jobs))
         if own_tracker:

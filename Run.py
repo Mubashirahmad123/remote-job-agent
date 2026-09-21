@@ -50,7 +50,13 @@ def check_python_version():
         sys.exit(1)
     ok(f"Python {major}.{minor} detected ({OS})")
 
+def is_docker():
+    return os.path.exists("/.dockerenv") or os.environ.get("DOCKER_CONTAINER") == "1"
+
 def check_venv():
+    if is_docker():
+        ok("Running inside Docker container (system Python)")
+        return
     if not os.path.exists(PYTHON):
         err("Virtual environment not found.")
         info("Run:  python run.py --setup")
@@ -98,7 +104,8 @@ def run_agent():
     if not os.path.exists(main_py):
         err("main.py not found. Are you in the right folder?")
         sys.exit(1)
-    subprocess.run([PYTHON, main_py], cwd=ROOT)
+    py_exec = sys.executable if is_docker() else PYTHON
+    subprocess.run([py_exec, main_py], cwd=ROOT)
 
 # ── Setup Mode ─────────────────────────────────────────────────────────────────
 def run_setup():
@@ -115,18 +122,25 @@ def run_setup():
         subprocess.run([sys.executable, "-m", "venv", "venv"], cwd=ROOT, check=True)
         ok("Virtual environment created")
 
-    # 3. Upgrade pip
-    info("Upgrading pip...")
-    subprocess.run([PIP, "install", "--upgrade", "pip"], cwd=ROOT, check=True)
+    # 3. Upgrade pip and install uv for fast, conflict-free dependency resolution
+    info("Upgrading pip and installing uv...")
+    subprocess.run([PIP, "install", "--upgrade", "pip", "uv"], cwd=ROOT, check=True)
 
     # 4. Install requirements
     req = os.path.join(ROOT, "requirements.txt")
     if os.path.exists(req):
         info("Installing dependencies from requirements.txt...")
-        subprocess.run([PIP, "install", "-r", req], cwd=ROOT, check=True)
+        uv_bin = (
+            os.path.join(VENV, "Scripts", "uv.exe") if OS == "Windows"
+            else os.path.join(VENV, "bin", "uv")
+        )
+        if os.path.exists(uv_bin):
+            subprocess.run([uv_bin, "pip", "install", "-r", req], cwd=ROOT, check=True)
+        else:
+            subprocess.run([PIP, "install", "-r", req], cwd=ROOT, check=True)
         ok("Dependencies installed")
     else:
-        warn("requirements.txt not found, skipping pip install")
+        warn("requirements.txt not found, skipping dependency install")
 
     # 5. Install Playwright Chromium
     info("Installing Playwright Chromium browser...")

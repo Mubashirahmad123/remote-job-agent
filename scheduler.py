@@ -19,7 +19,7 @@ def run_scraper():
     try:
         # We're already in the right directory
         result = subprocess.run([
-            "./venv/bin/python",  # Relative path since we're in the project dir
+            sys.executable,
             "main.py"
         ], capture_output=True, text=True, timeout=3600)  # 1 hour timeout
         

@@ -55,7 +55,7 @@ def _get_crewai():
 # Your modules
 from agents.scrapper import scrape_all
 from agents.curator import curate
-from tools.sheet_writer import append_rows, test_connection
+from tools.sheet_writer import test_connection
 
 
 # =============================================================================
@@ -161,7 +161,26 @@ def _setup_crewai_tools(Agent, Crew, Task, LLM, tool, llm):
             result = curate(jobs)
 
             if result["status"] == "success" and result.get("top_jobs"):
-                return f"✅ Processed {len(jobs)} jobs. Found {len(result['top_jobs'])} high-quality jobs saved to sheet."
+                top_jobs = result["top_jobs"]
+                # Cache curated output so downstream tools (application
+                # generation, auto-apply) consume it instead of re-running
+                # curate() on the raw file — a second curate() would
+                # fingerprint-dedupe exactly the jobs that just passed.
+                curated_path = BASE_DIR / "curated_jobs.json"
+                try:
+                    from datetime import datetime, timezone
+                    payload = {
+                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                        "source_file": str(actual_path),
+                        "source_count": len(jobs),
+                        "jobs": top_jobs,
+                    }
+                    with open(curated_path, 'w', encoding='utf-8') as f:
+                        json.dump(payload, f, indent=2, ensure_ascii=False)
+                except Exception as e:
+                    print(f"⚠️ Curated cache write failed: {e}")
+                return (f"✅ Processed {len(jobs)} jobs. Found {len(top_jobs)} "
+                        f"high-quality jobs saved to sheet and cached to {curated_path}.")
             else:
                 return f"✅ Processed {len(jobs)} jobs. No high-quality matches found."
 
@@ -176,35 +195,21 @@ def _setup_crewai_tools(Agent, Crew, Task, LLM, tool, llm):
         """
         print(f"✍️ Generating application materials from: {file_path}...")
 
-        possible_paths = [
-            Path(file_path),
-            BASE_DIR / "scraped_jobs.json",
-        ]
-
-        actual_path = None
-        for path in possible_paths:
-            if path.exists():
-                actual_path = path
-                break
-
-        if not actual_path:
-            return "❌ No job data file found."
+        # Consume the curated cache written by process_jobs_tool — never
+        # re-run curate() on the raw file here (second curate() would
+        # dedupe out exactly the jobs that just passed).
+        curated_path = BASE_DIR / "curated_jobs.json"
+        if not curated_path.exists():
+            return "❌ No curated jobs found. Run the processor tool first."
 
         try:
-            with open(actual_path, 'r', encoding='utf-8') as f:
-                jobs = json.load(f)
+            with open(curated_path, 'r', encoding='utf-8') as f:
+                payload = json.load(f)
+            curated_jobs = payload.get("jobs", []) if isinstance(payload, dict) else payload
 
-            if not jobs:
-                return "❌ No jobs in file."
-
-            # === CURATE FIRST, then pick best ===
-            from agents.curator import curate
-            curated_result = curate(jobs)
-            curated_jobs = curated_result.get("top_jobs", [])
-            
             if not curated_jobs:
-                return "❌ No high-quality jobs found for application generation."
-            
+                return "❌ No high-quality jobs available for application generation."
+
             # Pick highest-scoring curated job
             best_job = max(curated_jobs, key=lambda x: x.get('match_score', 0) or 0)
 
@@ -273,7 +278,8 @@ def _setup_crewai_tools(Agent, Crew, Task, LLM, tool, llm):
     generate_app_task = Task(
         description=(
             "Generate tailored resume and cover letter for the best matching job "
-            "from scraped_jobs.json. Save both as PDFs. Return file paths."
+            "from the curated jobs cache (curated_jobs.json written by the processor tool). "
+            "Save both as PDFs. Return file paths."
         ),
         agent=application_agent,
         context=[scrape_curate_task],
@@ -355,17 +361,14 @@ def run_simple_scraper():
     print(f"✅ Scraped {len(jobs)} jobs")
 
     if jobs:
-        # === CURATE BEFORE SAVING ===
+        # === CURATE BEFORE SAVING (curate() already saves to sheet internally) ===
         result = curate(jobs, tracker=tracker)
         tracker.save()
         tracker.print_table()
         curated_jobs = [j for j in result.get("top_jobs", []) if j.get("match_score", 0) >= 70]
-        
+
         if curated_jobs:
-            print(f"💾 Saving {len(curated_jobs)} curated jobs to Google Sheets...")
-            append_rows(curated_jobs)
-            print("✅ Saved!")
-            
+            # Already persisted by curate() Step 6 — no second append_rows here.
             # Generate materials for top curated job
             best = max(curated_jobs, key=lambda x: x.get('match_score', 0) or 0)
             print(f"\n🎯 Top job: {best['job_title']} at {best['company']} (Score: {best.get('match_score')})")
@@ -448,10 +451,30 @@ def _run_auto_apply(jobs=None, use_playwright=None):
 
 
 def _run_auto_apply_from_file():
-    """Run auto-apply from scraped_jobs.json."""
-    jobs = _load_scraped_jobs()
+    """Run auto-apply from curated cache (has match_score)."""
+    jobs = _load_curated_jobs()
     if jobs:
         _run_auto_apply(jobs)
+
+
+def _load_curated_jobs():
+    """Load scored jobs from curated_jobs.json. Fails loudly when missing —
+    falling back to raw scraped_jobs.json would silently score everything 0
+    (raw dicts have no match_score) and auto-apply would no-op."""
+    curated_path = BASE_DIR / "curated_jobs.json"
+    if not curated_path.exists():
+        print("❌ No curated_jobs.json found. Run curation first (simple/crewai mode).")
+        return []
+
+    try:
+        with open(curated_path, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+        jobs = payload.get("jobs", []) if isinstance(payload, dict) else payload
+        print(f"✅ Loaded {len(jobs)} curated jobs from {curated_path}")
+        return jobs
+    except Exception as e:
+        print(f"❌ Failed to load curated jobs: {e}")
+        return []
 
 
 def _load_scraped_jobs():
@@ -516,9 +539,9 @@ def run_auto_apply_cli(playwright=False):
     print("🤖 AUTO-APPLY MODE")
     print("="*60)
 
-    jobs = _load_scraped_jobs()
+    jobs = _load_curated_jobs()
     if not jobs:
-        print("❌ No jobs found. Run scrape first.")
+        print("❌ No curated jobs found. Run scrape + curation first.")
         return
 
     _run_auto_apply(jobs, use_playwright=playwright)
@@ -530,9 +553,9 @@ def run_resume_generation():
     print("📝 RESUME GENERATION MODE")
     print("="*60)
 
-    jobs = _load_scraped_jobs()
+    jobs = _load_curated_jobs()
     if not jobs:
-        print("❌ No jobs found.")
+        print("❌ No curated jobs found.")
         return
 
     from tools.resume_generator import generate_resume_for_job
