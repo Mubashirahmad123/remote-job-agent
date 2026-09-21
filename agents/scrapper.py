@@ -215,11 +215,11 @@ MASTER_BOARDS = {
         "type": "html"
     },
     "Arc": {
-        "url": "https://arc.dev/remote-jobs/full-stack-developer",
+        "url": "https://arc.dev/remote-jobs?jobRoles=engineering",
         "type": "html"
     },
     "Lemon": {
-        "url": "https://lemon.io/for-developers/",
+        "url": "https://lemon.io/for-developers/full-stack-developer-jobs",
         "type": "html"
     },
     "FlexJobs": {
@@ -238,8 +238,12 @@ MASTER_BOARDS = {
         "url": "https://www.workatastartup.com/jobs?remote=true&role=engineering",
         "type": "html"
     },
+    "Wellfound": {
+        "url": "https://wellfound.com/role/r/remote/full-stack-developer",
+        "type": "html"
+    },
     "JustJoinIt": {
-        "url": "https://justjoin.it/remote",
+        "url": "https://justjoin.it/job-offers/remote",
         "type": "html"
     },
     "Dice": {
@@ -726,7 +730,17 @@ _SESSION.headers.update(HEADERS)
 # Boards that need special handling
 BOT_PROTECTED_BOARDS = {"FlexJobs", "EU Remote Jobs", "TrueUp", "RemoteRocketship", "GulfTalent", "WorkInStartups", "Dice", "Naukri", "CWJobs", "Shine", "NoFluffJobs", "LandingJobs", "WeAreDevelopers", "DailyRemote", "BuiltIn", "RemoteJobsCom", "JustJoinIt"}
 SSL_ISSUE_BOARDS = {"TimesJobs", "NaukriGulf"}
-JS_RENDERED_BOARDS = {"YCombinator", "Wellfound", "NoDesk", "Arc"}
+# Boards that render via JS — plain requests returns a shell page, so the main
+# loop skips them and the PlaywrightStealth pass below handles them instead.
+# Nothing is dropped: every board is still attempted, just through the right path.
+# JustJoinIt included: verified 2026-09-21 — its listing data arrives via XHR to
+# api.justjoin.it (bot-gated, 503 to requests) and RSC payloads carry no job data,
+# so only a real browser render works.
+# Arc removed 2026-09-21: /remote-jobs?jobRoles=engineering server-renders clean
+# /remote-jobs/details/<slug> cards — requests path works, no browser needed.
+# Lemon removed 2026-09-21: role pages server-render div.pt teaser cards —
+# requests path works (no per-project URLs exist; apply_url = role page).
+JS_RENDERED_BOARDS = {"YCombinator", "Wellfound", "NoDesk", "GulfTalent", "NoFluffJobs", "JustJoinIt"}
 
 
 def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, verify_ssl=True, board_name=""):
@@ -1742,6 +1756,265 @@ def parse_html_justremote(html, base_url, board):
     return results
 
 
+def parse_html_arc(html, base_url="https://arc.dev", board="Arc"):
+    """Arc.dev server-renders job cards (verified 2026-09-21). Real job links
+    match /remote-jobs/details/<slug> — bare /remote-jobs/<skill> links are
+    skill/category hubs and must be skipped."""
+    soup = BeautifulSoup(html, "html.parser")
+    results = []
+    seen = set()
+    for a in soup.select('a[href*="/remote-jobs/details/"]'):
+        href = a.get("href") or ""
+        title = clean_text(a)
+        if not title or len(title) < 3:
+            continue
+        if EXCLUDE_FILTER.search(title) or not re.search(TECH_FILTER, title):
+            continue
+        if not (EXP_FILTER.search(title) or
+                any(w in title.lower() for w in ['developer', 'engineer', 'programmer'])):
+            continue
+        link = href if href.startswith("http") else base_url + href
+        if link in seen:
+            continue
+        seen.add(link)
+        # Company appears in card text as "<Company>'s job post on Arc's..."
+        company = "Unknown"
+        node = a
+        for _ in range(4):
+            node = node.find_parent("div")
+            if not node:
+                break
+            m = re.search(r"([A-Za-z0-9][A-Za-z0-9 .&'-]{1,60})'s job post on Arc", node.get_text(" ", strip=True))
+            if m:
+                company = m.group(1).strip()
+                break
+        results.append({
+            "job_title": title,
+            "company": company,
+            "salary": "",
+            "tech_stack": top_techs(title),
+            "timezone": "Remote",
+            "apply_url": link,
+            "summary": "Arc.dev remote listing",
+            "posted_date_iso": normalize_date(None),
+            "source": board,
+        })
+    print(f"  {board}: Extracted {len(results)} jobs from details links")
+    return results
+
+
+LEMON_ROLE_PAGES = [
+    "https://lemon.io/for-developers/full-stack-developer-jobs",
+    "https://lemon.io/for-developers/back-end-engineer-jobs",
+    "https://lemon.io/for-developers/front-end-developer-jobs",
+]
+
+
+def parse_html_lemon(html, page_url, board="Lemon"):
+    """Lemon.io role pages server-render project teasers (verified 2026-09-21):
+    div.pt cards with h4.pt__title + .pt__labels stack spans. There are no
+    per-project public URLs (Apply -> login funnel), so apply_url is the role page."""
+    soup = BeautifulSoup(html, "html.parser")
+    results = []
+    seen = set()
+    for card in soup.select("div.pt"):
+        title_el = card.select_one("h4.pt__title")
+        title = clean_text(title_el)
+        if not title or len(title) < 5:
+            continue
+        if title in seen:
+            continue
+        seen.add(title)
+        stack = [clean_text(s) for s in card.select(".pt__labels span")]
+        stack = [s for s in stack if s]
+        tech_text = f"{title} {' '.join(stack)}"
+        if EXCLUDE_FILTER.search(title) and not re.search(TECH_FILTER, tech_text):
+            continue
+        if not re.search(TECH_FILTER, tech_text):
+            continue
+        desc_el = card.select_one("p.pt__description-text")
+        desc = clean_text(desc_el)[:300] if desc_el else ""
+        results.append({
+            "job_title": title,
+            "company": "Unknown",
+            "salary": "",
+            "tech_stack": ", ".join(stack[:5]) or top_techs(tech_text),
+            "timezone": "Remote",
+            "apply_url": page_url,
+            "summary": desc or "Lemon.io project listing",
+            "posted_date_iso": normalize_date(None),
+            "source": board,
+        })
+    return results
+
+
+def _iter_balanced_json_objects(text):
+    """Yield bracket-balanced {...} substrings (string-aware) for payload mining."""
+    depth = 0
+    start = -1
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start != -1:
+                    yield text[start:i + 1]
+                    start = -1
+
+
+def _justjoinit_job_from_obj(obj, board):
+    """Build a normalized job dict from one embedded offer object. Returns None if filtered out."""
+    if not isinstance(obj, dict):
+        return None
+    title = (obj.get("title") or "").strip()
+    if not title or len(title) < 3:
+        return None
+    if EXCLUDE_FILTER.search(title):
+        return None
+    company = (obj.get("companyName") or obj.get("company") or obj.get("employer") or "").strip()
+    skills = obj.get("skills") or obj.get("tags") or obj.get("technologies") or []
+    if isinstance(skills, str):
+        skills = [s.strip() for s in skills.split(",") if s.strip()]
+    tech_text = f"{title} {' '.join(skills) if isinstance(skills, list) else ''}"
+    if not re.search(TECH_FILTER, tech_text):
+        return None
+    if not (EXP_FILTER.search(title) or
+            any(word in title.lower() for word in ['developer', 'engineer', 'programmer'])):
+        return None
+    slug = (obj.get("slug") or obj.get("id") or "").strip()
+    link = f"https://justjoin.it/offers/{slug}" if slug else ""
+    return {
+        "job_title": title,
+        "company": company or "Unknown",
+        "salary": "",
+        "tech_stack": ", ".join(skills[:5]) if isinstance(skills, list) and skills else top_techs(tech_text),
+        "timezone": "Remote",
+        "apply_url": link,
+        "summary": "JustJoin.it listing",
+        "posted_date_iso": normalize_date(obj.get("publishedAt") or obj.get("createdAt")),
+        "source": board,
+    }
+
+
+def parse_html_justjoinit(html, board="JustJoinIt", base_url="https://justjoin.it"):
+    """JustJoin.it is a Next.js app: job data lives in RSC flight payloads
+    (self.__next_f.push) / __NEXT_DATA__, not in plain DOM selectors.
+
+    Field names (companyName/skills/slug) are best-effort — verify against one
+    saved live page if this returns 0; the extraction approach is the point.
+    """
+    results = []
+    seen_urls = set()
+
+    def _add(obj):
+        job = _justjoinit_job_from_obj(obj, board)
+        if job and job["apply_url"] not in seen_urls:
+            seen_urls.add(job["apply_url"])
+            results.append(job)
+
+    # 1) Next.js __NEXT_DATA__ blob
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        next_data = soup.find("script", id="__NEXT_DATA__")
+        if next_data and next_data.string:
+            try:
+                data = json.loads(next_data.string)
+            except (json.JSONDecodeError, TypeError):
+                data = None
+            if data:
+                stack = [data]
+                while stack:
+                    cur = stack.pop()
+                    if isinstance(cur, dict):
+                        if cur.get("title") and ("slug" in cur or "companyName" in cur or "company" in cur):
+                            _add(cur)
+                        stack.extend(cur.values())
+                    elif isinstance(cur, list):
+                        stack.extend(cur)
+    except Exception:
+        pass
+
+    # 2) React Server Component flight payloads
+    try:
+        chunks = re.findall(r'self\.__next_f\.push\(\[1,\s*"(.*?)"\]\)', html, re.DOTALL)
+        for chunk in chunks:
+            try:
+                # Properly unescape the JS string literal
+                decoded = json.loads('"' + chunk.replace('"', '\\"') + '"')
+            except Exception:
+                try:
+                    decoded = chunk.encode().decode("unicode_escape")
+                except Exception:
+                    continue
+            if '"title"' not in decoded:
+                continue
+            for candidate in _iter_balanced_json_objects(decoded):
+                if '"title"' not in candidate:
+                    continue
+                try:
+                    obj = json.loads(candidate)
+                except json.JSONDecodeError:
+                    continue
+                # Offer may be nested one level (e.g. {"offer": {...}})
+                if isinstance(obj, dict):
+                    if obj.get("title"):
+                        _add(obj)
+                    for v in obj.values():
+                        if isinstance(v, dict) and v.get("title"):
+                            _add(v)
+    except Exception:
+        pass
+
+    # 3) Fallback: plain offer links (may be empty on JS-only renders).
+    # Real offer URLs are /job-offer/<slug> (verified 2026-09-21).
+    if not results:
+        try:
+            soup = soup if "soup" in dir() else BeautifulSoup(html, "html.parser")
+            for a in soup.select('a[href*="/job-offer/"]')[:50]:
+                title = clean_text(a)
+                href = a.get("href") or ""
+                if not title or len(title) < 3:
+                    continue
+                if EXCLUDE_FILTER.search(title) or not re.search(TECH_FILTER, title):
+                    continue
+                link = href if href.startswith("http") else base_url + href
+                if link in seen_urls:
+                    continue
+                seen_urls.add(link)
+                results.append({
+                    "job_title": title,
+                    "company": "Unknown",
+                    "salary": "",
+                    "tech_stack": top_techs(title),
+                    "timezone": "Remote",
+                    "apply_url": link,
+                    "summary": f"Listing from {board}",
+                    "posted_date_iso": normalize_date(None),
+                    "source": board,
+                })
+        except Exception:
+            pass
+
+    print(f"  {board}: Extracted {len(results)} jobs from RSC payload")
+    return results
+
+
 # =============================================================================
 # MAIN FETCH LOGIC
 # =============================================================================
@@ -1827,8 +2100,30 @@ def fetch_jobs_from_board(name, info, debug=False):
                 return parse_html_himalayas(html)
             elif name == "RemoteTech" or name == "GoRemote":
                 return parse_html_generic(html, name, base_url)
+            elif name == "Arc":
+                return parse_html_arc(html, base_url, name)
+            elif name == "Lemon":
+                # Role pages each hold a handful of teasers; combine a few.
+                combined, seen_urls = [], set()
+                for role_url in LEMON_ROLE_PAGES:
+                    try:
+                        r = fetch_with_retry(role_url, timeout=40, board_name=name, verify_ssl=verify_ssl)
+                        if r is None:
+                            continue
+                        for job in parse_html_lemon(r.text, role_url, name):
+                            key = (job["job_title"], job["apply_url"])
+                            if key not in seen_urls:
+                                seen_urls.add(key)
+                                combined.append(job)
+                    except Exception:
+                        continue
+                    time.sleep(random.uniform(1, 2))
+                print(f"  {name}: Extracted {len(combined)} jobs from {len(LEMON_ROLE_PAGES)} role pages")
+                return combined
             elif name == "JustRemote":
                 return parse_html_justremote(html, base_url, name)
+            elif name == "JustJoinIt":
+                return parse_html_justjoinit(html, name, base_url)
             elif name == "YCombinator":
                 return parse_html_ycombinator(html, base_url, name)
             else:
@@ -1886,6 +2181,13 @@ def scrape_all(debug=False, tracker=None):
     print("Starting job scraping...")
 
     for name, info in MASTER_BOARDS.items():
+        if name in JS_RENDERED_BOARDS:
+            # Handled by the PlaywrightStealth pass below — a requests attempt
+            # here would only burn a 2-4s sleep for a guaranteed-empty result.
+            print(f"\n--- Processing {name} ---")
+            print(f"  Skipped in requests loop (covered by PlaywrightStealth pass)")
+            tracker.scrape(name, "skipped-js", 0)
+            continue
         print(f"\n--- Processing {name} ---")
         try:
             jobs_from_board = fetch_jobs_from_board(name, info, debug)
@@ -1920,9 +2222,16 @@ def scrape_all(debug=False, tracker=None):
 
     try:
         from tools.playwright_scraper import scrape_stealth_boards
+        _jobs_before_pw = len(jobs)
         _run_optional_scraper("PlaywrightStealth", scrape_stealth_boards, jobs, working_scrapers, failed_scrapers, debug, tracker)
+        if len(jobs) == _jobs_before_pw:
+            # Playwright ran but yielded nothing — JS boards have no fallback,
+            # so surface it loudly instead of silently dropping coverage.
+            print(f"  WARNING: PlaywrightStealth returned 0 jobs — JS boards {sorted(JS_RENDERED_BOARDS)} uncovered this run. "
+                  f"Re-run with debug=True and inspect selectors.")
     except Exception as e:
         print(f"Playwright stealth setup failed: {e}")
+        print(f"  WARNING: JS boards {sorted(JS_RENDERED_BOARDS)} uncovered this run (Playwright unavailable).")
         failed_scrapers.append("PlaywrightStealth")
         tracker.scrape("PlaywrightStealth", "error", 0)
 

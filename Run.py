@@ -50,7 +50,13 @@ def check_python_version():
         sys.exit(1)
     ok(f"Python {major}.{minor} detected ({OS})")
 
+def is_docker():
+    return os.path.exists("/.dockerenv") or os.environ.get("DOCKER_CONTAINER") == "1"
+
 def check_venv():
+    if is_docker():
+        ok("Running inside Docker container (system Python)")
+        return
     if not os.path.exists(PYTHON):
         err("Virtual environment not found.")
         info("Run:  python run.py --setup")
@@ -98,7 +104,8 @@ def run_agent():
     if not os.path.exists(main_py):
         err("main.py not found. Are you in the right folder?")
         sys.exit(1)
-    subprocess.run([PYTHON, main_py], cwd=ROOT)
+    py_exec = sys.executable if is_docker() else PYTHON
+    subprocess.run([py_exec, main_py], cwd=ROOT)
 
 # ── Setup Mode ─────────────────────────────────────────────────────────────────
 def run_setup():

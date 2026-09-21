@@ -35,6 +35,14 @@ def _clean_text(text):
         return ""
     return re.sub(r'\s+', ' ', text).strip()
 
+def _log_page_state(page, source):
+    """Debug helper: log title/URL/body size to distinguish blocks from selector misses."""
+    try:
+        logger.info(f"{source} page title={page.title()!r} url={page.url} html_len={len(page.content())}")
+    except Exception as e:
+        logger.info(f"{source} page-state log failed: {e}")
+
+
 def _is_valid_job_title(title: str) -> bool:
     """Check if title looks like a valid job title."""
     if not title or len(title) < 5:
@@ -95,18 +103,39 @@ def scrape_stealth_boards(debug=False):
         
         # Add random delays to mimic human behavior
         import random
-        
-        # Scrape each site
-        jobs.extend(_scrape_weworkremotely(page, debug, timeout))
-        jobs.extend(_scrape_remoteco(page, debug, timeout))
-        jobs.extend(_scrape_wellfound(page, debug, timeout))
-        jobs.extend(_scrape_nodesk(page, debug, timeout))
-        
-        browser.close()
+        import time as _time
+
+        # NOTE: nothing removed — every board is still attempted, each in
+        # isolation so one board failure never kills the rest.
+        # NOTE: _scrape_arc / _scrape_lemon stay in this file as dormant fallbacks —
+        # both boards are currently covered via requests (server-rendered cards).
+        _scrapers = (
+            _scrape_weworkremotely,
+            _scrape_remoteco,
+            _scrape_wellfound,
+            _scrape_nodesk,
+            _scrape_ycombinator,
+            _scrape_gulftalent,
+            _scrape_nofluffjobs,
+            _scrape_justjoinit,
+        )
+        try:
+            for _fn in _scrapers:
+                try:
+                    jobs.extend(_fn(page, debug, timeout))
+                except Exception as e:
+                    logger.error(f"{_fn.__name__} failed: {e}")
+                # Small human-like pause between boards
+                _time.sleep(random.uniform(1, 3))
+        finally:
+            try:
+                browser.close()
+            except Exception:
+                pass
 
     if debug:
         logger.info(f"Playwright stealth returned {len(jobs)} total jobs")
-    
+
     return jobs
 
 def _scrape_weworkremotely(page, debug=False, timeout=30000):
@@ -346,6 +375,311 @@ def _scrape_nodesk(page, debug=False, timeout=30000):
         logger.info(f"{source} Playwright returned {len(jobs)} jobs")
     return jobs[:30]
 
+def _scrape_ycombinator(page, debug=False, timeout=30000):
+    """Scrape YC Work at a Startup (JS-rendered). Only /jobs/<numeric-id> links
+    are real jobs — /jobs/v2 and ?role= links are nav/filter pages (verified 2026-09-21:
+    unfiltered anchors picked up 'Engineering |' -> /jobs/v2?role=eng junk)."""
+    jobs = []
+    source = "YCombinator"
+    try:
+        page.goto("https://www.workatastartup.com/jobs?remote=true&role=engineering",
+                  wait_until="domcontentloaded", timeout=timeout)
+        page.wait_for_timeout(3000)
+        links = page.query_selector_all('a[href*="/jobs/"]')
+        seen = set()
+        for el in links[:100]:
+            try:
+                href = el.get_attribute("href") or ""
+                if not re.search(r'/jobs/\d+', href):
+                    continue
+                url = _with_base(href, "https://www.workatastartup.com")
+                if url in seen:
+                    continue
+                seen.add(url)
+                # Anchor text lines = [Company, tagline, JOB TITLE, location/salary
+                # meta] (verified 2026-09-21) — never use the whole blob as title.
+                lines = [ln.strip() for ln in _safe_text(el).splitlines() if ln.strip()]
+                if not lines:
+                    continue
+                company = _clean_text(lines[0])
+                title = ""
+                if len(lines) >= 3:
+                    title = _clean_text(lines[2])
+                else:
+                    for ln in lines[1:]:
+                        if _is_valid_job_title(_clean_text(ln)):
+                            title = _clean_text(ln)
+                            break
+                    if not title:
+                        title = _clean_text(lines[-1])
+                if not title or not _is_valid_job_title(title):
+                    continue
+                salary = ""
+                for ln in lines[3:]:
+                    m = re.search(r'\$[\d,.K\-–\s]+(?:K|k)?', ln)
+                    if m:
+                        salary = _clean_text(m.group(0))
+                        break
+                jobs.append(_job(title, company, url, source, "YC-backed startup listing",
+                                 salary=salary))
+            except Exception:
+                continue
+    except Exception as exc:
+        logger.error(f"{source} Playwright scrape failed: {exc}")
+    if debug:
+        logger.info(f"{source} Playwright returned {len(jobs)} jobs")
+    return jobs[:30]
+
+
+def _scrape_arc(page, debug=False, timeout=30000):
+    """Scrape Arc.dev remote jobs (JS-rendered)."""
+    jobs = []
+    source = "Arc"
+    try:
+        page.goto("https://arc.dev/remote-jobs/full-stack-developer",
+                  wait_until="domcontentloaded", timeout=timeout)
+        page.wait_for_timeout(3000)
+        links = page.query_selector_all('a[href*="/remote-jobs/"]')
+        seen = set()
+        for el in links[:80]:
+            try:
+                title = _clean_text(_safe_text(el))
+                href = el.get_attribute("href") or ""
+                # Category hubs read "<X> jobs" ("Data analyst jobs") — not jobs.
+                if re.search(r'\bjobs\s*$', title, re.I):
+                    continue
+                if not title or not href or not _is_valid_job_title(title):
+                    continue
+                url = _with_base(href, "https://arc.dev")
+                if url in seen:
+                    continue
+                seen.add(url)
+                jobs.append(_job(title, "", url, source, "Arc.dev remote listing"))
+            except Exception:
+                continue
+    except Exception as exc:
+        logger.error(f"{source} Playwright scrape failed: {exc}")
+    if debug:
+        logger.info(f"{source} Playwright returned {len(jobs)} jobs")
+    return jobs[:30]
+
+
+def _scrape_gulftalent(page, debug=False, timeout=30000):
+    """Scrape GulfTalent (JS-rendered + bot-protected)."""
+    jobs = []
+    source = "GulfTalent"
+    try:
+        page.goto("https://www.gulftalent.com/uae/jobs/search?q=developer",
+                  wait_until="domcontentloaded", timeout=timeout)
+        try:
+            page.wait_for_selector("a[href]", timeout=15000)
+        except Exception:
+            pass
+        page.wait_for_timeout(2000)
+        if debug:
+            _log_page_state(page, source)
+        cards = page.query_selector_all('[class*="job-list"] a[href*="/jobs/"], a[href*="/jobs/"]')
+        for el in cards[:50]:
+            try:
+                title = _clean_text(_safe_text(el))
+                href = el.get_attribute("href") or ""
+                if not title or not href or not _is_valid_job_title(title):
+                    continue
+                jobs.append(_job(title, "", _with_base(href, "https://www.gulftalent.com"),
+                                 source, "GulfTalent listing"))
+            except Exception:
+                continue
+    except Exception as exc:
+        logger.error(f"{source} Playwright scrape failed: {exc}")
+    if debug:
+        logger.info(f"{source} Playwright returned {len(jobs)} jobs")
+    return jobs[:30]
+
+
+def _scrape_nofluffjobs(page, debug=False, timeout=30000):
+    """Scrape NoFluffJobs (JS-rendered)."""
+    jobs = []
+    source = "NoFluffJobs"
+    try:
+        page.goto("https://nofluffjobs.com/pl/remote", wait_until="domcontentloaded", timeout=timeout)
+        try:
+            page.wait_for_selector("a[href]", timeout=15000)
+        except Exception:
+            pass
+        page.wait_for_timeout(2000)
+        if debug:
+            _log_page_state(page, source)
+        cards = page.query_selector_all('a[href*="/job/"]')
+        for el in cards[:50]:
+            try:
+                title = _clean_text(_safe_text(el))
+                href = el.get_attribute("href") or ""
+                if not title or not href or not _is_valid_job_title(title):
+                    continue
+                jobs.append(_job(title, "", _with_base(href, "https://nofluffjobs.com"),
+                                 source, "NoFluffJobs listing"))
+            except Exception:
+                continue
+    except Exception as exc:
+        logger.error(f"{source} Playwright scrape failed: {exc}")
+    if debug:
+        logger.info(f"{source} Playwright returned {len(jobs)} jobs")
+    return jobs[:30]
+
+
+def _scrape_lemon(page, debug=False, timeout=30000):
+    """Scrape Lemon.io role pages (verified 2026-09-21: /for-developers/ is a
+    marketing hub with no listings; real projects live on role pages like
+    /for-developers/full-stack-developer-jobs). Project cards expose a heading
+    plus an 'Apply now'/'See more details' link, so extract headings and pair
+    each with its nearest link."""
+    jobs = []
+    source = "Lemon"
+    role_pages = [
+        "https://lemon.io/for-developers/full-stack-developer-jobs",
+        "https://lemon.io/for-developers/back-end-engineer-jobs",
+        "https://lemon.io/for-developers/front-end-developer-jobs",
+    ]
+    seen = set()
+    try:
+        for role_url in role_pages:
+            try:
+                page.goto(role_url, wait_until="domcontentloaded", timeout=timeout)
+                page.wait_for_timeout(3000)
+            except Exception as exc:
+                logger.error(f"{source} goto failed for {role_url}: {exc}")
+                continue
+            heads = page.query_selector_all("h2, h3, h4")
+            for h in heads[:60]:
+                try:
+                    title = _clean_text(_safe_text(h))
+                    if not title or not _is_valid_job_title(title):
+                        continue
+                    # Nearest link: enclosing anchor, else following Apply/Details link
+                    href = ""
+                    try:
+                        up = h.query_selector("xpath=ancestor::a[1]")
+                        if up is not None:
+                            href = up.get_attribute("href") or ""
+                    except Exception:
+                        pass
+                    if not href:
+                        try:
+                            sib = h.query_selector(
+                                "xpath=following::a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'apply')"
+                                " or contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'see more')][1]")
+                            if sib is not None:
+                                href = sib.get_attribute("href") or ""
+                        except Exception:
+                            pass
+                    url = _with_base(href, "https://lemon.io") if href else role_url
+                    if url in seen:
+                        continue
+                    seen.add(url)
+                    jobs.append(_job(title, "", url, source, "Lemon.io project listing"))
+                except Exception:
+                    continue
+            if len(jobs) >= 30:
+                break
+    except Exception as exc:
+        logger.error(f"{source} Playwright scrape failed: {exc}")
+    if debug:
+        logger.info(f"{source} Playwright returned {len(jobs)} jobs")
+    return jobs[:30]
+
+def _scrape_justjoinit(page, debug=False, timeout=30000):
+    """Scrape JustJoin.it remote listings (client-rendered MUI app; offer data
+    arrives via bot-gated XHR, so a real browser render is required).
+    Offer URLs are /job-offer/<slug>. Card anchor text is a blob — first
+    non-empty line is assumed to be the title; confirm once with debug=True."""
+    jobs = []
+    source = "JustJoinIt"
+    try:
+        page.goto("https://justjoin.it/job-offers/remote", wait_until="domcontentloaded", timeout=timeout)
+        page.wait_for_timeout(4000)
+        cards = page.query_selector_all('a[href*="/job-offer/"]')
+        for el in cards[:50]:
+            try:
+                href = el.get_attribute("href") or ""
+                raw = _safe_text(el)
+                lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+                title = _clean_text(lines[0]) if lines else ""
+                if not title or not href or not _is_valid_job_title(title):
+                    continue
+                jobs.append(_job(title, "", _with_base(href, "https://justjoin.it"),
+                                 source, "JustJoin.it remote listing"))
+            except Exception:
+                continue
+    except Exception as exc:
+        logger.error(f"{source} Playwright scrape failed: {exc}")
+    if debug:
+        logger.info(f"{source} Playwright returned {len(jobs)} jobs")
+    return jobs[:30]
+
+# Registry for single-board testing (python -m tools.playwright_scraper <Board>)
+STEALTH_BOARD_FNS = {
+    "WeWorkRemotely": _scrape_weworkremotely,
+    "Remote.co": _scrape_remoteco,
+    "Wellfound": _scrape_wellfound,
+    "NoDesk": _scrape_nodesk,
+    "YCombinator": _scrape_ycombinator,
+    "Arc": _scrape_arc,
+    "GulfTalent": _scrape_gulftalent,
+    "NoFluffJobs": _scrape_nofluffjobs,
+    "Lemon": _scrape_lemon,
+    "JustJoinIt": _scrape_justjoinit,
+}
+
+
+def test_stealth_board(name, debug=True):
+    """Run one Playwright board in isolation and print count + samples.
+    On 0 results, also prints generic DOM stats to guide selector fixes."""
+    if name not in STEALTH_BOARD_FNS:
+        print(f"Unknown board '{name}'. Available: {sorted(STEALTH_BOARD_FNS)}")
+        return []
+    from playwright.sync_api import sync_playwright
+    headless = os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
+    timeout = int(os.getenv("PLAYWRIGHT_TIMEOUT", "30000"))
+    fn = STEALTH_BOARD_FNS[name]
+    jobs = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=headless)
+        try:
+            page = browser.new_page(viewport={"width": 1920, "height": 1080})
+            jobs = fn(page, debug=True, timeout=timeout)
+            if not jobs or os.getenv("PW_DIAG_LINES", "false").lower() == "true":
+                # Diagnostics for selector fixing: what does the DOM actually have?
+                try:
+                    anchors = page.query_selector_all("a[href]")
+                    print(f"  DIAG: {len(anchors)} total <a> tags")
+                    shown = 0
+                    for a in anchors:
+                        href = (a.get_attribute("href") or "")
+                        if "job" in href.lower():
+                            txt = _clean_text(_safe_text(a))[:100]
+                            print(f"    job-href={href[:120]} | text={txt}")
+                            shown += 1
+                            if shown >= 15:
+                                break
+                    if shown == 0:
+                        print("  DIAG: no href contains 'job'; first 10 anchors:")
+                        for a in anchors[:10]:
+                            href = (a.get_attribute("href") or "")[:100]
+                            txt = _clean_text(_safe_text(a))[:80]
+                            print(f"    href={href} | text={txt}")
+                except Exception as e:
+                    print(f"  DIAG failed: {e}")
+        finally:
+            try:
+                browser.close()
+            except Exception:
+                pass
+    print(f"\n{name}: {len(jobs)} jobs")
+    for j in jobs[:3]:
+        print(f"  - {j['job_title'][:90]} | {j['apply_url'][:100]}")
+    return jobs
+
+
 # Optional: Add retry logic
 def scrape_stealth_boards_with_retry(debug=False, max_retries=3):
     """Scrape with retry logic."""
@@ -364,3 +698,14 @@ def scrape_stealth_boards_with_retry(debug=False, max_retries=3):
                 import time
                 time.sleep(5 * (attempt + 1))
     return []
+
+
+if __name__ == "__main__":
+    import sys
+    logging.basicConfig(level=logging.INFO)
+    arg = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if arg == "all":
+        all_jobs = scrape_stealth_boards(debug=True)
+        print(f"\nTotal: {len(all_jobs)} jobs")
+    else:
+        test_stealth_board(arg, debug=True)

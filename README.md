@@ -31,7 +31,7 @@ An automated system that scrapes 30+ remote job boards, matches jobs to your CV 
 | JobSpy integration | ✅ | Scrapes LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter |
 | Scheduled automation | ✅ | Cron-based scheduler (Mon/Thu full scrape, daily quick checks) |
 | Universal run script | ✅ | `Run.py` works on Windows / Mac / Linux with `--setup` flag |
-| Docker support | 🛠️ | Basic Dockerfile included (requires Playwright + Crawl4AI setup) |
+| Docker support | ✅ | Production-grade Docker + docker-compose with Playwright, persistent volumes & secrets isolation |
 
 ---
 
@@ -309,14 +309,62 @@ python format_jobs_xlsx.py input.xlsx              # overwrites in place
 
 ---
 
-## Docker
+## Docker Deployment
 
-```bash
-docker build -t remote-job-agent .
-docker run --env-file .env remote-job-agent
-```
+The application includes a production-grade container setup with pre-installed Playwright Chromium dependencies, Crawl4AI, and persistent volume mounts.
 
-> **Note:** The Dockerfile is a starting point. You may need to install Playwright browsers (`playwright install chromium`) and run `crawl4ai.install` inside the container for full functionality.
+### Why Use Docker?
+- **Zero Browser Setup Issues:** Automatically installs all 30+ Debian shared libraries required by headless Chromium.
+- **24/7 Unattended Scheduling:** Deploy to any Linux cloud VM (e.g. Hetzner, DigitalOcean, AWS) without keeping your personal computer running.
+- **Strict Security:** Secrets (`.env`, `keys.json`, `my_cv.pdf`) are never baked into image layers; they are excluded via `.dockerignore` and mounted as read-only at runtime.
+- **Data Persistence:** Scraped job caches, deduplication hashes (`seen_jobs.json`), the application tracker database (`data/job_agent.db`), logs, and generated resumes persist across container restarts via host volume bindings.
+
+### Quick Start with Docker Compose
+
+1. **Ensure your configuration files are ready in the project root:**
+   - `.env` (API keys and configuration)
+   - `keys.json` (Google Cloud Service Account)
+   - `my_cv.pdf` (Your CV)
+   - `seen_jobs.json` and `scraped_jobs.json` must exist as **files** (both are gitignored, so a fresh clone won't have them — Docker would otherwise create directories at those paths and the app would crash):
+   ```bash
+   # Linux / Mac
+   touch seen_jobs.json scraped_jobs.json && echo '{}' > seen_jobs.json && echo '[]' > scraped_jobs.json
+   # Windows (PowerShell)
+   '{}' | Out-File -Encoding utf8 seen_jobs.json; '[]' | Out-File -Encoding utf8 scraped_jobs.json
+   ```
+
+2. **Run the 24/7 background scheduler daemon:**
+   ```bash
+   # Build image and start scheduler in background
+   docker compose up -d scheduler
+
+   # View live logs
+   docker compose logs -f scheduler
+
+   # Stop scheduler
+   docker compose down
+   ```
+
+3. **Run on-demand CLI tasks via Docker:**
+   ```bash
+   # Run direct scrape without LLM
+   docker compose run --rm runner python main.py simple
+
+   # Run full CrewAI pipeline
+   docker compose run --rm runner python main.py crewai
+
+   # Run auto-apply on top matching jobs
+   docker compose run --rm runner python main.py apply
+
+   # Run auto-apply with automated Playwright form filling
+   docker compose run --rm runner python main.py apply --playwright
+
+   # Run application tracker CLI
+   docker compose run --rm runner python track.py --stats
+
+   # Run pytest test suite inside container
+   docker compose run --rm runner python -m pytest tests/
+   ```
 
 ---
 

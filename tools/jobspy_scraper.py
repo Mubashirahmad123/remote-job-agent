@@ -5,85 +5,49 @@ from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-def scrape_with_jobspy(debug=False) -> List[Dict[str, Any]]:
-    """
-    Scrape major job boards through JobSpy.
-    
-    Args:
-        debug: If True, print debug information
-        
-    Returns:
-        List of job dictionaries
-    """
+def scrape_with_jobspy(debug=False):
     try:
         from jobspy import scrape_jobs
     except ImportError:
         logger.warning("JobSpy is not installed. Run: pip install python-jobspy")
         return []
 
-    # Get configuration from environment
     results_per_site = int(os.getenv("JOBSPY_RESULTS_PER_SITE", "20"))
     delay = int(os.getenv("JOBSPY_DELAY", "3"))
-    
-    # Job sites to scrape
-    sites = ["linkedin", "indeed", "glassdoor", "google", "zip_recruiter"]
-    
-    # Search terms for developer jobs
-    search_terms = [
-        "backend developer",
-        "fullstack developer", 
-        "node.js developer",
-        "python developer",
-        "react developer",
-        "remote developer"
-    ]
-    
+    country_indeed = os.getenv("JOBSPY_COUNTRY_INDEED", "UK")
+    location = os.getenv("JOBSPY_LOCATION", "United Kingdom")
+    proxies_env = os.getenv("JOBSPY_PROXIES", "")
+    proxies = [p.strip() for p in proxies_env.split(",") if p.strip()] or None
+
+    sites = ["linkedin", "indeed", "zip_recruiter"]  # drop glassdoor/google unless tuned separately
+    search_terms = ["backend developer", "fullstack developer", "node.js developer", "python developer"]
+
     all_jobs = []
-    
     for site in sites:
-        try:
-            if debug:
-                logger.info(f"Scraping {site} with JobSpy...")
-            
-            # Try different search terms if one fails
-            for term in search_terms[:2]:  # Limit to 2 terms per site to avoid rate limits
-                try:
-                    jobs_df = scrape_jobs(
-                        site_name=[site],
-                        search_term=term,
-                        location="remote",
-                        results_wanted=results_per_site,
-                        is_remote=True,
-                        job_type="fulltime",
-                    )
-                    
-                    if jobs_df is not None and not jobs_df.empty:
-                        # Process the jobs
-                        processed = _process_jobspy_results(jobs_df, site)
-                        all_jobs.extend(processed)
-                        if debug:
-                            logger.info(f"Found {len(processed)} jobs from {site} for term '{term}'")
-                        break  # Break if we found jobs with this term
-                        
-                except Exception as e:
-                    if debug:
-                        logger.debug(f"Term '{term}' failed for {site}: {e}")
-                    continue
-            
-            # Add delay between sites to avoid rate limiting
-            if site != sites[-1]:  # Don't sleep after the last site
-                time.sleep(delay)
-                
-        except Exception as exc:
-            logger.error(f"JobSpy failed for {site}: {exc}")
-            continue
-    
-    # Remove duplicates based on job title and company
+        for term in search_terms[:2]:
+            try:
+                jobs_df = scrape_jobs(
+                    site_name=[site],
+                    search_term=term,
+                    location=location,
+                    is_remote=True,
+                    results_wanted=results_per_site,
+                    job_type="fulltime",
+                    country_indeed=country_indeed,
+                    proxies=proxies,
+                )
+                if jobs_df is not None and not jobs_df.empty:
+                    processed = _process_jobspy_results(jobs_df, site)
+                    all_jobs.extend(processed)
+                    logger.info(f"[{site}] '{term}': {len(processed)} jobs")
+                    break
+            except Exception as e:
+                logger.warning(f"[{site}] term '{term}' failed: {e}")
+                continue
+        time.sleep(delay)
+
     unique_jobs = _deduplicate_jobs(all_jobs)
-    
-    if debug:
-        logger.info(f"JobSpy returned {len(unique_jobs)} unique jobs from {len(all_jobs)} total")
-    
+    logger.info(f"JobSpy returned {len(unique_jobs)} unique jobs from {len(all_jobs)} total")
     return unique_jobs
 
 

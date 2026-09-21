@@ -100,7 +100,10 @@ SKILL_SYNONYMS = {
 # REJECTION KEYWORDS (non-dev roles to exclude)
 # =============================================================================
 
-REJECTION_PATTERNS = [
+# Title-only patterns: role/seniority signals that must ONLY fire on the
+# job title. Searching these in summary/company causes false positives
+# (e.g. "content management APIs", "Principal Investments LLC").
+TITLE_ONLY_PATTERNS = [
     # Non-dev roles
     r"\bservice desk\b", r"\bhelp desk\b", r"\bit support\b", r"\btechnical support\b",
     r"\bcustomer support\b", r"\bsystems engineer\b(?!.*software)",  # systems engineer but not software systems
@@ -124,7 +127,10 @@ REJECTION_PATTERNS = [
     r"\bscrum master\b", r"\bproduct owner\b", r"\bproject manager\b", r"\bprogram manager\b",
     r"\btechnical writer\b", r"\bdocumentation\b",
     r"\bux designer\b", r"\bui designer\b", r"\bgraphic designer\b", r"\bproduct designer\b",
-    r"\bdigital marketing\b", r"\bseo\b", r"\bcontent\b", r"\bsocial media\b",
+    # Narrow role phrases — bare "\bcontent\b"/"\bseo\b" rejected real dev
+    # jobs mentioning "content management" or "contentful". Require a role noun.
+    r"\bdigital marketing\b", r"\bcontent (writer|creator|strategist|marketer|manager|specialist|seo)\b",
+    r"\bseo (specialist|analyst|consultant|manager|strategist|writer)\b", r"\bsocial media\b",
     r"\bsolutions architect\b(?!.*software)", r"\benterprise architect\b",
     r"\bconsultant\b", r"\bstrategy\b", r"\banalyst\b(?!.*software|systems)",
 
@@ -139,6 +145,24 @@ REJECTION_PATTERNS = [
     r"\bintern\b",  # remove if you want internships
     r"\bvolunteer\b",
 ]
+
+# Strict body signals: only multi-word, unambiguous role phrases. Single
+# generic words (content, seo, principal, analyst...) must NOT appear here.
+BODY_REJECTION_PATTERNS = [
+    r"\bservice desk\b", r"\bhelp desk\b", r"\btechnical support\b",
+    r"\bnetwork engineer\b", r"\bnetwork administrator\b",
+    r"\bsecurity engineer\b", r"\bcybersecurity\b", r"\bpenetration tester\b",
+    r"\bdata scientist\b", r"\bdata analyst\b", r"\bmachine learning\b",
+    r"\bquality assurance\b", r"\bqa engineer\b", r"\btest engineer\b",
+    r"\bgame developer\b", r"\bgame designer\b",
+    r"\bsalesforce developer\b", r"\bvisualforce\b",
+    r"\bscrum master\b", r"\bproduct owner\b", r"\bproject manager\b",
+    r"\btechnical writer\b", r"\bux designer\b", r"\bui designer\b",
+    r"\bcontent writer\b", r"\bcontent strategist\b", r"\bseo specialist\b",
+]
+
+# Back-compat alias (deprecated — use TITLE_ONLY_PATTERNS instead).
+REJECTION_PATTERNS = TITLE_ONLY_PATTERNS
 
 # Skills that count as "core stack" — language/framework/db.
 # Only these participate in the main coverage ratio; everything else
@@ -234,17 +258,26 @@ class CVMatcher:
         """
         Returns (should_reject, reason).
         True if job is NOT a software/web dev role.
+
+        Title-only patterns fire on the title alone (company names like
+        "Principal Investments" must not reject). Body patterns are a
+        strict multi-word subset applied to summary + tech stack only.
         """
         title = (job.get("job_title") or "").lower()
-        company = (job.get("company") or "").lower()
         summary = (job.get("summary") or "").lower()
         tech_stack = (job.get("tech_stack") or "").lower()
 
-        combined = f"{title} {company} {summary} {tech_stack}"
+        for pattern in TITLE_ONLY_PATTERNS:
+            if re.search(pattern, title, re.IGNORECASE):
+                return True, f"Rejected by title pattern: {pattern}"
 
-        for pattern in REJECTION_PATTERNS:
-            if re.search(pattern, combined, re.IGNORECASE):
-                return True, f"Rejected by pattern: {pattern}"
+        body = f"{summary} {tech_stack}"
+        for pattern in BODY_REJECTION_PATTERNS:
+            if re.search(pattern, body, re.IGNORECASE):
+                return True, f"Rejected by body pattern: {pattern}"
+
+        # Must contain at least one dev indicator (title + body, not company)
+        combined = f"{title} {summary} {tech_stack}"
 
         # Must contain at least one dev indicator
         dev_indicators = [
