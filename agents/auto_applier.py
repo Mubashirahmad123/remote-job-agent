@@ -589,18 +589,20 @@ def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
     except Exception as e:
         print(f"   ❌ Resume error: {e}")
 
-    # Step 2: Generate tailored cover letter
+    # Step 2: Generate tailored cover letter (picked CV first, primary CV fallback)
     print("\n📝 2. Generating tailored cover letter...")
     try:
         from agents.gemini_tools import generate_cover_letter, save_cover_letter_pdf, _load_cv_profile
-        cv_profile = _load_cv_profile()
+        selected_cv_path = job.get("selected_cv_path", "") or None
+        cv_profile = _load_cv_profile(selected_cv_path)
         cover_letter = generate_cover_letter(
             job_title, company, summary,
             applicant_name=APPLICANT_NAME,
             tech_stack=tech_stack,
-            cv_profile=cv_profile
+            cv_profile=cv_profile,
+            selected_cv_path=selected_cv_path
         )
-        cl_path = save_cover_letter_pdf(cover_letter, job_title)
+        cl_path = save_cover_letter_pdf(cover_letter, job_title, company=company, cv_profile=cv_profile)
         if cl_path:
             result["cover_letter_path"] = cl_path
             print(f"   ✅ Cover letter: {cl_path}")

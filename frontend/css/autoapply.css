@@ -1,0 +1,173 @@
+/* =============================================================================
+   AUTOAPPLY.CSS — Minimalist Auto-Apply Cockpit & Clean Telemetry Feed
+   ============================================================================= */
+
+.autoapply-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.safety-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.safety-control-card {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.control-label-group strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.control-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  display: block;
+  min-height: 32px;
+}
+
+.mode-switch-container {
+  display: flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  margin-top: 12px;
+}
+
+.mode-switch-btn {
+  flex: 1;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all var(--transition-fast);
+}
+
+.mode-switch-btn.active {
+  background: var(--accent-emerald-bg);
+  color: var(--accent-emerald);
+  font-weight: 700;
+}
+
+.mode-switch-btn.danger.active {
+  background: var(--accent-rose-bg);
+  color: var(--accent-rose);
+  font-weight: 700;
+}
+
+.mode-switch-btn .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.mode-switch-btn .dot.green { background: var(--accent-emerald); }
+.mode-switch-btn .dot.red { background: var(--accent-rose); }
+
+.control-slider-box {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.control-slider-box input[type="range"] {
+  flex: 1;
+  accent-color: var(--primary-blue);
+}
+
+.slider-badge {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 65px;
+}
+
+.cockpit-action-row {
+  display: flex;
+  gap: 14px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.autoapply-split-row {
+  display: flex;
+  gap: 18px;
+}
+
+.terminal-window {
+  background: #090a0d;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  height: 260px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.term-line {
+  color: #e2e8f0;
+}
+
+.term-cyan { color: var(--accent-cyan); font-weight: 600; }
+.term-indigo { color: var(--primary-blue); font-weight: 600; }
+.term-green { color: var(--accent-emerald); font-weight: 600; }
+.term-amber { color: var(--accent-amber); font-weight: 600; }
+
+.applied-package-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.applied-package-card {
+  padding: 12px 14px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pkg-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pkg-meta {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+@media (max-width: 1200px) {
+  .safety-controls-grid {
+    grid-template-columns: 1fr;
+  }
+}

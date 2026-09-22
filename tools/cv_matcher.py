@@ -132,7 +132,7 @@ TITLE_ONLY_PATTERNS = [
     r"\bdigital marketing\b", r"\bcontent (writer|creator|strategist|marketer|manager|specialist|seo)\b",
     r"\bseo (specialist|analyst|consultant|manager|strategist|writer)\b", r"\bsocial media\b",
     r"\bsolutions architect\b(?!.*software)", r"\benterprise architect\b",
-    r"\bconsultant\b", r"\bstrategy\b", r"\banalyst\b(?!.*software|systems)",
+    r"\bconsultant\b", r"\bstrategy\b", r"\banalyst\b(?!.*(?:software|systems))",
 
     # Seniority gates (optional — remove if you want senior roles)
     r"\bprincipal\b", r"\bstaff engineer\b", r"\bdistinguished\b", r"\bfellow\b",
@@ -300,7 +300,20 @@ class CVMatcher:
         job_skills = self._job_text_to_skills(job_text)
 
         if not job_skills:
-            return {"score": 0, "match_reason": "No recognizable tech skills in job"}
+            # Full schema (same keys as the main return) so consumers can
+            # rely on result["has_core_signal"] etc. without .get() guards.
+            return {
+                "score": 0,
+                "match_reason": "No recognizable tech skills in job",
+                "cv_skills_found": len(self.cv_skills),
+                "job_skills_found": 0,
+                "core_job_skills": 0,
+                "core_matches": 0,
+                "has_core_signal": False,
+                "overlap": 0,
+                "direct_matches": [],
+                "expanded_matches": [],
+            }
 
         core_job_skills = job_skills & CORE_CATEGORIES
         bonus_job_skills = job_skills - CORE_CATEGORIES
@@ -328,34 +341,51 @@ class CVMatcher:
         if core_job_skills:
             core_coverage = len(core_matches) / len(core_job_skills)
         else:
-            # No recognizable core stack in the posting — don't reward this
-            # with full coverage. Only title/bonus points can lift the score.
+            # No recognizable core stack in the posting — coverage stays 0
+            # and the has_core_signal gate below zeroes all bonuses too,
+            # so such jobs always score 0.
             core_coverage = 0
 
-        # Small bonus for matching generic/tooling skills (git, agile, testing, docker, etc.)
-        bonus_points = min(len(bonus_matches) * 2, 5)
+        # Gate: without at least one core-stack overlap (CV skill ∩ job's
+        # language/framework/db), title/tooling/seniority bonuses must not
+        # lift the score. Without this, a job with core_coverage = 0 could
+        # still reach ~20 from title_bonus + bonus_points + seniority_bonus
+        # alone (flat-20 cluster of unrelated titles).
+        has_core_signal = len(core_matches) > 0
 
-        # Bonus: exact (non-synonym) core matches weighted higher
-        exact_bonus = len(direct_matches & CORE_CATEGORIES) * 3
+        # Small bonus for matching generic/tooling skills (git, agile, testing, docker, etc.)
+        bonus_points = min(len(bonus_matches) * 2, 5) if has_core_signal else 0
+
+        # Bonus: exact (non-synonym) core matches weighted higher.
+        # Gated explicitly (not just by implication) so a future redefinition
+        # of core_matches can't silently re-open the flat-20 hole.
+        exact_bonus = len(direct_matches & CORE_CATEGORIES) * 3 if has_core_signal else 0
 
         # Title alignment bonus — capped so title text alone can't dominate the score
         title_bonus = 0
         job_title_norm = title.lower()
-        for kw in self.cv_title_keywords:
-            if kw in job_title_norm.replace(" ", ""):
-                title_bonus += 10
+        if has_core_signal:
+            for kw in self.cv_title_keywords:
+                if kw in job_title_norm.replace(" ", ""):
+                    title_bonus += 10
         title_bonus = min(title_bonus, 10)
 
         # Seniority alignment
         seniority_bonus = 0
         cv_seniority = self.cv_profile.get("seniority", "mid").lower()
-        if cv_seniority in job_title_norm:
+        if has_core_signal and cv_seniority in job_title_norm:
             seniority_bonus = 5
 
         score = min(100, int(core_coverage * 70 + exact_bonus + bonus_points + title_bonus + seniority_bonus))
 
         matched_skills = sorted(all_matches)[:10]
-        match_reason = f"Matched: {', '.join(matched_skills)}" if matched_skills else "Weak skill overlap"
+        if not has_core_signal:
+            match_reason = "No core stack overlap"
+        # Defensive fallback only: has_core_signal=True implies all_matches
+        # is non-empty (it ⊇ core_matches), so this branch is unreachable
+        # today. Kept so the reason is never an empty "Matched: ".
+        else:
+            match_reason = f"Matched: {', '.join(matched_skills)}" if matched_skills else "Weak skill overlap"
 
         return {
             "score": score,
@@ -364,6 +394,7 @@ class CVMatcher:
             "job_skills_found": len(job_skills),
             "core_job_skills": len(core_job_skills),
             "core_matches": len(core_matches),
+            "has_core_signal": has_core_signal,
             "overlap": len(all_matches),
             "direct_matches": sorted(direct_matches),
             "expanded_matches": sorted(expanded_matches - direct_matches),

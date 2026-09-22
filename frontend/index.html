@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remote Job Agent — Autonomous Command Center</title>
+  <meta name="description" content="AI-powered remote job scraping, ATS CV matching, tailored 1-page resume generation, and auto-apply command center.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Modular Component Stylesheets (Easy Debugging & Zero Bundling) -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/jobs.css">
+  <link rel="stylesheet" href="css/resume.css">
+  <link rel="stylesheet" href="css/autoapply.css">
+  <link rel="stylesheet" href="css/tracker.css">
+</head>
+<body class="theme-dark">
+  <!-- App Shell -->
+  <div class="app-layout">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="app-sidebar" id="appSidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        </div>
+        <div class="brand-meta">
+          <span class="brand-title">JOB AGENT</span>
+          <span class="brand-badge">PRO v3.1</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="dashboard" id="navDashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          <span class="nav-label">Command Deck</span>
+          <span class="nav-counter" id="activeJobsBadge">24</span>
+        </button>
+
+        <button class="nav-item" data-tab="jobs" id="navJobs">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 13.255A23.931 23.931 0 0 1 12 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2m4 6h.01M5 20h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z"></path></svg>
+          <span class="nav-label">Curated Jobs</span>
+          <span class="nav-chip-emerald" id="topMatchCountBadge">11 Hot</span>
+        </button>
+
+        <button class="nav-item" data-tab="resume" id="navResume">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          <span class="nav-label">CV & Resume Studio</span>
+        </button>
+
+        <button class="nav-item" data-tab="autoapply" id="navAutoApply">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          <span class="nav-label">Auto-Apply Cockpit</span>
+          <span class="nav-pulse-dot" title="Safety Gate Active"></span>
+        </button>
+
+        <button class="nav-item" data-tab="tracker" id="navTracker">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+          <span class="nav-label">Pipeline Tracker</span>
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer Status -->
+      <div class="sidebar-status-box">
+        <div class="status-indicator-row">
+          <span class="status-dot pulse-emerald"></span>
+          <span class="status-title">Scraper 45+ Active</span>
+        </div>
+        <div class="status-sub">Next run: Mon 09:00 UTC</div>
+        <div class="status-stat-bar">
+          <div class="status-stat-fill" style="width: 60%"></div>
+        </div>
+        <div class="status-stat-label">Daily Apply Cap: <strong>3 / 5</strong></div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Container -->
+    <main class="app-main">
+      <!-- Persistent Top Command Bar -->
+      <header class="app-header">
+        <div class="header-left">
+          <div class="breadcrumb-container">
+            <span class="breadcrumb-root">Remote Job Agent</span>
+            <span class="breadcrumb-sep">/</span>
+            <span class="breadcrumb-current" id="currentViewTitle">Command Deck</span>
+          </div>
+        </div>
+
+        <div class="header-center">
+          <div class="quick-search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="globalSearchInput" class="quick-search-input" placeholder="Search 1,200+ jobs by title, tech stack, company... [⌘K]">
+            <span class="search-key-hint">ESC</span>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <button class="action-btn secondary" id="btnSyncSheets" title="Sync live status with Google Sheets">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+            <span>Sync Sheets</span>
+          </button>
+
+          <button class="action-btn primary" id="btnScrapeNow" title="Trigger instant multi-board scrape">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            <span>Scrape Now</span>
+          </button>
+
+          <!-- Minimalist Dark / Light Mode Toggle -->
+          <button class="theme-toggle-btn" id="btnThemeToggle" title="Toggle Clean Dark / Light Mode">
+            <svg id="themeIconDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            <svg id="themeIconLight" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+          </button>
+
+          <div class="user-profile-badge" title="Active CV Profile: Mubashir">
+            <span class="avatar-initials">MA</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- View 1: Command Deck (Dashboard Overview) -->
+      <section class="view-panel active" id="view-dashboard">
+        <div class="bento-grid">
+          <!-- Metric Card 1 -->
+          <div class="bento-card glow-subtle">
+            <div class="card-header">
+              <span class="card-label">Total Jobs Scraped</span>
+              <span class="badge-tag">Across 45 Boards</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-number" id="metricTotalJobs">1,248</span>
+              <span class="metric-trend positive">+48 today</span>
+            </div>
+            <div class="metric-progress-track">
+              <div class="metric-progress-bar bg-cyan" style="width: 82%"></div>
+            </div>
+            <div class="card-footnote">Rejection engine filtered out 68% irrelevant / senior roles</div>
+          </div>
+
+          <!-- Metric Card 2 -->
+          <div class="bento-card glow-emerald">
+            <div class="card-header">
+              <span class="card-label">Top ATS Matches (≥85%)</span>
+              <span class="badge-emerald">HOT PICKS</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-number text-emerald" id="metricTopMatches">42</span>
+              <span class="metric-subtitle">Ready for instant apply</span>
+            </div>
+            <div class="metric-progress-track">
+              <div class="metric-progress-bar bg-emerald" style="width: 100%"></div>
+            </div>
+            <div class="card-footnote">CV Matcher keyword score + semantic FAISS similarity</div>
+          </div>
+
+          <!-- Metric Card 3 -->
+          <div class="bento-card">
+            <div class="card-header">
+              <span class="card-label">Auto-Apply Daily Cap</span>
+              <span class="badge-amber">SAFETY CAP</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-number text-amber" id="metricDailyCap">3 / 5</span>
+              <span class="metric-subtitle">Remaining: 2 slots</span>
+            </div>
+            <div class="metric-progress-track">
+              <div class="metric-progress-bar bg-amber" style="width: 60%"></div>
+            </div>
+            <div class="card-footnote">Prevents rate-limiting & protects candidate reputation</div>
+          </div>
+
+          <!-- Metric Card 4 -->
+          <div class="bento-card">
+            <div class="card-header">
+              <span class="card-label">Application Pipeline</span>
+              <span class="badge-indigo">ACTIVE</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="metric-number text-indigo" id="metricInterviews">4</span>
+              <span class="metric-subtitle">Interviews Scheduled</span>
+            </div>
+            <div class="metric-progress-track">
+              <div class="metric-progress-bar bg-indigo" style="width: 40%"></div>
+            </div>
+            <div class="card-footnote">18 Applied • 2 Offers • 8 Rejected</div>
+          </div>
+        </div>
+
+        <!-- Secondary Overview Row -->
+        <div class="dashboard-split-row">
+          <div class="dash-widget flex-2">
+            <div class="widget-header">
+              <div class="widget-title-group">
+                <h3>Live Scraper Engine Health</h3>
+                <span class="widget-sub">Monitoring 45+ remote job portals with Playwright Stealth & Crawl4AI</span>
+              </div>
+              <span class="badge-pill-live"><span class="pulse-dot"></span> Online</span>
+            </div>
+            <div class="sources-grid" id="sourcesGrid"></div>
+          </div>
+
+          <div class="dash-widget flex-1">
+            <div class="widget-header">
+              <div class="widget-title-group">
+                <h3>High-Yield Skill Demand</h3>
+                <span class="widget-sub">Based on current active listings</span>
+              </div>
+            </div>
+            <div class="skill-cloud" id="topSkillsCloud"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 2: Curated Jobs (Interactive Job Desk) -->
+      <section class="view-panel" id="view-jobs">
+        <div class="filter-toolbar">
+          <div class="filter-row-primary">
+            <div class="filter-search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="jobFilterSearch" placeholder="Filter by title, company, stack...">
+            </div>
+
+            <div class="role-pill-group" id="rolePillGroup">
+              <button class="role-pill active" data-role="all">All Roles</button>
+              <button class="role-pill" data-role="frontend">Frontend</button>
+              <button class="role-pill" data-role="backend">Backend</button>
+              <button class="role-pill" data-role="fullstack">Fullstack</button>
+              <button class="role-pill" data-role="mobile">Mobile</button>
+            </div>
+
+            <div class="view-switch-group">
+              <button class="view-toggle-btn active" id="btnViewGrid" title="Card Grid View">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+              </button>
+              <button class="view-toggle-btn" id="btnViewTable" title="High-Density Table View">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="filter-row-secondary">
+            <div class="filter-control-item">
+              <label for="scoreRange">Min ATS Match: <strong id="scoreRangeValue">70%</strong></label>
+              <input type="range" id="scoreRange" min="50" max="95" step="5" value="70">
+            </div>
+
+            <div class="filter-control-item">
+              <label for="locationFilter">Timezone / Location:</label>
+              <select id="locationFilter" class="filter-select">
+                <option value="all">All Locations</option>
+                <option value="worldwide">Worldwide / Anywhere</option>
+                <option value="usa">USA / North America</option>
+                <option value="uk">United Kingdom</option>
+                <option value="europe">Europe</option>
+              </select>
+            </div>
+
+            <div class="filter-control-item">
+              <label for="sourceFilter">Job Board Source:</label>
+              <select id="sourceFilter" class="filter-select">
+                <option value="all">All Sources (45+)</option>
+                <option value="RemoteOK">RemoteOK</option>
+                <option value="Remotive">Remotive</option>
+                <option value="WeWorkRemotely">WeWorkRemotely</option>
+                <option value="LinkedIn">LinkedIn (JobSpy)</option>
+                <option value="JustRemote">JustRemote (Crawl4AI)</option>
+              </select>
+            </div>
+
+            <div class="filter-control-item">
+              <label for="statusFilter">Status:</label>
+              <select id="statusFilter" class="filter-select">
+                <option value="all">All Statuses</option>
+                <option value="new">New (Unreviewed)</option>
+                <option value="reviewed">Reviewed</option>
+                <option value="applied">Applied</option>
+              </select>
+            </div>
+
+            <div class="filter-counter-label">
+              Showing <span id="filteredJobCount">24</span> matching opportunities
+            </div>
+          </div>
+        </div>
+
+        <div class="jobs-display-area">
+          <div class="jobs-grid-container" id="jobsGridContainer"></div>
+          <div class="jobs-table-container hidden" id="jobsTableContainer">
+            <table class="jobs-table">
+              <thead>
+                <tr>
+                  <th style="width: 90px">Match</th>
+                  <th>Job Title & Company</th>
+                  <th>Location / Timezone</th>
+                  <th>Tech Stack</th>
+                  <th>Salary</th>
+                  <th>Source</th>
+                  <th>Date</th>
+                  <th style="width: 140px; text-align: right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="jobsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 3: CV & Resume Studio -->
+      <section class="view-panel" id="view-resume">
+        <div class="studio-grid">
+          <div class="studio-left">
+            <div class="dash-widget">
+              <div class="widget-header">
+                <div class="widget-title-group">
+                  <h3>Master CV Upload</h3>
+                  <span class="widget-sub">Updates <code>my_cv.pdf</code> used for keyword & semantic scoring</span>
+                </div>
+              </div>
+
+              <div class="dropzone-box" id="cvDropzone">
+                <input type="file" id="cvFileInput" accept=".pdf,.docx" style="display: none">
+                <div class="dropzone-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                </div>
+                <div class="dropzone-prompt">
+                  <strong>Drag & drop your CV here</strong>, or <span class="text-indigo">browse files</span>
+                </div>
+                <div class="dropzone-hint">Supports PDF and DOCX (Up to 10MB)</div>
+                <div class="dropzone-active-file" id="dropzoneActiveFile">
+                  <span class="file-tag">Current: <strong>my_cv.pdf</strong> (67.5 KB)</span>
+                  <span class="badge-emerald">Verified Active</span>
+                </div>
+              </div>
+
+              <div class="multi-cv-section">
+                <div class="section-sub-header">
+                  <span class="sub-label">Multi-CV Variants (from <code>cvs/</code>)</span>
+                  <button class="text-link-btn" id="btnAddVariant">+ Add Variant</button>
+                </div>
+                <div class="cv-variant-list">
+                  <div class="cv-variant-card selected">
+                    <div class="variant-info">
+                      <span class="variant-name">Frontend Specialist CV</span>
+                      <span class="variant-meta">React, TypeScript, Next.js • Primary</span>
+                    </div>
+                    <span class="badge-tag">DEFAULT</span>
+                  </div>
+                  <div class="cv-variant-card">
+                    <div class="variant-info">
+                      <span class="variant-name">Fullstack Python CV</span>
+                      <span class="variant-meta">FastAPI, PostgreSQL, Vue • Auto-picks for backend roles</span>
+                    </div>
+                  </div>
+                  <div class="cv-variant-card">
+                    <div class="variant-info">
+                      <span class="variant-name">General Software Engineer</span>
+                      <span class="variant-meta">Broad stack • Fallback</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="dash-widget">
+              <div class="widget-header">
+                <div class="widget-title-group">
+                  <h3>Parsed AI Profile Cache</h3>
+                  <span class="widget-sub">Auto-extracted contact info & skills used for auto-fill</span>
+                </div>
+                <button class="action-btn secondary small" id="btnEditProfile">Edit</button>
+              </div>
+
+              <div class="profile-summary-grid">
+                <div class="profile-field">
+                  <span class="field-label">Full Name</span>
+                  <span class="field-val" id="profName">Mubashir Ahmad</span>
+                </div>
+                <div class="profile-field">
+                  <span class="field-label">Email</span>
+                  <span class="field-val" id="profEmail">mubashir.dev@example.com</span>
+                </div>
+                <div class="profile-field">
+                  <span class="field-label">Phone</span>
+                  <span class="field-val" id="profPhone">+44 7123 456789</span>
+                </div>
+                <div class="profile-field">
+                  <span class="field-label">LinkedIn</span>
+                  <span class="field-val text-indigo" id="profLinkedIn">linkedin.com/in/mubashir1</span>
+                </div>
+                <div class="profile-field full-width">
+                  <span class="field-label">Extracted Core Skills</span>
+                  <div class="skills-wrap" id="profSkills">
+                    <span class="skill-tag">TypeScript</span>
+                    <span class="skill-tag">JavaScript (ES6+)</span>
+                    <span class="skill-tag">React.js</span>
+                    <span class="skill-tag">Next.js</span>
+                    <span class="skill-tag">Node.js</span>
+                    <span class="skill-tag">Python</span>
+                    <span class="skill-tag">FastAPI</span>
+                    <span class="skill-tag">REST APIs</span>
+                    <span class="skill-tag">Docker</span>
+                    <span class="skill-tag">TailwindCSS</span>
+                    <span class="skill-tag">Playwright</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="studio-right">
+            <div class="dash-widget">
+              <div class="widget-header">
+                <div class="widget-title-group">
+                  <h3>On-Demand 1-Page ATS Tailor Engine</h3>
+                  <span class="widget-sub">Generates custom ATS-optimized 1-page PDF matched to any target job</span>
+                </div>
+                <span class="badge-emerald">3-PASS SHRINK ACTIVE</span>
+              </div>
+
+              <div class="tailor-selector-box">
+                <label for="tailorJobSelect">Target Job Posting:</label>
+                <select id="tailorJobSelect" class="filter-select full-width">
+                  <option value="1">Frontend Web Application Developer @ KoboToolbox (92% Match)</option>
+                  <option value="2">Frontend Engineer @ Bjak (88% Match)</option>
+                  <option value="3">Backend Software Engineer @ Airspace Link (85% Match)</option>
+                </select>
+
+                <div class="tailor-action-bar">
+                  <button class="action-btn primary full-width" id="btnGenerateTailored">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                    <span>Generate Tailored Resume & Cover Letter</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="shrink-progress-card hidden" id="shrinkProgressCard">
+                <div class="shrink-header">
+                  <span class="shrink-title">AI Tailoring & ATS Page-Fit Engine</span>
+                  <span class="shrink-status-badge">Processing...</span>
+                </div>
+                <div class="shrink-steps">
+                  <div class="shrink-step done" id="step1">
+                    <span class="step-num">1</span>
+                    <span class="step-text">Role category detected: <strong>Frontend</strong> (Adjusting tone & skills)</span>
+                  </div>
+                  <div class="shrink-step done" id="step2">
+                    <span class="step-num">2</span>
+                    <span class="step-text">Re-ranking bullet points for keyword density</span>
+                  </div>
+                  <div class="shrink-step active" id="step3">
+                    <span class="step-num">3</span>
+                    <span class="step-text">3-Pass font & margin shrink: <strong>Guaranteed 1 Page</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="generated-preview-card" id="generatedPreviewCard">
+                <div class="doc-preview-header">
+                  <div class="doc-preview-meta">
+                    <h4>Tailored Package Generated: <code>KoboToolbox_Frontend.pdf</code></h4>
+                    <span class="doc-meta-info">1 Page ATS Verified • Slate Header • Unicode Compliant</span>
+                  </div>
+                  <span class="badge-emerald">READY TO DOWNLOAD</span>
+                </div>
+
+                <div class="doc-mock-preview">
+                  <div class="mock-sheet">
+                    <div class="mock-name">MUBASHIR AHMAD</div>
+                    <div class="mock-sub">Frontend Engineer • Remote • mubashir.dev@example.com • github.com/mubashir1</div>
+                    <div class="mock-rule"></div>
+                    <div class="mock-section-title">TECHNICAL EXPERTISE</div>
+                    <div class="mock-text">React, TypeScript, Next.js, Redux, TailwindCSS, REST APIs, Jest, Webpack, Git</div>
+                    <div class="mock-section-title">PROFESSIONAL EXPERIENCE</div>
+                    <div class="mock-bullet">• Architected responsive web applications using React & TypeScript, boosting Lighthouse score by 35%</div>
+                    <div class="mock-bullet">• Engineered component libraries and unified design system tokens with zero layout shift</div>
+                    <div class="mock-bullet">• Integrated automated Playwright testing pipelines reducing regression bugs by 40%</div>
+                  </div>
+                </div>
+
+                <div class="doc-download-bar">
+                  <button class="action-btn secondary" id="btnDownloadResume">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <span>Download Resume PDF</span>
+                  </button>
+                  <button class="action-btn secondary" id="btnDownloadCoverLetter">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                    <span>Download Cover Letter</span>
+                  </button>
+                  <button class="action-btn primary" id="btnDownloadPackage">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path></svg>
+                    <span>Full Package (.ZIP)</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 4: Auto-Apply Cockpit & Safety Center -->
+      <section class="view-panel" id="view-autoapply">
+        <div class="autoapply-container">
+          <div class="dash-widget highlight-border">
+            <div class="widget-header">
+              <div class="widget-title-group">
+                <h3>Autonomous Auto-Apply Safety Cockpit</h3>
+                <span class="widget-sub">Playwright stealth automation with strict human-in-the-loop safeguards</span>
+              </div>
+              <div class="safety-badge-group">
+                <span class="badge-emerald" id="safetyStatusLabel">🛡️ FILL & REVIEW (SAFE)</span>
+              </div>
+            </div>
+
+            <div class="safety-controls-grid">
+              <div class="safety-control-card">
+                <div class="control-label-group">
+                  <strong>Safety Submission Mode</strong>
+                  <span class="control-desc">Controls whether Playwright actually clicks Submit or pauses for review</span>
+                </div>
+                <div class="mode-switch-container">
+                  <button class="mode-switch-btn active" id="btnModeReview">
+                    <span class="dot green"></span> Fill & Review Only
+                  </button>
+                  <button class="mode-switch-btn danger" id="btnModeSubmit">
+                    <span class="dot red"></span> Auto-Submit (Live)
+                  </button>
+                </div>
+              </div>
+
+              <div class="safety-control-card">
+                <div class="control-label-group">
+                  <strong>Minimum Match Score to Apply</strong>
+                  <span class="control-desc">Jobs scoring below this threshold are strictly ignored</span>
+                </div>
+                <div class="control-slider-box">
+                  <span class="slider-badge" id="autoApplyThresholdVal">75%</span>
+                  <input type="range" id="autoApplyThreshold" min="65" max="95" step="5" value="75">
+                </div>
+              </div>
+
+              <div class="safety-control-card">
+                <div class="control-label-group">
+                  <strong>Daily Application Cap</strong>
+                  <span class="control-desc">Hard limit to prevent rate limits and ensure profile quality</span>
+                </div>
+                <div class="control-slider-box">
+                  <span class="slider-badge" id="dailyCapVal">5 / Day</span>
+                  <input type="range" id="dailyCapSlider" min="1" max="15" step="1" value="5">
+                </div>
+              </div>
+            </div>
+
+            <div class="cockpit-action-row">
+              <button class="action-btn primary large" id="btnRunAutoApplyQueue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>Trigger Auto-Apply for Top 3 Jobs Now</span>
+              </button>
+              <button class="action-btn secondary large" id="btnViewScreenshots">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                <span>Open Pre-Submit Verification Screenshots (4)</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="autoapply-split-row">
+            <div class="dash-widget flex-2">
+              <div class="widget-header">
+                <div class="widget-title-group">
+                  <h3>Playwright Execution Telemetry</h3>
+                  <span class="widget-sub">Real-time terminal stream from <code>agents/auto_applier.py</code></span>
+                </div>
+                <span class="badge-tag">STREAM ACTIVE</span>
+              </div>
+              <div class="terminal-window" id="terminalLog">
+                <div class="term-line timestamp">[14:32:01] <span class="term-cyan">[INIT]</span> AutoApplier loaded with state database: data/job_agent.db</div>
+                <div class="term-line timestamp">[14:32:02] <span class="term-indigo">[QUEUE]</span> Loaded 3 candidate jobs scoring >= 75%</div>
+                <div class="term-line timestamp">[14:32:04] <span class="term-green">[JOB #1]</span> Evaluating KoboToolbox (Frontend Developer) - Score: 92%</div>
+                <div class="term-line timestamp">[14:32:06] <span class="term-cyan">[ATS]</span> Detected Greenhouse form at https://boards.greenhouse.io/...</div>
+                <div class="term-line timestamp">[14:32:08] <span class="term-indigo">[FILL]</span> Populating fields: First Name, Last Name, Email, Phone, LinkedIn</div>
+                <div class="term-line timestamp">[14:32:11] <span class="term-indigo">[UPLOAD]</span> Uploaded tailored resume: apply_packages/job_1/resume.pdf</div>
+                <div class="term-line timestamp">[14:32:14] <span class="term-green">[SCREENSHOT]</span> Captured pre-submission verification proof: screenshots/kobo_review.png</div>
+                <div class="term-line timestamp">[14:32:15] <span class="term-amber">[GATE]</span> AUTO_APPLY_CONFIRM=false. Paused form before submit for human review. Ready!</div>
+              </div>
+            </div>
+
+            <div class="dash-widget flex-1">
+              <div class="widget-header">
+                <div class="widget-title-group">
+                  <h3>Recent Applied Packages</h3>
+                  <span class="widget-sub">Packages generated in <code>apply_packages/</code></span>
+                </div>
+              </div>
+              <div class="applied-package-list" id="appliedPackagesList"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 5: Application Status Tracker (Kanban Pipeline) -->
+      <section class="view-panel" id="view-tracker">
+        <div class="tracker-header-row">
+          <div class="tracker-title-meta">
+            <h2>Application Kanban Pipeline</h2>
+            <p>Track progress from application submission through technical interviews and final offers</p>
+          </div>
+          <div class="tracker-actions">
+            <button class="action-btn secondary" id="btnSyncTrackerSheets">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
+              <span>Sync with APPLIED Sheet Tab</span>
+            </button>
+            <button class="action-btn primary" id="btnNewTrackedJob">+ Add Manual Application</button>
+          </div>
+        </div>
+
+        <div class="kanban-board">
+          <div class="kanban-col">
+            <div class="kanban-col-header">
+              <div class="col-title-wrap">
+                <span class="col-dot bg-indigo"></span>
+                <span class="col-title">Applied</span>
+              </div>
+              <span class="col-count" id="countApplied">4</span>
+            </div>
+            <div class="kanban-cards-area" id="kanbanColApplied"></div>
+          </div>
+
+          <div class="kanban-col">
+            <div class="kanban-col-header">
+              <div class="col-title-wrap">
+                <span class="col-dot bg-amber"></span>
+                <span class="col-title">Under Review</span>
+              </div>
+              <span class="col-count" id="countReview">3</span>
+            </div>
+            <div class="kanban-cards-area" id="kanbanColReview"></div>
+          </div>
+
+          <div class="kanban-col">
+            <div class="kanban-col-header">
+              <div class="col-title-wrap">
+                <span class="col-dot bg-cyan"></span>
+                <span class="col-title">Interviewing</span>
+              </div>
+              <span class="col-count" id="countInterview">4</span>
+            </div>
+            <div class="kanban-cards-area" id="kanbanColInterview"></div>
+          </div>
+
+          <div class="kanban-col">
+            <div class="kanban-col-header">
+              <div class="col-title-wrap">
+                <span class="col-dot bg-emerald"></span>
+                <span class="col-title">Offer Received 🎉</span>
+              </div>
+              <span class="col-count" id="countOffer">2</span>
+            </div>
+            <div class="kanban-cards-area" id="kanbanColOffer"></div>
+          </div>
+
+          <div class="kanban-col">
+            <div class="kanban-col-header">
+              <div class="col-title-wrap">
+                <span class="col-dot bg-rose"></span>
+                <span class="col-title">Archived / Rejected</span>
+              </div>
+              <span class="col-count" id="countRejected">3</span>
+            </div>
+            <div class="kanban-cards-area" id="kanbanColRejected"></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Slide-Over Master-Detail Drawer (Linear Style) -->
+    <div class="drawer-overlay" id="drawerOverlay"></div>
+    <aside class="job-detail-drawer" id="jobDetailDrawer">
+      <div class="drawer-header">
+        <button class="drawer-close-btn" id="btnDrawerClose" title="Close Drawer [ESC]">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+        <div class="drawer-header-actions">
+          <button class="action-btn secondary small" id="btnDrawerSave">⭐ Save</button>
+          <a href="#" target="_blank" class="action-btn primary small" id="btnDrawerApplyNow">
+            <span>Apply on Site</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          </a>
+        </div>
+      </div>
+      <div class="drawer-body" id="drawerBody"></div>
+    </aside>
+
+    <!-- Screenshot Lightbox Modal -->
+    <div class="modal-overlay hidden" id="screenshotModal">
+      <div class="modal-box modal-lg">
+        <div class="modal-header">
+          <h3>Pre-Submission Form Screenshot</h3>
+          <button class="modal-close-btn" id="btnCloseModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="screenshot-viewer">
+            <img id="modalScreenshotImg" src="" alt="Application Form Screenshot">
+          </div>
+          <div class="screenshot-meta">
+            <span id="modalScreenshotJob">Job: Frontend Engineer @ KoboToolbox</span>
+            <span class="badge-tag" id="modalScreenshotTimestamp">Form Filled: Today 14:32</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Component-Wise Modular JavaScript Files -->
+  <script src="js/data/mockData.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/components/toast.js"></script>
+  <script src="js/components/navigation.js"></script>
+  <script src="js/components/dashboard.js"></script>
+  <script src="js/components/jobDesk.js"></script>
+  <script src="js/components/jobDrawer.js"></script>
+  <script src="js/components/resumeStudio.js"></script>
+  <script src="js/components/autoApply.js"></script>
+  <script src="js/components/tracker.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

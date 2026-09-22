@@ -1,0 +1,13 @@
+/* =============================================================================
+   STYLE.CSS — Master CSS Aggregator (Modular Component Architecture)
+   ============================================================================= */
+
+@import url('variables.css');
+@import url('base.css');
+@import url('layout.css');
+@import url('components.css');
+@import url('dashboard.css');
+@import url('jobs.css');
+@import url('resume.css');
+@import url('autoapply.css');
+@import url('tracker.css');

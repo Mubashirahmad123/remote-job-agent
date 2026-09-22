@@ -20,6 +20,7 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GLM_API_KEY = os.getenv("GLM_API_KEY", "")
+GLM_MODEL = os.getenv("GLM_MODEL", "glm-4")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
@@ -79,7 +80,7 @@ def _call_glm(prompt: str) -> str:
         raise Exception("GLM not available")
     client = ZhipuAI(api_key=GLM_API_KEY)
     response = client.chat.completions.create(
-        model="glm-4",
+        model=GLM_MODEL,
         messages=[{"role": "user", "content": prompt}],
     )
     if response and response.choices:
@@ -181,7 +182,7 @@ def generate_with_fallback(prompt: str, task: str = "cover_letter") -> str:
 
     if GLM_AVAILABLE:
         try:
-            print(f"  [{task}] Trying GLM-4...")
+            print(f"  [{task}] Trying GLM ({GLM_MODEL})...")
             return _call_glm(prompt)
         except Exception as e:
             errors.append(f"GLM: {e}")
@@ -202,16 +203,34 @@ def generate_with_fallback(prompt: str, task: str = "cover_letter") -> str:
 # CV LOADING
 # =============================================================================
 
-def _load_cv_profile():
-    """Load the CV profile from the parsed CV."""
-    try:
-        cv_path = os.getenv("CV_PATH", "").strip()
-        if not cv_path:
-            return None
-        resolved = Path(cv_path)
+def _resolve_cv_path(cv_path_override=None):
+    """Resolve which CV file to load: explicit pick first, then CV_PATH env."""
+    if cv_path_override:
+        resolved = Path(cv_path_override)
         if not resolved.is_absolute():
             resolved = Path(__file__).resolve().parents[1] / resolved
-        if not resolved.exists():
+        if resolved.exists():
+            return resolved
+        print(f"Selected CV not found: {cv_path_override} — falling back to CV_PATH")
+    cv_path = os.getenv("CV_PATH", "").strip()
+    if not cv_path:
+        return None
+    resolved = Path(cv_path)
+    if not resolved.is_absolute():
+        resolved = Path(__file__).resolve().parents[1] / resolved
+    return resolved if resolved.exists() else None
+
+
+def _load_cv_profile(cv_path_override=None):
+    """Load the CV profile from the parsed CV.
+
+    Uses the per-job picked CV (curator's ``selected_cv_path``) when one is
+    given and exists on disk; falls back to ``CV_PATH`` otherwise so
+    single-CV setups keep working unchanged.
+    """
+    try:
+        resolved = _resolve_cv_path(cv_path_override)
+        if resolved is None:
             return None
         from tools.cv_parser import parse_cv
         return parse_cv(str(resolved))
@@ -297,18 +316,25 @@ def _build_skill_section(cv_profile, job_tech_stack: str, role_category: str) ->
 # COVER LETTER GENERATION
 # =============================================================================
 
-def generate_cover_letter(job_title, company, job_description, applicant_name="Mubashir", 
-                          tech_stack="", cv_profile=None):
+def generate_cover_letter(job_title, company, job_description, applicant_name="Mubashir",
+                          tech_stack="", cv_profile=None, selected_cv_path=None):
     """
     Generate a tailored cover letter with role-specific tone and skill matching.
     Uses LLM fallback chain for reliability.
+
+    Pass the curator's ``selected_cv_path`` (or a pre-loaded ``cv_profile``
+    for that CV) so the letter is tailored to the picked profile when
+    multi-CV matching chose one. Falls back to ``CV_PATH`` otherwise.
     """
+    # Default for the except-path fallback letter (must exist even if
+    # _detect_role_category itself throws on a bad job_title).
+    role_category = "software"
     try:
         print(f"🤖 Generating cover letter for: {job_title} at {company}")
 
-        # Load CV if not provided
+        # Load CV if not provided (picked CV first, primary CV fallback)
         if cv_profile is None:
-            cv_profile = _load_cv_profile()
+            cv_profile = _load_cv_profile(selected_cv_path)
 
         # Detect role for proper tone
         role_category, role_hint, role_noun = _detect_role_category(job_title)
@@ -423,16 +449,18 @@ def generate_cover_letter_from_job_data(job_data_json):
         company = job.get('company', 'the company')
         job_description = job.get('summary', job.get('description', 'Exciting development opportunity'))
         tech_stack = job.get('tech_stack', '')
+        selected_cv_path = job.get('selected_cv_path', '') if isinstance(job, dict) else ''
         
         print(f"📋 Extracted: {job_title} at {company}")
         
-        cv_profile = _load_cv_profile()
+        cv_profile = _load_cv_profile(selected_cv_path or None)
         cover_letter = generate_cover_letter(job_title, company, job_description, 
-                                             "Mubashir", tech_stack, cv_profile)
+                                             "Mubashir", tech_stack, cv_profile,
+                                             selected_cv_path=selected_cv_path or None)
         
         # Save PDF
         try:
-            pdf_path = save_cover_letter_pdf(cover_letter, job_title)
+            pdf_path = save_cover_letter_pdf(cover_letter, job_title, company=company, cv_profile=cv_profile)
             print(f"📄 PDF saved: {pdf_path}")
         except Exception as pdf_error:
             print(f"⚠️ PDF save failed: {pdf_error}")
@@ -490,25 +518,88 @@ def sanitize_filename(s):
     return re.sub(r'[\\/*?:"<>|]', "", s)
 
 
-def save_cover_letter_pdf(text, job_title, folder="cover_letters"):
-    """Save cover letter as Unicode-safe PDF."""
+def save_cover_letter_pdf(text, job_title, company="Company", folder="cover_letters", cv_profile=None, cv_path=None):
+    """Save cover letter as an ATS-optimized, beautifully styled single-page PDF.
+
+    ``cv_profile``/``cv_path`` carry the curator's picked CV so the header
+    contact block matches the profile the letter was tailored from. When
+    omitted, the primary ``CV_PATH`` profile is used (backward compatible).
+    """
     try:
         os.makedirs(folder, exist_ok=True)
-        now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"{sanitize_filename(job_title)}_{now}.pdf"
+        now_str = datetime.now().strftime("%B %d, %Y")
+        now_file = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"{sanitize_filename(job_title)}_{now_file}.pdf"
         filepath = os.path.join(folder, filename)
 
-        pdf = UnicodePDF()
-        pdf.set_bold(14)
-        pdf.multi_cell(0, 10, f"Cover Letter: {job_title}")
-        pdf.set_normal(11)
-        pdf.multi_cell(0, 8, text)
+        if cv_profile is None:
+            cv_profile = _load_cv_profile(cv_path)
+        candidate_name = cv_profile.get("name", "Applicant") if cv_profile else "Applicant"
+        email = cv_profile.get("email", "") if cv_profile else ""
+        phone = cv_profile.get("phone", "") if cv_profile else ""
+        location = cv_profile.get("location", "") if cv_profile else ""
+        linkedin = cv_profile.get("linkedin", "") if cv_profile else ""
+        github = cv_profile.get("github", "") if cv_profile else ""
+
+        contact_parts = [p for p in [email, phone, location, linkedin, github] if p]
+
+        passes = [
+            {"margin": 14, "font_size": 10.5, "line_height": 5.2, "gap": 4},
+            {"margin": 12, "font_size": 9.5,  "line_height": 4.6, "gap": 3},
+            {"margin": 10, "font_size": 9.0,  "line_height": 4.2, "gap": 2},
+        ]
+
+        for pass_cfg in passes:
+            pdf = UnicodePDF(margin=pass_cfg["margin"])
+            font_size = pass_cfg["font_size"]
+            lh = pass_cfg["line_height"]
+            gap = pass_cfg["gap"]
+
+            # Header matching resume
+            pdf.add_header(candidate_name, title=f"Application: {job_title}", contact_info=contact_parts)
+
+            # Date & Subject Line
+            pdf.set_normal(9)
+            pdf.use_text_color(pdf.COLOR_MUTED)
+            pdf.cell(0, 5, f"Date: {now_str}", align='L', new_line=True)
+            if company and company != "Company" and company != "the company":
+                pdf.cell(0, 5, f"To: Hiring Manager at {company}", align='L', new_line=True)
+            
+            pdf.ln(2)
+            pdf.set_bold(10)
+            pdf.use_text_color(pdf.COLOR_SECONDARY)
+            pdf.cell(0, 5, f"RE: {job_title} Position", align='L', new_line=True)
+            pdf.ln(gap)
+
+            # Body Paragraphs
+            paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
+            for p in paragraphs:
+                if p.startswith("#") or p.startswith("RE:") or p.startswith("Subject:"):
+                    continue
+                
+                # Check for signature closing
+                if p.lower().startswith("best regards") or p.lower().startswith("sincerely") or p.lower().startswith("thank you"):
+                    pdf.ln(gap)
+                    pdf.set_bold(10)
+                    pdf.use_text_color(pdf.COLOR_PRIMARY)
+                    pdf.multi_cell(pdf.get_printable_width(), lh, p)
+                else:
+                    pdf.set_normal(font_size)
+                    pdf.use_text_color(pdf.COLOR_TEXT)
+                    pdf.multi_cell(pdf.get_printable_width(), lh, p)
+                    pdf.ln(gap)
+
+            if pdf.page_count <= 1:
+                pdf.output(filepath)
+                print(f"[OK] ATS 1-page Cover Letter saved to: {filepath}")
+                return filepath
+
         pdf.output(filepath)
-        
-        print(f"✅ Cover letter saved to: {filepath}")
+        print(f"[OK] ATS Cover Letter saved to: {filepath} (Pass 3 compact)")
         return filepath
+
     except Exception as e:
-        print(f"❌ PDF save error: {e}")
+        print(f"[ERROR] PDF save error: {e}")
         return None
 
 

@@ -21,6 +21,7 @@ from tools.sheet_writer import append_rows, get_all_rows, get_sheet, get_or_crea
 from tools.cv_parser import parse_cv
 from tools.deduplicator import load_seen_hashes, save_seen_hashes
 from tools.yield_tracker import YieldTracker, count_by_source
+from tools.cv_library import get_library as _get_cv_library
 
 # Try to import semantic matcher (Phase 2 feature)
 try:
@@ -77,6 +78,25 @@ if cv_path:
     else:
         print(f"⚠️ CV not found: {cv_path}")
 
+# ------------------------------------------------------------------
+# Multi-CV library (Feature 3: Personalisation)
+# Activated when CV_DIR is set; falls back to single CV_PATH otherwise.
+# ------------------------------------------------------------------
+print("\n✨ Loading CV library...")
+_CV_LIBRARY = _get_cv_library()
+if not _CV_LIBRARY.is_empty:
+    _CV_LIBRARY.summary()
+
+# If CV_DIR provided CVs but no single CV_PATH gave a primary profile,
+# use the first registered CV as the backward-compat CV_PROFILE.
+if not CV_MATCHING_ENABLED and not _CV_LIBRARY.is_empty:
+    _CV_LIBRARY._ensure_parsed(_CV_LIBRARY.cvs[0])
+    _primary = _CV_LIBRARY.cvs[0]["profile"]
+    if _primary:
+        CV_PROFILE = _primary
+        CV_MATCHING_ENABLED = True
+        print(f"✅ CV matching enabled via CV_DIR (min score: {MIN_SCORE})")
+
 
 # =============================================================================
 # REJECTION ENGINE (delegated to cv_matcher.py)
@@ -85,12 +105,29 @@ if cv_path:
 # Reusable matcher instance (initialized once when CV is available)
 _CV_MATCHER = None
 
+# Per-profile scorer cache: CVMatcher construction (skill extraction) is
+# deterministic per profile, so reuse instances across jobs. Keyed by the
+# selected CV path (or "primary" for the single-CV fallback). This removes
+# the per-job construction cost in single-CV setups while staying correct
+# for multi-CV routing (each picked profile gets its own cached matcher).
+_MATCHER_CACHE = {}
+
 def _get_cv_matcher():
     global _CV_MATCHER
     if _CV_MATCHER is None and CV_MATCHING_ENABLED and CV_PROFILE:
         from tools.cv_matcher import CVMatcher
         _CV_MATCHER = CVMatcher(CV_PROFILE)
     return _CV_MATCHER
+
+
+def _get_matcher_for_profile(scoring_profile, cache_key):
+    """Return a cached CVMatcher for the given profile (keyed by CV path)."""
+    matcher = _MATCHER_CACHE.get(cache_key)
+    if matcher is None:
+        from tools.cv_matcher import CVMatcher as _CVMatcher
+        matcher = _CVMatcher(scoring_profile)
+        _MATCHER_CACHE[cache_key] = matcher
+    return matcher
 
 
 def _should_reject(job: dict) -> tuple:
@@ -386,22 +423,33 @@ def curate(raw_jobs: list, tracker=None) -> dict:
         semantic_score = 0
         semantic_computed = False
         match_reason = "No CV matching"
-        
-        if CV_MATCHING_ENABLED and CV_PROFILE:
-            matcher = _get_cv_matcher()
-            if matcher:
-                score_result = matcher.score(job)
-                keyword_score = score_result.get("score", 0)
-                match_reason = score_result.get("match_reason", "")
-            
-            # Semantic scoring (Phase 2)
+
+        # --- Multi-CV: pick the best CV for this specific job ---
+        selected_cv_path = ""
+        selected_cv_name = ""
+        scoring_profile = CV_PROFILE  # fallback to global primary profile
+
+        if not _CV_LIBRARY.is_empty:
+            picked_path, picked_profile, _ = _CV_LIBRARY.pick_best(job)
+            if picked_path and picked_profile:
+                selected_cv_path = picked_path
+                selected_cv_name = Path(picked_path).name
+                scoring_profile = picked_profile
+
+        if CV_MATCHING_ENABLED and scoring_profile:
+            scorer = _get_matcher_for_profile(scoring_profile, selected_cv_path or "primary")
+            score_result = scorer.score(job)
+            keyword_score = score_result.get("score", 0)
+            match_reason = score_result.get("match_reason", "")
+
+            # Semantic scoring (Phase 2) — always uses the primary CV embeddings
             if SEMANTIC_AVAILABLE and CV_EMBEDDINGS:
                 try:
                     semantic_score = score_semantic(job, CV_EMBEDDINGS)
                     semantic_computed = True
                 except Exception as e:
                     print(f"   ⚠️ Semantic scoring failed for {job.get('job_title', '')[:40]}: {e}")
-        
+
         # Freshness boost (ranking only — never gates the threshold)
         freshness = _calculate_freshness_boost(job.get("posted_date_iso", ""))
 
@@ -425,7 +473,10 @@ def curate(raw_jobs: list, tracker=None) -> dict:
         job["semantic_computed"] = semantic_computed
         job["match_reason"] = match_reason
         job["freshness_boost"] = freshness
-        
+        # Attach selected CV so downstream steps (auto_applier, gemini_tools) can use it
+        job["selected_cv_path"] = selected_cv_path
+        job["selected_cv"] = selected_cv_name
+
         if base_score < MIN_SCORE:
             low_match += 1
             print(f"   ⚠️ LOW MATCH ({base_score:.0f}+{freshness:+d}): {job.get('job_title', '')[:50]}")

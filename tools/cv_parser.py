@@ -21,6 +21,7 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GLM_API_KEY = os.getenv("GLM_API_KEY", "")
+GLM_MODEL = os.getenv("GLM_MODEL", "glm-4")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
@@ -80,7 +81,7 @@ def _call_glm(prompt: str) -> str:
         raise Exception("GLM not available")
     client = ZhipuAI(api_key=GLM_API_KEY)
     response = client.chat.completions.create(
-        model="glm-4",
+        model=GLM_MODEL,
         messages=[{"role": "user", "content": prompt}],
     )
     if response and response.choices:

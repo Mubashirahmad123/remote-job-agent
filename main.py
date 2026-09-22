@@ -258,16 +258,18 @@ def _setup_crewai_tools(Agent, Crew, Task, LLM, tool, llm):
             resume_path = generate_resume_for_job(best_job)
             resume_status = f"Resume: {resume_path}" if resume_path else "Resume: FAILED"
 
-            # Generate cover letter
+            # Generate cover letter (picked CV first, primary CV fallback)
             from agents.gemini_tools import generate_cover_letter, save_cover_letter_pdf, _load_cv_profile
-            cv_profile = _load_cv_profile()
+            selected_cv_path = best_job.get('selected_cv_path', '') or None
+            cv_profile = _load_cv_profile(selected_cv_path)
             cover_letter = generate_cover_letter(
                 job_title, company, summary,
                 applicant_name=os.getenv("APPLICANT_NAME", "Mubashir"),
                 tech_stack=tech_stack,
-                cv_profile=cv_profile
+                cv_profile=cv_profile,
+                selected_cv_path=selected_cv_path
             )
-            cl_path = save_cover_letter_pdf(cover_letter, job_title)
+            cl_path = save_cover_letter_pdf(cover_letter, job_title, company=company, cv_profile=cv_profile)
             cl_status = f"Cover Letter: {cl_path}" if cl_path else "Cover Letter: FAILED"
 
             return f"✅ Application materials generated.\n   {resume_status}\n   {cl_status}"
@@ -445,19 +447,21 @@ def _generate_materials_for_job(job):
     except Exception as e:
         print(f"   ❌ Resume: {e}")
 
-    # Cover letter
+    # Cover letter (picked CV first, primary CV fallback)
     try:
         from agents.gemini_tools import generate_cover_letter, save_cover_letter_pdf, _load_cv_profile
-        cv_profile = _load_cv_profile()
+        selected_cv_path = job.get('selected_cv_path', '') or None
+        cv_profile = _load_cv_profile(selected_cv_path)
         cover_letter = generate_cover_letter(
             job.get('job_title', ''),
             job.get('company', ''),
             job.get('summary', ''),
             os.getenv("APPLICANT_NAME", "Mubashir"),
             job.get('tech_stack', ''),
-            cv_profile
+            cv_profile,
+            selected_cv_path=selected_cv_path
         )
-        cl_path = save_cover_letter_pdf(cover_letter, job.get('job_title', ''))
+        cl_path = save_cover_letter_pdf(cover_letter, job.get('job_title', ''), company=job.get('company', 'Company'), cv_profile=cv_profile)
         if cl_path:
             print(f"   ✅ Cover Letter: {cl_path}")
     except Exception as e:
@@ -568,14 +572,16 @@ def run_test_tools():
     print("\n4. Testing cover letter generation...")
     if jobs:
         from agents.gemini_tools import generate_cover_letter, _load_cv_profile
-        cv_profile = _load_cv_profile()
+        selected_cv_path = jobs[0].get('selected_cv_path', '') or None
+        cv_profile = _load_cv_profile(selected_cv_path)
         cl = generate_cover_letter(
             jobs[0].get('job_title', ''),
             jobs[0].get('company', ''),
             jobs[0].get('summary', ''),
             os.getenv("APPLICANT_NAME", "Mubashir"),
             jobs[0].get('tech_stack', ''),
-            cv_profile
+            cv_profile,
+            selected_cv_path=selected_cv_path
         )
         print(f"   ✅ Cover letter: {len(cl)} chars")
         print(f"   Preview: {cl[:150]}...")
