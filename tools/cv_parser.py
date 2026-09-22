@@ -1,7 +1,7 @@
 """
 tools/cv_parser.py
 Extracts structured profile from PDF/DOCX CVs.
-Uses LLM fallback chain (Gemini → GLM → Ollama).
+Uses LLM fallback chain (Gemini → Groq → Mistral → GLM → Ollama).
 Caches parsed profile to avoid re-parsing.
 """
 
@@ -21,8 +21,13 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GLM_API_KEY = os.getenv("GLM_API_KEY", "")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")  # required for Ollama Cloud, empty = local server
 
 try:
     from google import genai as _genai_new
@@ -50,8 +55,12 @@ except ImportError:
 try:
     import requests
     OLLAMA_AVAILABLE = True
+    MISTRAL_AVAILABLE = bool(MISTRAL_API_KEY)
+    GROQ_AVAILABLE = bool(GROQ_API_KEY)
 except ImportError:
     OLLAMA_AVAILABLE = False
+    MISTRAL_AVAILABLE = False
+    GROQ_AVAILABLE = False
 
 
 def _call_gemini(prompt: str) -> str:
@@ -79,11 +88,59 @@ def _call_glm(prompt: str) -> str:
     raise Exception("Empty response")
 
 
+def _call_mistral(prompt: str) -> str:
+    if not MISTRAL_AVAILABLE:
+        raise Exception("Mistral not available")
+    resp = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {MISTRAL_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": MISTRAL_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=120,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    try:
+        return data["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, AttributeError):
+        raise Exception(f"Mistral returned unexpected response: {data}")
+
+
+def _call_groq(prompt: str) -> str:
+    if not GROQ_AVAILABLE:
+        raise Exception("Groq not available")
+    resp = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": GROQ_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=120,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    try:
+        return data["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, AttributeError):
+        raise Exception(f"Groq returned unexpected response: {data}")
+
+
 def _call_ollama(prompt: str) -> str:
     if not OLLAMA_AVAILABLE:
         raise Exception("Ollama not available")
+    headers = {"Authorization": f"Bearer {OLLAMA_API_KEY}"} if OLLAMA_API_KEY else {}
     resp = requests.post(
         f"{OLLAMA_URL}/api/generate",
+        headers=headers,
         json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
         timeout=120,
     )
@@ -95,12 +152,22 @@ def _call_ollama(prompt: str) -> str:
 
 
 def _parse_with_llm(prompt: str, task: str = "cv_parsing") -> str:
-    """Try Gemini → GLM → Ollama."""
+    """Try Gemini → Groq → Mistral → GLM → Ollama."""
     errors = []
     try:
         return _call_gemini(prompt)
     except Exception as e:
         errors.append(f"Gemini: {e}")
+    if GROQ_AVAILABLE:
+        try:
+            return _call_groq(prompt)
+        except Exception as e:
+            errors.append(f"Groq: {e}")
+    if MISTRAL_AVAILABLE:
+        try:
+            return _call_mistral(prompt)
+        except Exception as e:
+            errors.append(f"Mistral: {e}")
     if GLM_AVAILABLE:
         try:
             return _call_glm(prompt)

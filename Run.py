@@ -70,14 +70,18 @@ def check_env_file():
         info("Copy .env.example to .env and fill in your keys.")
         sys.exit(1)
 
-    # Check required keys are not empty
-    required = ["GOOGLE_SHEETS_ID", "GOOGLE_SERVICE_ACCOUNT", "GEMINI_API_KEY"]
+    # Check required keys are not empty (need at least one LLM key)
+    required = ["GOOGLE_SHEETS_ID", "GOOGLE_SERVICE_ACCOUNT"]
+    llm_keys = ["GEMINI_API_KEY", "MISTRAL_API_KEY", "GROQ_API_KEY"]
     missing = []
     with open(env_path) as f:
         content = f.read()
     for key in required:
         if key + "=" not in content or key + "=\n" in content or key + "=your" in content:
             missing.append(key)
+    # Need at least one LLM provider key
+    if not any(k + "=" in content and k + "=\n" not in content for k in llm_keys):
+        missing.append("GEMINI_API_KEY or MISTRAL_API_KEY or GROQ_API_KEY")
     if missing:
         warn(f"These .env keys look empty or unset: {', '.join(missing)}")
     else:
