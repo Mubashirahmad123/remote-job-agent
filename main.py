@@ -25,18 +25,24 @@ load_dotenv(dotenv_path=env_file)
 GOOGLE_SERVICE_ACCOUNT = os.getenv("GOOGLE_SERVICE_ACCOUNT")
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 if not GOOGLE_SERVICE_ACCOUNT or not GOOGLE_SHEETS_ID:
     print("❌ ERROR: Missing GOOGLE_SERVICE_ACCOUNT or GOOGLE_SHEETS_ID in .env")
     exit(1)
 
-if not GEMINI_API_KEY:
-    print("⚠️ WARNING: GEMINI_API_KEY not set. LLM features will fail.")
+if not GEMINI_API_KEY and not MISTRAL_API_KEY and not GROQ_API_KEY:
+    print("⚠️ WARNING: No LLM API key set (GEMINI/MISTRAL/GROQ). LLM features will fail.")
 
 print("✅ Environment loaded successfully")
 print(f"   Google Service Account: {GOOGLE_SERVICE_ACCOUNT}")
 print(f"   Google Sheets ID: {GOOGLE_SHEETS_ID}")
 print(f"   Gemini API Key: {'Loaded' if GEMINI_API_KEY else 'Missing'}")
+print(f"   Mistral API Key: {'Loaded' if MISTRAL_API_KEY else 'Missing'}")
+print(f"   Groq API Key: {'Loaded' if GROQ_API_KEY else 'Missing'}")
 
 
 # =============================================================================
@@ -77,18 +83,45 @@ AUTO_APPLY_PLAYWRIGHT = os.getenv("AUTO_APPLY_PLAYWRIGHT", "false").lower() == "
 # =============================================================================
 
 def _setup_llm():
-    """Setup LLM with available provider."""
+    """Setup LLM with available provider (Gemini or Mistral via MODEL)."""
     Agent, Crew, Task, LLM, tool = _get_crewai()
     if not LLM:
         return None, None, None, None, None
-    
+
+    # Pick API key based on MODEL prefix so `MODEL=mistral/...` or
+    # `MODEL=groq/...` just works.
+    # CrewAI/LiteLLM expects e.g. model="mistral/mistral-medium-latest"
+    # with api_key=MISTRAL_API_KEY, model="groq/llama-3.3-70b-versatile"
+    # with api_key=GROQ_API_KEY, or model="gemini/gemini-2.5-flash"
+    # with api_key=GEMINI_API_KEY.
+    model_lower = MODEL.lower()
+    if model_lower.startswith("mistral"):
+        api_key = MISTRAL_API_KEY
+        # LiteLLM needs the provider prefix
+        model_name = MODEL if "/" in MODEL else f"mistral/{MODEL}"
+        # LiteLLM reads MISTRAL_API_KEY from env — export it for safety
+        if api_key and not os.getenv("MISTRAL_API_KEY"):
+            os.environ["MISTRAL_API_KEY"] = api_key
+    elif model_lower.startswith("groq"):
+        api_key = GROQ_API_KEY
+        model_name = MODEL if "/" in MODEL else f"groq/{MODEL}"
+        if api_key and not os.getenv("GROQ_API_KEY"):
+            os.environ["GROQ_API_KEY"] = api_key
+    else:
+        api_key = GEMINI_API_KEY
+        model_name = MODEL
+
+    if not api_key:
+        print(f"⚠️ No API key for model {model_name}. Set GEMINI_API_KEY, MISTRAL_API_KEY or GROQ_API_KEY.")
+        return Agent, Crew, Task, LLM, tool, None
+
     # Try to use the model from .env
     try:
         llm = LLM(
-            model=MODEL,
-            api_key=GEMINI_API_KEY
+            model=model_name,
+            api_key=api_key
         )
-        print(f"✅ LLM configured: {MODEL}")
+        print(f"✅ LLM configured: {model_name}")
         return Agent, Crew, Task, LLM, tool, llm
     except Exception as e:
         print(f"⚠️ LLM setup failed: {e}")
@@ -225,16 +258,18 @@ def _setup_crewai_tools(Agent, Crew, Task, LLM, tool, llm):
             resume_path = generate_resume_for_job(best_job)
             resume_status = f"Resume: {resume_path}" if resume_path else "Resume: FAILED"
 
-            # Generate cover letter
+            # Generate cover letter (picked CV first, primary CV fallback)
             from agents.gemini_tools import generate_cover_letter, save_cover_letter_pdf, _load_cv_profile
-            cv_profile = _load_cv_profile()
+            selected_cv_path = best_job.get('selected_cv_path', '') or None
+            cv_profile = _load_cv_profile(selected_cv_path)
             cover_letter = generate_cover_letter(
                 job_title, company, summary,
                 applicant_name=os.getenv("APPLICANT_NAME", "Mubashir"),
                 tech_stack=tech_stack,
-                cv_profile=cv_profile
+                cv_profile=cv_profile,
+                selected_cv_path=selected_cv_path
             )
-            cl_path = save_cover_letter_pdf(cover_letter, job_title)
+            cl_path = save_cover_letter_pdf(cover_letter, job_title, company=company, cv_profile=cv_profile)
             cl_status = f"Cover Letter: {cl_path}" if cl_path else "Cover Letter: FAILED"
 
             return f"✅ Application materials generated.\n   {resume_status}\n   {cl_status}"
@@ -412,19 +447,21 @@ def _generate_materials_for_job(job):
     except Exception as e:
         print(f"   ❌ Resume: {e}")
 
-    # Cover letter
+    # Cover letter (picked CV first, primary CV fallback)
     try:
         from agents.gemini_tools import generate_cover_letter, save_cover_letter_pdf, _load_cv_profile
-        cv_profile = _load_cv_profile()
+        selected_cv_path = job.get('selected_cv_path', '') or None
+        cv_profile = _load_cv_profile(selected_cv_path)
         cover_letter = generate_cover_letter(
             job.get('job_title', ''),
             job.get('company', ''),
             job.get('summary', ''),
             os.getenv("APPLICANT_NAME", "Mubashir"),
             job.get('tech_stack', ''),
-            cv_profile
+            cv_profile,
+            selected_cv_path=selected_cv_path
         )
-        cl_path = save_cover_letter_pdf(cover_letter, job.get('job_title', ''))
+        cl_path = save_cover_letter_pdf(cover_letter, job.get('job_title', ''), company=job.get('company', 'Company'), cv_profile=cv_profile)
         if cl_path:
             print(f"   ✅ Cover Letter: {cl_path}")
     except Exception as e:
@@ -535,14 +572,16 @@ def run_test_tools():
     print("\n4. Testing cover letter generation...")
     if jobs:
         from agents.gemini_tools import generate_cover_letter, _load_cv_profile
-        cv_profile = _load_cv_profile()
+        selected_cv_path = jobs[0].get('selected_cv_path', '') or None
+        cv_profile = _load_cv_profile(selected_cv_path)
         cl = generate_cover_letter(
             jobs[0].get('job_title', ''),
             jobs[0].get('company', ''),
             jobs[0].get('summary', ''),
             os.getenv("APPLICANT_NAME", "Mubashir"),
             jobs[0].get('tech_stack', ''),
-            cv_profile
+            cv_profile,
+            selected_cv_path=selected_cv_path
         )
         print(f"   ✅ Cover letter: {len(cl)} chars")
         print(f"   Preview: {cl[:150]}...")

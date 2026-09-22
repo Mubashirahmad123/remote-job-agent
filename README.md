@@ -1,6 +1,6 @@
 # Remote Job Agent
 
-An automated system that scrapes 30+ remote job boards, matches jobs to your CV using AI, and saves curated results to Google Sheets — all running on a scheduled cron.
+An automated system that scrapes 45+ remote job boards, matches jobs to your CV using AI, and saves curated results to Google Sheets — all running on a scheduled cron.
 
 ---
 
@@ -10,12 +10,14 @@ An automated system that scrapes 30+ remote job boards, matches jobs to your CV 
 |---|---|---|---|---|
 | Multi-source scraping | ✅ | 45+ job boards via APIs, HTML parsing, Playwright stealth, JobSpy, and Crawl4AI |
 | **Smart job filters** | ✅ | Only web/software dev roles — excludes ML, AI, Network, DevOps, SRE, Security, QA, Game, Blockchain, Embedded, Salesforce, and senior/lead roles |
-| CV-based job matching | ✅ | Parses your PDF/DOCX CV via Gemini, local keyword scoring (no API calls per job) |
-| **Semantic job matching** | ✅ | Optional FAISS + sentence-transformers for cosine-similarity scoring (catches synonyms) — `pip install sentence-transformers faiss-cpu` |
+| CV-based job matching | ✅ | Parses your PDF/DOCX CV via LLM fallback chain, local keyword scoring (no API calls per job) |
+| **Multi-CV matching** | 🟡 Partial | `CV_DIR=cvs/` — auto-picks the best CV per job (keyword-based); pick recorded as `selected_cv`/`selected_cv_path` per job and used for scoring, resume + cover-letter generation. Semantic scoring still uses the primary CV only |
+| **ATS 1-page resume + cover letter** | ✅ | Multi-pass shrink engine guarantees exactly 1 page; slate/navy styled header, section rules, hanging-indent bullets (verified with pdfplumber) |
+| **Semantic job matching** | ✅ | Optional FAISS + sentence-transformers for cosine-similarity scoring (catches synonyms) — `pip install sentence-transformers faiss-cpu`, then build the index with `python -m tools.embedding_matcher` (required — without `cv_embeddings.pkl` scoring silently stays keyword-only) |
 | Duplicate detection | ✅ | MD5 fingerprinting prevents duplicate entries across runs |
 | Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS — with colored score bands, hyperlinks, frozen headers |
 | **AI cover letters with role detection** | ✅ | Detects backend/frontend/fullstack/mobile role from job title and tailors tone, skills, and experience accordingly |
-| **LLM fallback chain** | ✅ | Gemini → GLM-4 (Zhipu) → Ollama (local) — pipeline never crashes from API quota errors |
+| **LLM fallback chain** | ✅ | Gemini → Groq → Mistral → GLM → Ollama Cloud — pipeline never crashes from API quota errors |
 | **Auto-apply pipeline** | ✅ | Generates tailored resume + cover letter, opens apply URL in browser or auto-fills Greenhouse/Lever via Playwright, tracks in APPLIED sheet |
 | **Tailored resume generation** | ✅ | Generates ATS-optimized resume PDF matched to each job's tech stack `python main.py resume` |
 | **Country/location filter** | ✅ | 452-country detection — blocks jobs from non-whitelisted countries, allows 198 whitelisted terms |
@@ -26,7 +28,7 @@ An automated system that scrapes 30+ remote job boards, matches jobs to your CV 
 | Sheet formatting (xlsx export) | ✅ | `format_jobs_xlsx.py` — professional Excel formatting with same visual style |
 | Standalone cleanup CLI | ✅ | `python tools/sheet_writer.py --cleanup [days]` — run cleanup + formatting anytime |
 | Excel cleanup + format | ✅ | `clean_jobs.py` — extracts company from URLs, strips HTML, deduplicates tags, removes senior roles; `format_jobs_xlsx.py` — professional xlsx formatting |
-| Playwright stealth scraper | ✅ | Scrapes Cloudflare-protected boards (WeWorkRemotely, Remote.co, Wellfound, NoDesk) |
+| Playwright stealth scraper | ✅ | Scrapes JS-rendered/bot-gated boards (WeWorkRemotely, Remote.co, Wellfound, NoDesk, YCombinator, Arc, GulfTalent, NoFluffJobs, Lemon, JustJoinIt — verified live 2026-09-22, 19 jobs) |
 | Crawl4AI scraper | ✅ | AI-native crawler for JustRemote |
 | JobSpy integration | ✅ | Scrapes LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter |
 | Scheduled automation | ✅ | Cron-based scheduler (Mon/Thu full scrape, daily quick checks) |
@@ -39,7 +41,7 @@ An automated system that scrapes 30+ remote job boards, matches jobs to your CV 
 
 - Python 3.11+
 - A Google Cloud service account (for Sheets API) → save as `keys.json`
-- A Gemini API key
+- At least one LLM API key: `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `GLM_API_KEY`, or `OLLAMA_API_KEY` (Ollama Cloud)
 - (Optional) Adzuna free API credentials
 
 ---
@@ -134,19 +136,20 @@ remote-job-agent/
 │   ├── __init__.py
 │   ├── scrapper.py           # 45+ job board scrapers (API, HTML, RSS)
 │   ├── curator.py            # Dedup, CV matching, quality ranking, sheet save
-│   ├── gemini_tools.py       # Cover letters with LLM fallback (Gemini→GLM→Ollama)
-│   └── auto_applier.py       # Auto-apply: resume + cover letter + Playwright form fill
+│   ├── gemini_tools.py       # Cover letters with LLM fallback (Gemini→Groq→Mistral→GLM→Ollama); ATS 1-page cover-letter PDF
+│   └── auto_applier.py       # Auto-apply: resume + cover letter + Playwright form fill (fill-and-review while AUTO_APPLY_CONFIRM=false; never auto-submits)
 ├── tools/
 │   ├── __init__.py
-│   ├── cv_parser.py           # PDF/DOCX CV → structured profile via Gemini
+│   ├── cv_library.py          # Multi-CV library: CV_DIR discovery, per-job pick_best(), single-CV fallback
+│   ├── cv_parser.py           # PDF/DOCX CV → structured profile via LLM fallback chain
 │   ├── cv_matcher.py          # Local keyword job scoring (no API calls)
 │   ├── deduplicator.py        # MD5 fingerprint duplicate detection
-│   ├── embedding_matcher.py   # Optional FAISS semantic scoring (Phase 2)
-│   ├── font_utils.py          # Cross-platform Unicode PDF font resolution (auto-downloads DejaVu)
+│   ├── embedding_matcher.py   # Optional FAISS semantic scoring (Phase 2; primary CV only)
+│   ├── font_utils.py          # UnicodePDF ATS layout engine (headers, sections, bullets, page_count) + DejaVu resolution
 │   ├── sheet_writer.py        # Google Sheets dashboard (5 tabs) + 30-day auto-cleanup
-│   ├── resume_generator.py    # AI-tailored resume PDF per job
+│   ├── resume_generator.py    # AI-tailored ATS 1-page resume PDF per job (3-pass shrink fit)
 │   ├── jobspy_scraper.py      # LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter
-│   ├── playwright_scraper.py  # Stealth browser scraping (WWR, Remote.co, Wellfound, NoDesk)
+│   ├── playwright_scraper.py  # Stealth browser scraping (10 boards incl. JustJoinIt) — `python -m tools.playwright_scraper <Board>`
 │   ├── crawl4ai_scraper.py    # AI-native Crawl4AI scraper for JustRemote
 │   ├── scraper_utils.py       # Text cleaning, date parsing utilities
 │   └── application_tracker.py # APPLIED sheet management (mark, update, list, stats)
@@ -179,7 +182,7 @@ remote-job-agent/
 GOOGLE_SHEETS_ID=your_sheet_id
 GOOGLE_SERVICE_ACCOUNT=keys.json
 GEMINI_API_KEY=your_key
-MODEL=gemini/gemini-2.5-flash
+MODEL=gemini/gemini-2.5-flash  # CrewAI model; groq/... and mistral/... also work (uses matching key)
 RUN_MODE=crewai          # crewai | simple | test | apply | resume
 
 # Job Scraping
@@ -188,9 +191,11 @@ ADZUNA_APP_KEY=your_key
 JOBSPY_RESULTS_PER_SITE=20
 JOBSPY_DELAY=3
 PLAYWRIGHT_HEADLESS=true
+PLAYWRIGHT_TIMEOUT=30000
 
 # CV Matching
 CV_PATH=my_cv.pdf
+CV_DIR=  # optional: folder of CV variants (cvs/); when set, best CV is picked per job, CV_PATH is the fallback
 MIN_MATCH_SCORE=70
 CLEANUP_DAYS=30
 
@@ -198,10 +203,17 @@ CLEANUP_DAYS=30
 # The code ignores this env var. Edit ALLOWED_COUNTRY_TERMS in scrapper.py to change allowed countries.
 ALLOWED_COUNTRIES=uk,united kingdom,new zealand,nz,usa,united states
 
-# LLM Fallback (optional — GLM-4 and Ollama for when Gemini hits rate limits)
+# LLM Fallback (need at least one key — chain is Gemini → Groq → Mistral → GLM → Ollama)
+GEMINI_API_KEY=
+GROQ_API_KEY=
+GROQ_MODEL=openai/gpt-oss-120b
+MISTRAL_API_KEY=
+MISTRAL_MODEL=mistral-medium-latest
 GLM_API_KEY=
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.1
+GLM_MODEL=glm-4
+OLLAMA_API_KEY=  # required only for Ollama Cloud; leave empty for a local server
+OLLAMA_URL=http://localhost:11434  # local server; use https://ollama.com for cloud
+OLLAMA_MODEL=llama3.1  # local model; cloud model in use: gpt-oss:120b
 
 # Auto-Apply
 AUTO_APPLY_ENABLED=false  # auto-apply after pipeline
@@ -228,7 +240,7 @@ CV_EMBEDDINGS_PATH=cv_embeddings.pkl
 ## How It Works
 
 ```
-30+ Job Boards
+45+ Job Boards
      │
      ▼
   agents/scrapper.py     ◄── API calls, HTML parse, Playwright, JobSpy, Crawl4AI
@@ -237,7 +249,7 @@ CV_EMBEDDINGS_PATH=cv_embeddings.pkl
   agents/curator.py       ◄── Dedup → CV score (local + optional semantic) → quality rank → Sheets
      │                    ──   (called by merged Scraper+Curator agent)
      ├─ tools/deduplicator.py    (MD5 fingerprinting)
-     ├─ tools/cv_parser.py       (Gemini CV → profile)
+     ├─ tools/cv_parser.py       (LLM fallback chain CV → profile)
      ├─ tools/cv_matcher.py      (Local keyword scoring, no API calls)
      ├─ tools/embedding_matcher.py  (Optional FAISS semantic scoring, Phase 2)
       └─ tools/sheet_writer.py    (Google Sheets dashboard + cleanup + formatting)
@@ -259,7 +271,7 @@ CV_EMBEDDINGS_PATH=cv_embeddings.pkl
 |---|---|
 | Free APIs | Remotive, RemoteOK, Arbeitnow, Himalayas, Jobicy, The Muse, Adzuna, WorkingNomads, AuthenticJobs (RSS) |
 | HTML (requests+BS4) | RemoteOK, Jobspresso, EU Remote Jobs, Arc, Lemon, FlexJobs, Remote.co, JustRemote, NoDesk, RemoteTech, GoRemote, Remote4me, DailyRemote, Remojobs (×3), RemoteFrontendJobs, FindBacon, LandingJobs, WeAreDevelopers, NoFluffJobs, JustJoinIt, CWJobs, WorkInStartups, BuiltIn, Dice, GulfTalent, Naukri, NaukriGulf, FounditIN, Shine, TimesJobs, TrueUp, RemoteRocketship, RemoteJobsCom, Remotees |
-| Playwright stealth | WeWorkRemotely, Remote.co, Wellfound, NoDesk |
+| Playwright stealth | WeWorkRemotely, Remote.co, Wellfound, NoDesk, YCombinator, Arc, GulfTalent, NoFluffJobs, Lemon, JustJoinIt |
 | JobSpy | LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter |
 | Crawl4AI | JustRemote |
 
@@ -397,8 +409,9 @@ python -c "from tools.cv_parser import parse_cv; profile = parse_cv('my_cv.pdf')
 # Test cover letter
 python -c "from agents.gemini_tools import generate_cover_letter; cl = generate_cover_letter('Full Stack Developer', 'Acme Corp', 'Node.js React role', 'Mubashir'); print(cl[:200])"
 
-# Build CV embeddings for semantic matching
-python -c "from tools.embedding_matcher import build_cv_index; build_cv_index(open('my_cv.pdf','rb').read().decode('utf-8','ignore'))"
+# Build CV embeddings for semantic matching (correct PDF text extraction)
+python -m tools.embedding_matcher
+# or: python -c "from tools.embedding_matcher import build_cv_index_from_file; build_cv_index_from_file('my_cv.pdf')"
 ```
 
 ---

@@ -1,0 +1,86 @@
+/* =============================================================================
+   VARIABLES.CSS — Minimalist Modern Design Tokens (High-Contrast & Dual Theme)
+   ============================================================================= */
+
+:root {
+  /* Minimalist Modern Dark (Default) — Neutral Slate & High Contrast */
+  --bg-canvas: #0c0d0e;
+  --bg-surface: #141518;
+  --bg-surface-glass: rgba(20, 21, 24, 0.92);
+  --bg-surface-elevated: #1c1d22;
+  --bg-surface-hover: #25272e;
+  --bg-card: #141518;
+
+  /* Borders & Dividers */
+  --border-subtle: rgba(255, 255, 255, 0.12);
+  --border-active: #3b82f6;
+  --border-focus: #3b82f6;
+  --border-glass: rgba(255, 255, 255, 0.16);
+
+  /* High-Contrast Text Hierarchy (WCAG AAA) */
+  --text-primary: #ffffff;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-inverse: #0c0d0e;
+
+  /* Refined Signal Accents */
+  --primary-blue: #3b82f6;
+  --primary-blue-glow: rgba(59, 130, 246, 0.25);
+  --accent-cyan: #0ea5e9;
+  --accent-cyan-bg: rgba(14, 165, 233, 0.14);
+  --accent-emerald: #10b981;
+  --accent-emerald-bg: rgba(16, 185, 129, 0.14);
+  --accent-amber: #f59e0b;
+  --accent-amber-bg: rgba(245, 158, 11, 0.14);
+  --accent-rose: #ef4444;
+  --accent-rose-bg: rgba(239, 68, 68, 0.14);
+
+  /* Typography */
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Layout Constants */
+  --sidebar-width: 256px;
+  --header-height: 64px;
+  --drawer-width: 520px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 9999px;
+
+  /* Snappy Transitions */
+  --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-drawer: 320ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Minimalist Clean Light Theme (Enterprise Slate) */
+[data-theme="light"] {
+  --bg-canvas: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-glass: rgba(255, 255, 255, 0.94);
+  --bg-surface-elevated: #f1f5f9;
+  --bg-surface-hover: #e2e8f0;
+  --bg-card: #ffffff;
+
+  --border-subtle: #e2e8f0;
+  --border-active: #2563eb;
+  --border-focus: #2563eb;
+  --border-glass: rgba(0, 0, 0, 0.08);
+
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-inverse: #ffffff;
+
+  --primary-blue: #2563eb;
+  --primary-blue-glow: rgba(37, 99, 235, 0.18);
+  --accent-cyan: #0284c7;
+  --accent-cyan-bg: rgba(2, 132, 199, 0.1);
+  --accent-emerald: #059669;
+  --accent-emerald-bg: rgba(5, 150, 105, 0.1);
+  --accent-amber: #d97706;
+  --accent-amber-bg: rgba(217, 119, 6, 0.1);
+  --accent-rose: #dc2626;
+  --accent-rose-bg: rgba(220, 38, 38, 0.1);
+}

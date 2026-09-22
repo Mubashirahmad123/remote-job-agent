@@ -21,8 +21,14 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GLM_API_KEY = os.getenv("GLM_API_KEY", "")
+GLM_MODEL = os.getenv("GLM_MODEL", "glm-4")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
+MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")  # required for Ollama Cloud, empty = local server
 
 # Try to import Gemini (new SDK first, legacy fallback)
 try:
@@ -53,8 +59,12 @@ except ImportError:
 try:
     import requests
     OLLAMA_AVAILABLE = True
+    MISTRAL_AVAILABLE = bool(MISTRAL_API_KEY)
+    GROQ_AVAILABLE = bool(GROQ_API_KEY)
 except ImportError:
     OLLAMA_AVAILABLE = False
+    MISTRAL_AVAILABLE = False
+    GROQ_AVAILABLE = False
 
 
 def _call_gemini(prompt: str, model_name: str = "gemini-2.5-flash") -> str:
@@ -76,7 +86,7 @@ def _call_glm(prompt: str) -> str:
         raise Exception("GLM not available")
     client = ZhipuAI(api_key=GLM_API_KEY)
     response = client.chat.completions.create(
-        model="glm-4",
+        model=GLM_MODEL,
         messages=[{"role": "user", "content": prompt}],
     )
     if response and response.choices:
@@ -84,12 +94,62 @@ def _call_glm(prompt: str) -> str:
     raise Exception("GLM returned empty response")
 
 
+def _call_mistral(prompt: str) -> str:
+    """Call Mistral API (OpenAI-compatible endpoint, no extra dep needed)."""
+    if not MISTRAL_AVAILABLE:
+        raise Exception("Mistral not available")
+    resp = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {MISTRAL_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": MISTRAL_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=120,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    try:
+        return data["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, AttributeError):
+        raise Exception(f"Mistral returned unexpected response: {data}")
+
+
+def _call_groq(prompt: str) -> str:
+    """Call Groq API (OpenAI-compatible endpoint, no extra dep needed)."""
+    if not GROQ_AVAILABLE:
+        raise Exception("Groq not available")
+    resp = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": GROQ_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=120,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    try:
+        return data["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, AttributeError):
+        raise Exception(f"Groq returned unexpected response: {data}")
+
+
 def _call_ollama(prompt: str) -> str:
-    """Call local Ollama as final fallback."""
+    """Call Ollama (local server or Ollama Cloud) as final fallback."""
     if not OLLAMA_AVAILABLE:
         raise Exception("Ollama not available")
+    headers = {"Authorization": f"Bearer {OLLAMA_API_KEY}"} if OLLAMA_API_KEY else {}
     resp = requests.post(
         f"{OLLAMA_URL}/api/generate",
+        headers=headers,
         json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
         timeout=120,
     )
@@ -102,7 +162,7 @@ def _call_ollama(prompt: str) -> str:
 
 def generate_with_fallback(prompt: str, task: str = "resume") -> str:
     """
-    Try Gemini → GLM → Ollama in sequence.
+    Try Gemini → Groq → Mistral → GLM → Ollama in sequence.
     Returns the first successful response.
     """
     errors = []
@@ -115,10 +175,28 @@ def generate_with_fallback(prompt: str, task: str = "resume") -> str:
         errors.append(f"Gemini: {e}")
         print(f"  [{task}] Gemini failed: {e}")
 
+    # Try Groq fallback
+    if GROQ_AVAILABLE:
+        try:
+            print(f"  [{task}] Trying Groq ({GROQ_MODEL})...")
+            return _call_groq(prompt)
+        except Exception as e:
+            errors.append(f"Groq: {e}")
+            print(f"  [{task}] Groq failed: {e}")
+
+    # Try Mistral fallback
+    if MISTRAL_AVAILABLE:
+        try:
+            print(f"  [{task}] Trying Mistral ({MISTRAL_MODEL})...")
+            return _call_mistral(prompt)
+        except Exception as e:
+            errors.append(f"Mistral: {e}")
+            print(f"  [{task}] Mistral failed: {e}")
+
     # Try GLM fallback
     if GLM_AVAILABLE:
         try:
-            print(f"  [{task}] Trying GLM-4...")
+            print(f"  [{task}] Trying GLM ({GLM_MODEL})...")
             return _call_glm(prompt)
         except Exception as e:
             errors.append(f"GLM: {e}")
@@ -140,16 +218,34 @@ def generate_with_fallback(prompt: str, task: str = "resume") -> str:
 # CV LOADING
 # =============================================================================
 
-def _load_cv_profile():
-    """Load CV profile from parsed CV."""
-    try:
-        cv_path = os.getenv("CV_PATH", "").strip()
-        if not cv_path:
-            return None
-        resolved = Path(cv_path)
+def _resolve_cv_path(cv_path_override=None):
+    """Resolve which CV file to load: explicit pick first, then CV_PATH env."""
+    if cv_path_override:
+        resolved = Path(cv_path_override)
         if not resolved.is_absolute():
             resolved = Path(__file__).resolve().parents[1] / resolved
-        if not resolved.exists():
+        if resolved.exists():
+            return resolved
+        print(f"Selected CV not found: {cv_path_override} — falling back to CV_PATH")
+    cv_path = os.getenv("CV_PATH", "").strip()
+    if not cv_path:
+        return None
+    resolved = Path(cv_path)
+    if not resolved.is_absolute():
+        resolved = Path(__file__).resolve().parents[1] / resolved
+    return resolved if resolved.exists() else None
+
+
+def _load_cv_profile(cv_path_override=None):
+    """Load CV profile from parsed CV.
+
+    Uses the per-job picked CV (curator's ``selected_cv_path``) when one is
+    given and exists on disk; falls back to ``CV_PATH`` otherwise so
+    single-CV setups keep working unchanged.
+    """
+    try:
+        resolved = _resolve_cv_path(cv_path_override)
+        if resolved is None:
             return None
         from tools.cv_parser import parse_cv
         return parse_cv(str(resolved))
@@ -158,16 +254,11 @@ def _load_cv_profile():
         return None
 
 
-def _get_base_resume_text(cv_profile):
-    """Get base resume text from the original CV."""
+def _get_base_resume_text(cv_profile, cv_path_override=None):
+    """Get base resume text from the original CV (picked CV first, CV_PATH fallback)."""
     try:
-        cv_path = os.getenv("CV_PATH", "").strip()
-        if not cv_path:
-            return ""
-        resolved = Path(cv_path)
-        if not resolved.is_absolute():
-            resolved = Path(__file__).resolve().parents[1] / resolved
-        if not resolved.exists():
+        resolved = _resolve_cv_path(cv_path_override)
+        if resolved is None:
             return ""
         
         # Try extract_cv_text first, fallback to reading raw text
@@ -264,15 +355,13 @@ CANDIDATE PROFILE:
 CANDIDATE CV (relevant sections):
 {safe_base}
 
-INSTRUCTIONS:
-1. Write a professional summary (2-3 sentences) that directly addresses THIS job's requirements
-2. List a "Technical Skills" section with technologies mentioned in the job description FIRST, then others
-3. For work experience, rewrite bullet points to emphasize achievements using the job's required tech stack
-4. Keep all factual information accurate — do NOT invent companies, dates, or degrees
-5. Use strong action verbs and quantify achievements where possible
-6. Format as clean markdown with # for name, ## for sections, - for bullet points
-
-Return ONLY the markdown resume. No explanations, no notes.""" 
+INSTRUCTIONS FOR 1-PAGE ATS RESUME:
+1. Keep content ultra-concise to guarantee a 1-PAGE fit.
+2. Write a professional summary (2-3 sentences max, ~40 words) directly aligned with this job.
+3. Include a "Technical Skills" section grouped logically (Languages, Frameworks, Tools/Cloud).
+4. Include top 2-3 work experiences with max 3 bullet points each, highlighting measurable impact.
+5. Use standard markdown headers: # for Candidate Name, ## for Sections, ### for Role | Company | Dates.
+6. Return ONLY markdown text, no preamble or extra notes."""
 
     return prompt
 
@@ -281,11 +370,15 @@ def generate_tailored_resume(job, cv_profile=None):
     """
     Generate a tailored resume for a specific job using LLM with fallback.
     Returns markdown-style resume text.
-    """
-    if cv_profile is None:
-        cv_profile = _load_cv_profile()
 
-    base_text = _get_base_resume_text(cv_profile)
+    When ``cv_profile`` is not given, the job's ``selected_cv_path`` (set by
+    the curator's multi-CV pick) is used first, falling back to ``CV_PATH``.
+    """
+    selected_cv_path = job.get("selected_cv_path", "") if isinstance(job, dict) else ""
+    if cv_profile is None:
+        cv_profile = _load_cv_profile(selected_cv_path or None)
+
+    base_text = _get_base_resume_text(cv_profile, selected_cv_path or None)
     prompt = _build_smart_prompt(job, cv_profile, base_text)
 
     try:
@@ -330,48 +423,36 @@ def _generate_fallback_resume(job, cv_profile):
             cv_profile.get("languages", [])
         )
         
-        # Build experience from CV data
         for exp in cv_profile.get("experience", []):
             company_name = exp.get("company", "Company")
             role = exp.get("title", "Developer")
             duration = exp.get("duration", "")
             desc = exp.get("description", "")
-            experience_lines.append(f"- **{role}** at {company_name} ({duration})")
+            experience_lines.append(f"### {role} | {company_name} | {duration}")
             if desc:
-                experience_lines.append(f"  - {desc[:100]}...")
+                experience_lines.append(f"- {desc[:120]}")
         
-        # Build education from CV data
         for edu in cv_profile.get("education", []):
             degree = edu.get("degree", "Bachelor's Degree")
             school = edu.get("institution", "University")
             year = edu.get("year", "")
-            education_lines.append(f"- {degree}, {school} {year}")
+            education_lines.append(f"- **{degree}**, {school} ({year})")
 
-    # If no structured data, use generic but relevant lines
     if not experience_lines:
         experience_lines = [
-            "- Software Developer at Previous Company",
-            "  - Built web applications using modern frameworks",
-            "  - Developed RESTful APIs and database solutions",
-            "  - Collaborated in agile teams"
+            f"### Software Developer | Technology Company | 2022 - Present",
+            "  - Developed web applications and services using modern frameworks",
+            "  - Built RESTful APIs and database solutions",
+            "  - Collaborated in agile development teams"
         ]
     
     if not education_lines:
         education_lines = ["- Bachelor's degree in Computer Science or related field"]
 
-    contact_line = f"{name}"
-    if email:
-        contact_line += f" | {email}"
-    if phone:
-        contact_line += f" | {phone}"
-    if location:
-        contact_line += f" | {location}"
-
-    resume = f"""# {contact_line}
+    resume = f"""# {name}
 
 ## Professional Summary
-Experienced software developer seeking a {job_title} position. 
-{('Proficient in ' + ', '.join(skills[:8]) + '.' if skills else 'Proficient in modern development technologies and best practices.')}
+Results-driven software developer seeking a {job_title} position. Proficient in modern development tools, clean architecture, and building scalable software solutions.
 
 ## Technical Skills
 {', '.join(skills[:15]) if skills else tech_stack}
@@ -381,94 +462,154 @@ Experienced software developer seeking a {job_title} position.
 
 ## Education
 {chr(10).join(education_lines)}
-
-## Note
-This is a fallback resume generated because AI services were unavailable. 
-Please review and update before submitting.
 """
     return resume
 
 
 # =============================================================================
-# PDF GENERATION — Unicode-safe (imported from font_utils)
+# PDF GENERATION — ATS-Optimized Single-Page Layout Engine
 # =============================================================================
 
 def _clean_markdown_for_pdf(text: str) -> str:
     """Convert markdown to plain text suitable for PDF."""
-    # Remove markdown syntax
-    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Bold
-    text = re.sub(r'\*(.*?)\*', r'\1', text)       # Italic
-    text = re.sub(r'`(.*?)`', r'\1', text)         # Code
-    text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text) # Links
-    text = re.sub(r'#{1,6}\s*', '', text)          # Headers
-    text = re.sub(r'^\s*[-*]\s*', '• ', text, flags=re.M)  # Bullets
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.*?)\*', r'\1', text)
+    text = re.sub(r'`(.*?)`', r'\1', text)
+    text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
+    text = re.sub(r'#{1,6}\s*', '', text)
+    text = re.sub(r'^\s*[-*]\s*', '• ', text, flags=re.M)
     return text
 
 
-def save_resume_pdf(resume_text, job_title, company, folder="resumes"):
-    """Save the tailored resume as a Unicode-safe PDF."""
+def save_resume_pdf(resume_text, job_title, company, folder="resumes", cv_profile=None, cv_path=None, cv_tag=None):
+    """Save the tailored resume as a single-page ATS-optimized PDF.
+
+    ``cv_profile``/``cv_path`` carry the curator's picked CV so the header
+    contact block matches the profile the resume was tailored from. When
+    omitted, the primary ``CV_PATH`` profile is used (backward compatible).
+    ``cv_tag`` (picked-CV stem) is embedded in the filename so the 7-day
+    reuse cache can tell profiles apart.
+    """
     try:
         os.makedirs(folder, exist_ok=True)
         now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         safe_title = sanitize_filename(job_title)[:40]
         safe_company = sanitize_filename(company)[:20]
-        filename = f"{safe_title}_{safe_company}_{now}.pdf"
+        tag_suffix = f"_{cv_tag}" if cv_tag else ""
+        filename = f"{safe_title}_{safe_company}{tag_suffix}_{now}.pdf"
         filepath = os.path.join(folder, filename)
 
-        pdf = UnicodePDF()
-        
-        # Parse markdown and render
-        lines = resume_text.split("\n")
-        in_bullet = False
-        
-        for line in lines:
-            stripped = line.strip()
-            
-            if not stripped:
-                pdf.ln(4)
-                in_bullet = False
-                continue
-            
-            # Name/header (first line starting with #)
-            if stripped.startswith("# ") and lines.index(line) == 0:
-                pdf.set_bold(16)
-                pdf.multi_cell(0, 10, stripped[2:])
-                pdf.ln(2)
-                continue
-            
-            # Section headers
-            if stripped.startswith("## "):
-                pdf.set_bold(13)
-                pdf.multi_cell(0, 10, stripped[3:])
-                pdf.ln(1)
-                in_bullet = False
-                continue
-            
-            # Bullet points
-            if stripped.startswith("- ") or stripped.startswith("• "):
-                pdf.set_normal(10)
-                text = stripped[2:]
-                pdf.multi_cell(0, 7, f"    • {text}")
-                in_bullet = True
-                continue
-            
-            # Indented bullet continuation
-            if in_bullet and stripped.startswith("  "):
-                pdf.set_normal(10)
-                pdf.multi_cell(0, 7, f"      {stripped.strip()}")
-                continue
-            
-            # Regular text
-            pdf.set_normal(10)
-            pdf.multi_cell(0, 7, stripped)
-            in_bullet = False
+        # Multi-pass rendering configs to guarantee 1-page fit
+        passes = [
+            {"margin": 12, "body_size": 9.5, "bullet_lh": 4.2},
+            {"margin": 10, "body_size": 9.0, "bullet_lh": 3.8},
+            {"margin": 8,  "body_size": 8.5, "bullet_lh": 3.5},
+        ]
 
+        # Parse candidate profile for header contact info (prefer the picked CV)
+        if cv_profile is None:
+            cv_profile = _load_cv_profile(cv_path)
+        profile_name = cv_profile.get("name", "").strip() if cv_profile else ""
+        candidate_name = profile_name or "Candidate"
+        email = cv_profile.get("email", "") if cv_profile else ""
+        phone = cv_profile.get("phone", "") if cv_profile else ""
+        location = cv_profile.get("location", "") if cv_profile else ""
+        linkedin = cv_profile.get("linkedin", "") if cv_profile else ""
+        github = cv_profile.get("github", "") if cv_profile else ""
+
+        for pass_idx, pass_cfg in enumerate(passes):
+            pdf = UnicodePDF(margin=pass_cfg["margin"])
+            body_size = pass_cfg["body_size"]
+            bullet_lh = pass_cfg["bullet_lh"]
+
+            lines = resume_text.split("\n")
+            header_rendered = False
+
+            # The profile name is ground truth for the header. The LLM's "# Name"
+            # line is only a fallback when the profile has no name, and a
+            # mismatch is logged (never silently ship a hallucinated name).
+            # Either way the "# ..." line itself is consumed as the header.
+            if lines and lines[0].strip().startswith("# "):
+                top_line = lines[0].strip()[2:].strip()
+                if top_line:
+                    llm_name = top_line.split("|")[0].strip()
+                    if not profile_name:
+                        candidate_name = llm_name or candidate_name
+                    elif llm_name and llm_name.lower() != profile_name.lower():
+                        print(f"⚠️ Resume header name mismatch: profile={profile_name!r} llm={llm_name!r} — using profile")
+                    header_rendered = True
+
+            contact_parts = [p for p in [email, phone, location, linkedin, github] if p]
+            if not contact_parts:
+                print("⚠️ Resume header has no contact info (profile missing email/phone/location)")
+            pdf.add_header(candidate_name, title=job_title, contact_info=contact_parts)
+
+            idx = 1 if header_rendered else 0
+            while idx < len(lines):
+                line = lines[idx]
+                stripped = line.strip()
+
+                if not stripped:
+                    idx += 1
+                    continue
+
+                # Section Headers (## Section)
+                if stripped.startswith("## "):
+                    sec_title = stripped[3:].strip()
+                    pdf.add_section_header(sec_title)
+                    idx += 1
+                    continue
+
+                # Subheaders (### Role | Company | Dates | Location)
+                if stripped.startswith("### "):
+                    sub_txt = stripped[4:].strip()
+                    parts = [p.strip() for p in sub_txt.split("|")]
+                    role = parts[0] if len(parts) > 0 else ""
+                    comp = parts[1] if len(parts) > 1 else ""
+                    dates = parts[2] if len(parts) > 2 else ""
+                    loc = parts[3] if len(parts) > 3 else ""
+                    pdf.add_experience_header(role, comp, dates, loc)
+                    idx += 1
+                    continue
+
+                # Bullet points (- or •)
+                if stripped.startswith("- ") or stripped.startswith("• "):
+                    bullet_text = stripped[2:].strip()
+                    bullet_text = re.sub(r'\*\*(.*?)\*\*', r'\1', bullet_text)
+                    bullet_text = re.sub(r'\*(.*?)\*', r'\1', bullet_text)
+                    pdf.add_bullet(bullet_text, font_size=body_size, line_height=bullet_lh)
+                    idx += 1
+                    continue
+
+                # Bold line pattern **Role** at Company (Dates)
+                if stripped.startswith("**") and " at " in stripped:
+                    m = re.match(r'\*\*(.*?)\*\*\s*at\s*(.*?)(?:\s*\((.*?)\))?$', stripped)
+                    if m:
+                        role, comp, dates = m.group(1), m.group(2), m.group(3) or ""
+                        pdf.add_experience_header(role, comp, dates)
+                        idx += 1
+                        continue
+
+                # Regular text line
+                clean_text = re.sub(r'\*\*(.*?)\*\*', r'\1', stripped)
+                clean_text = re.sub(r'\*(.*?)\*', r'\1', clean_text)
+                pdf.set_normal(body_size)
+                pdf.multi_cell(pdf.get_printable_width(), bullet_lh, clean_text)
+                pdf.ln(1)
+                idx += 1
+
+            if pdf.page_count <= 1:
+                pdf.output(filepath)
+                print(f"[OK] ATS 1-page Resume saved to: {filepath} (Pass {pass_idx+1})")
+                return filepath
+
+        # If Pass 3 still exceeds 1 page, output pass 3
         pdf.output(filepath)
-        print(f"✅ Resume saved to: {filepath}")
+        print(f"[OK] ATS Resume saved to: {filepath} (Pass 3 compact)")
         return filepath
-        
+
     except Exception as e:
-        print(f"❌ Resume PDF save error: {e}")
+        print(f"[ERROR] Resume PDF save error: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -484,17 +625,38 @@ def _job_fingerprint(job) -> str:
     return hashlib.md5(key.encode()).hexdigest()
 
 
+def _cv_cache_tag(job) -> str:
+    """Short tag identifying which CV a cached resume was built from.
+
+    Returns the sanitized picked-CV stem (e.g. ``cv_backend``) or ``""`` for
+    single-CV setups. Embedded in generated filenames so the 7-day reuse
+    cache never serves a resume tailored from a different profile.
+    """
+    selected = job.get("selected_cv_path", "") if isinstance(job, dict) else ""
+    if not selected:
+        return ""
+    stem = Path(selected).stem
+    return sanitize_filename(stem)[:30]
+
+
 def _existing_resume_for_job(job, folder="resumes") -> str:
-    """Check if a resume already exists for this job (last 7 days)."""
+    """Check if a resume already exists for this job (last 7 days).
+
+    When the job carries a picked CV, only a resume built from that same CV
+    (tag embedded in the filename) is reused — never another profile's PDF.
+    """
     if not os.path.exists(folder):
         return None
-    
+
     fingerprint = _job_fingerprint(job)[:8]
     job_title = sanitize_filename(job.get("job_title", ""))[:20]
-    
+    cv_tag = _cv_cache_tag(job)
+
     # Look for existing files matching this job
     for filename in os.listdir(folder):
         if fingerprint in filename and job_title in filename:
+            if cv_tag and cv_tag not in filename:
+                continue  # built from a different CV profile — don't reuse
             filepath = os.path.join(folder, filename)
             # Check if file is less than 7 days old
             file_age = datetime.now() - datetime.fromtimestamp(os.path.getmtime(filepath))
@@ -529,7 +691,10 @@ def generate_resume_for_job(job, output_folder="resumes", skip_existing=True):
             print(f"  ⏭️  Using existing resume (generated {existing})")
             return existing
 
-    cv_profile = _load_cv_profile()
+    # Use the curator's picked CV when one was recorded for this job;
+    # otherwise fall back to the primary CV (single-CV setups).
+    selected_cv_path = job.get("selected_cv_path", "") if isinstance(job, dict) else ""
+    cv_profile = _load_cv_profile(selected_cv_path or None)
     resume_text = generate_tailored_resume(job, cv_profile)
 
     if resume_text:
@@ -537,7 +702,10 @@ def generate_resume_for_job(job, output_folder="resumes", skip_existing=True):
             resume_text,
             job.get("job_title", "Software Developer"),
             job.get("company", "Company"),
-            output_folder
+            output_folder,
+            cv_profile=cv_profile,
+            cv_path=selected_cv_path or None,
+            cv_tag=_cv_cache_tag(job) or None,
         )
         return pdf_path
 

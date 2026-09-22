@@ -1,0 +1,229 @@
+/* =============================================================================
+   DASHBOARD.CSS — Minimalist Bento Grid & High-Contrast Telemetry
+   ============================================================================= */
+
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.bento-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  position: relative;
+  transition: all var(--transition-fast);
+}
+
+.bento-card:hover {
+  border-color: var(--border-active);
+  transform: translateY(-2px);
+}
+
+.bento-card.glow-emerald {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.metric-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.metric-number {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+}
+
+.metric-number.text-emerald { color: var(--accent-emerald); }
+.metric-number.text-amber { color: var(--accent-amber); }
+.metric-number.text-indigo { color: var(--primary-blue); }
+
+.metric-trend.positive {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-emerald);
+}
+
+.metric-subtitle {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.metric-progress-track {
+  height: 5px;
+  background: var(--bg-surface-elevated);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  margin-bottom: 10px;
+  border: 1px solid var(--border-subtle);
+}
+
+.metric-progress-bar {
+  height: 100%;
+  border-radius: var(--radius-pill);
+}
+
+.bg-cyan { background: var(--accent-cyan); }
+.bg-emerald { background: var(--accent-emerald); }
+.bg-amber { background: var(--accent-amber); }
+.bg-indigo { background: var(--primary-blue); }
+.bg-rose { background: var(--accent-rose); }
+
+.card-footnote {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* Secondary Dashboard Row */
+.dashboard-split-row {
+  display: flex;
+  gap: 16px;
+}
+
+.dash-widget {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+}
+
+.dash-widget.highlight-border {
+  border-color: var(--border-active);
+}
+
+.dash-widget.flex-2 { flex: 2; }
+.dash-widget.flex-1 { flex: 1; }
+
+.widget-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.widget-title-group h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.widget-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  display: block;
+}
+
+/* Scraper Sources Grid */
+.sources-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.source-item-card {
+  padding: 12px 14px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all var(--transition-fast);
+}
+
+.source-item-card:hover {
+  border-color: var(--border-active);
+}
+
+.source-meta-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.source-meta-status {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 2px;
+}
+
+.source-count-pill {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent-cyan);
+}
+
+/* Skills Cloud */
+.skill-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.skill-pill {
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.skill-pill .skill-pct {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--primary-blue);
+}
+
+@media (max-width: 1200px) {
+  .bento-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .sources-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .bento-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-split-row {
+    flex-direction: column;
+  }
+  .sources-grid {
+    grid-template-columns: 1fr;
+  }
+}
