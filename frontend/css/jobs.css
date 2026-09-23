@@ -167,11 +167,20 @@
   font-family: var(--font-mono);
 }
 
+/* Jobs Display Area Wrapper */
+.jobs-display-area {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
 /* Jobs Grid View */
 .jobs-grid-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
+  width: 100%;
+  align-items: stretch;
 }
 
 .job-card {
@@ -185,6 +194,8 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   position: relative;
+  min-width: 0;          /* Prevents grid blowout from long content */
+  overflow: hidden;      /* Clip any overflowing children */
 }
 
 .job-card:hover {
@@ -207,6 +218,8 @@
 
 .job-title-group {
   flex: 1;
+  min-width: 0;          /* Allow text truncation inside flex */
+  overflow: hidden;
 }
 
 .job-role-title {
@@ -214,6 +227,9 @@
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .job-company-name {
@@ -224,6 +240,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* Match Score Circular Gauge Badge */
@@ -274,6 +293,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 
 .meta-chip {
@@ -305,12 +325,15 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  word-break: break-word;
+  min-height: 39px;      /* 2 lines × 13px × 1.5 line-height — keeps cards uniform */
 }
 
 .job-tech-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
+  min-height: 24px;      /* Reserve space even with 0 pills — keeps cards aligned */
 }
 
 .tech-tag {
@@ -587,4 +610,17 @@
   color: var(--text-secondary);
   line-height: 1.65;
   white-space: pre-wrap;
+}
+
+/* ===== Responsive: Stack cards on narrow viewports ===== */
+@media (max-width: 600px) {
+  .jobs-grid-container {
+    grid-template-columns: 1fr;
+  }
+  .filter-row-primary {
+    flex-wrap: wrap;
+  }
+  .role-pill-group {
+    flex-wrap: wrap;
+  }
 }

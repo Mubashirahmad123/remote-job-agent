@@ -3,9 +3,11 @@
 ## Project Structure & Module Organization
 
 - `agents/` — pipeline modules: `scrapper.py` (45+ job-board scrapers), `curator.py` (dedup, CV matching, ranking), `gemini_tools.py` (LLM cover letters with fallback), `auto_applier.py` (auto-apply).
+- `api/` — FastAPI Phase 1 reads: `app.py` (thin factory), `deps.py` (auth/CORS), `cache.py` (Sheets TTL cache + snapshot fallback), `schemas.py`, `mappers.py`, `routers/` (one file per group: health, jobs, stats, tracker, system).
+- `frontend/` — vanilla-JS dashboard, no build step: `js/api.js` (one fn per endpoint group), `js/store.js` (state + normalization + mock fallback), `js/components/` (dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply).
+- `tests/` — pytest suites mirroring the modules they test (e.g., `test_auto_applier.py`, `test_api_phase1.py` — faked Sheets, no network).
 - `tools/` — reusable utilities: `cv_parser.py`, `cv_matcher.py`, `deduplicator.py`, `sheet_writer.py`, `resume_generator.py`, and scraper helpers.
 - LLM fallback chain (shared by `gemini_tools.py`, `resume_generator.py`, `cv_parser.py`): Gemini → Groq → Mistral → GLM → Ollama Cloud. Mistral/Groq use OpenAI-compatible endpoints via `requests` (no extra SDK deps); GLM needs `GLM_API_KEY` + `zhipuai` package (model via `GLM_MODEL`, default `glm-4`); Ollama sends `Authorization: Bearer` only when `OLLAMA_API_KEY` is set (empty = local server).
-- `tests/` — pytest suites mirroring the modules they test (e.g., `test_auto_applier.py`).
 - Top-level entry points: `main.py` (CrewAI pipeline), `Run.py` (setup/run), `scheduler.py` (cron), `track.py` (application tracker), `clean_jobs.py` and `format_jobs_xlsx.py` (Excel tooling).
 - Generated artifacts (`apply_packages/`, `cover_letters/`, `resumes/`, `screenshots/`, `cache/`) are gitignored — never commit them.
 

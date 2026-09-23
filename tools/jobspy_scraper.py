@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 def scrape_with_jobspy(debug=False):
     try:
         from jobspy import scrape_jobs
+        from jobspy.jobs import JobType
     except ImportError:
         logger.warning("JobSpy is not installed. Run: pip install python-jobspy")
         return []
@@ -18,6 +19,9 @@ def scrape_with_jobspy(debug=False):
     location = os.getenv("JOBSPY_LOCATION", "United Kingdom")
     proxies_env = os.getenv("JOBSPY_PROXIES", "")
     proxies = [p.strip() for p in proxies_env.split(",") if p.strip()] or None
+    # Installed python-jobspy takes a single `proxy` (str), not `proxies` (list),
+    # and a JobType enum, not a "fulltime" string.
+    proxy = proxies[0] if proxies else None
 
     sites = ["linkedin", "indeed", "zip_recruiter"]  # drop glassdoor/google unless tuned separately
     search_terms = ["backend developer", "fullstack developer", "node.js developer", "python developer"]
@@ -32,9 +36,9 @@ def scrape_with_jobspy(debug=False):
                     location=location,
                     is_remote=True,
                     results_wanted=results_per_site,
-                    job_type="fulltime",
+                    job_type=JobType.FULL_TIME,
                     country_indeed=country_indeed,
-                    proxies=proxies,
+                    proxy=proxy,
                 )
                 if jobs_df is not None and not jobs_df.empty:
                     processed = _process_jobspy_results(jobs_df, site)

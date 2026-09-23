@@ -88,15 +88,20 @@ def update_status(sheets_client, apply_url: str, new_status: str, notes: str = "
     url_col = col.get("apply_url")
     status_col = col.get("status")
     notes_col = col.get("notes")
+    # Timestamp column is optional: tracker header uses `last_updated`, while
+    # the sheet_writer APPLIED_COLUMNS fork (COLUMNS + applied_at/notes) has
+    # no last_updated column. Don't fail in that case — just skip the stamp
+    # so PATCH /api/tracker works on both header forks.
     updated_col = col.get("last_updated")
 
-    if not url_col or not status_col or not updated_col:
+    if not url_col or not status_col:
         return False
 
     for i, row in enumerate(rows[1:], start=2):  # start=2 because row 1 is header
         if len(row) > url_col - 1 and row[url_col - 1] == apply_url:
             sheet.update_cell(i, status_col, new_status)
-            sheet.update_cell(i, updated_col, datetime.now().strftime("%Y-%m-%d %H:%M"))
+            if updated_col:
+                sheet.update_cell(i, updated_col, datetime.now().strftime("%Y-%m-%d %H:%M"))
             if notes and notes_col:
                 existing_notes = row[notes_col - 1] if len(row) >= notes_col else ""
                 new_notes = f"{existing_notes} | {notes}".strip(" |")

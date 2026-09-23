@@ -44,3 +44,9 @@ schedule==1.2.0
 
 #Test
 pytest
+
+# API (Phase 1 reads)
+fastapi==0.141.1
+uvicorn==0.49.0
+pydantic>=2.0,<3.0
+httpx==0.28.1  # required for fastapi.testclient.TestClient (tests/test_api_phase1.py)
