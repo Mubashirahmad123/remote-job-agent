@@ -25,6 +25,21 @@
   height: 14px;
 }
 
+/* Busy/disabled state (e.g. Scrape Now while a run is active) */
+.action-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+  transform: none;
+}
+
+.action-btn:disabled svg {
+  animation: spinBusy 1.2s linear infinite;
+}
+
+@keyframes spinBusy {
+  to { transform: rotate(360deg); }
+}
+
 .action-btn.primary {
   background: var(--primary-blue);
   color: #ffffff;

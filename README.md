@@ -34,6 +34,8 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | Scheduled automation | ✅ | Cron-based scheduler (Mon/Thu full scrape, daily quick checks) |
 | Universal run script | ✅ | `Run.py` works on Windows / Mac / Linux with `--setup` flag |
 | Docker support | ✅ | Production-grade Docker + docker-compose with Playwright, persistent volumes & secrets isolation |
+| FastAPI backend (reads + actions) | ✅ | `api/` — jobs, stats, tracker, refresh, scrape runs, tailored materials, CV profile endpoints over the Sheets cache (see below) |
+| Command Center dashboard | ✅ | `frontend/` — live UI served same-origin at `http://127.0.0.1:8000/` (no CORS issues) |
 
 ---
 
@@ -153,6 +155,24 @@ remote-job-agent/
 │   ├── crawl4ai_scraper.py    # AI-native Crawl4AI scraper for JustRemote
 │   ├── scraper_utils.py       # Text cleaning, date parsing utilities
 │   └── application_tracker.py # APPLIED sheet management (mark, update, list, stats)
+├── api/                      # FastAPI backend (reads + actions)
+│   ├── app.py                # Thin factory: CORS + router includes + static UI mount
+│   ├── deps.py               # CORS origins + Bearer auth (`API_TOKEN`)
+│   ├── cache.py              # Per-tab Sheets cache (TTL) + curated enrichment + snapshot fallback + CV profile/variants
+│   ├── schemas.py            # `JobOut`, `TrackerEntry`, `HealthOut`, `CvProfileOut`, `CvVariant` response models
+│   ├── mappers.py            # Sheet-row → schema converters
+│   ├── materials.py          # Resume/cover-letter generation registry (fp-mapped files)
+│   ├── runs.py               # Background scrape-run registry (single active run)
+│   └── routers/              # One file per group: health, jobs, stats, tracker, system, runs, materials, cv
+├── frontend/                 # Command Center dashboard (no build step, vanilla JS)
+│   ├── index.html            # Shell + all views (deck, jobs, resume, auto-apply, tracker)
+│   ├── css/                  # Per-component stylesheets (see DESIGN.md tokens)
+│   └── js/
+│       ├── api.js            # Live FastAPI client (one fn per endpoint group)
+│       ├── store.js          # Reactive state + backend→UI normalization + mock fallback
+│       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
+├── tests/
+│   └── test_api_*.py etc.   # 136 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
 ├── apply_packages/           # Auto-generated apply packages (resume + cover letter + form data)
 ├── cover_letters/            # Generated PDF cover letters
 ├── resumes/                  # Generated tailored PDF resumes
@@ -309,6 +329,48 @@ python track.py --stats
 # Show jobs due for follow-up
 python track.py --followups
 ```
+
+---
+
+## API + Command Center Dashboard
+
+The FastAPI backend exposes the Sheets pipeline as read endpoints, and the
+dashboard UI is served same-origin so there are never CORS issues.
+
+```bash
+# Run the API + dashboard (http://127.0.0.1:8000/ — open this, not index.html directly)
+venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
+# Interactive docs: http://127.0.0.1:8000/docs
+```
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/health` | `{status, sheets_configured, curated_jobs_loaded, data_source}` — `data_source` is `sheets` \| `snapshot` \| `empty` |
+| `GET /api/jobs?tab=&q=&source=&limit=&offset=` | Enriched jobs from `ALL JOBS` / `TOP MATCHES` / `GOOD MATCHES` |
+| `GET /api/jobs/{fingerprint}` | One job by MD5 fingerprint |
+| `GET /api/stats` | `{total_jobs, tabs, by_source, stats_rows, curated_jobs}` |
+| `GET /api/tracker?status=` | APPLIED-tab rows |
+| `PATCH /api/tracker/{fp}` | `{status, notes}` — status whitelist: applied, interviewing, offer, rejected, withdrawn, ghosted |
+| `POST /api/jobs/refresh` | `{tab?}` — invalidate the sheet cache on demand |
+| `POST /api/scrape` | Start a background scrape run → `202 {run_id, status}` (409 if one is active) |
+| `GET /api/scrape` / `GET /api/scrape/{run_id}` | List runs / poll `{status, phase, scraped, curated, error}` |
+| `POST /api/resume/{fp}` | Tailor 1-page resume PDF → `{status, filename}` + `GET …/download` |
+| `POST /api/cover-letter/{fp}` | Role-aware cover letter → `{status, filename, cover_letter}` + `GET …/download` |
+| `GET /api/cv/profile` | Cached parsed-CV profile → `CvProfileOut` (501 when no fresh `cache/cv_profile_*.json`; per-request LLM parsing disabled) |
+| `PUT /api/cv/profile` | Persist Resume Studio edits (contact + skills) into the profile cache → `CvProfileOut` (501 when uncached; never triggers LLM parsing) |
+| `GET /api/cv/variants` | CV variants `[{name, tags}]` via `CV_DIR`/`cvs/` discovery (missing dir → `[]`) |
+
+Notes:
+
+- Sheet cache TTL is 90s (override `API_CACHE_TTL`, clamped 60–120s).
+- If Sheets is unreachable, `ALL JOBS` falls back to the local scrape snapshot
+  (`scraped_jobs.json` → `fresh_scrape.json`); `data_source` reports `snapshot`
+  and the UI badges row counts as `(snapshot: N)`. Snapshot rows are unscored,
+  so the dashboard drops the score gate to 0% automatically.
+- Binding is `127.0.0.1` by default; a non-local bind refuses to start unless
+  `API_TOKEN` is set (then every `/api/*` needs `Authorization: Bearer <token>`).
+- `file://` origins are blocked by design — always open the dashboard via the URL above.
+- See `PRODUCTION.md` for Docker deployment and `DESIGN.md` for the UI design system.
 
 ---
 

@@ -1,5 +1,6 @@
 /**
  * JOBDESK.JS — Curated Jobs Matrix, Advanced Multi-Filters & Dual View Switch
+ * Live data: reads JobAgent.store.state.jobs (fetched from GET /api/jobs).
  */
 
 window.JobAgent = window.JobAgent || {};
@@ -24,7 +25,7 @@ JobAgent.jobDesk = {
     this.bindEvents();
     this.render();
 
-    // Subscribe to store changes
+    // Re-render on any store change (filters, live loads).
     JobAgent.store.subscribe((state) => {
       this.render();
     });
@@ -97,15 +98,33 @@ JobAgent.jobDesk = {
     }
   },
 
+  _allJobs() {
+    const live = JobAgent.store.state.jobs || [];
+    if (live.length) return live;
+    return JobAgent.MOCK_JOBS || [];
+  },
+
+  _findJob(id) {
+    const key = String(id || '');
+    return this._allJobs().find(j =>
+      String(j.id) === key ||
+      String(j.job_fingerprint || '') === key ||
+      ('mock-' + String(j.id)) === key
+    );
+  },
+
   getFilteredJobs() {
     const filters = JobAgent.store.state.filters;
-    return (JobAgent.MOCK_JOBS || []).filter(job => {
+    return this._allJobs().filter(job => {
+      const title = (job.job_title || '').toLowerCase();
+      const company = (job.company || '').toLowerCase();
+      const stack = Array.isArray(job.tech_stack) ? job.tech_stack : [];
       // Search
       if (filters.search) {
         const query = filters.search;
-        const inTitle = job.job_title.toLowerCase().includes(query);
-        const inCompany = job.company.toLowerCase().includes(query);
-        const inStack = job.tech_stack.some(t => t.toLowerCase().includes(query));
+        const inTitle = title.includes(query);
+        const inCompany = company.includes(query);
+        const inStack = stack.some(t => String(t).toLowerCase().includes(query));
         if (!inTitle && !inCompany && !inStack) return false;
       }
 
@@ -115,16 +134,17 @@ JobAgent.jobDesk = {
       }
 
       // Score
-      if (job.match_score < filters.minScore) {
+      if ((job.match_score || 0) < filters.minScore) {
         return false;
       }
 
       // Location
       if (filters.location !== 'all') {
-        if (filters.location === 'worldwide' && !job.timezone.toLowerCase().includes('worldwide')) return false;
-        if (filters.location === 'usa' && !job.timezone.toLowerCase().includes('usa')) return false;
-        if (filters.location === 'uk' && !job.timezone.toLowerCase().includes('uk')) return false;
-        if (filters.location === 'europe' && !job.timezone.toLowerCase().includes('europe')) return false;
+        const tz = (job.timezone || '').toLowerCase();
+        if (filters.location === 'worldwide' && !tz.includes('worldwide') && !tz.includes('anywhere')) return false;
+        if (filters.location === 'usa' && !tz.includes('usa')) return false;
+        if (filters.location === 'uk' && !tz.includes('uk')) return false;
+        if (filters.location === 'europe' && !tz.includes('europe')) return false;
       }
 
       // Source
@@ -133,7 +153,7 @@ JobAgent.jobDesk = {
       }
 
       // Status
-      if (filters.status !== 'all' && job.status !== filters.status) {
+      if (filters.status !== 'all' && (job.status || '').toLowerCase() !== filters.status) {
         return false;
       }
 
@@ -153,33 +173,68 @@ JobAgent.jobDesk = {
     return 'low';
   },
 
+  plainText(value) {
+    return String(value ?? '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  },
+
+  escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[character]));
+  },
+
+  _stateBanner() {
+    const { loading, errors, usingLive } = JobAgent.store.state;
+    if (loading.jobs) {
+      return `<div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-muted); background: var(--bg-card); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">Loading live jobs from <code>/api/jobs</code>…</div>`;
+    }
+    if (errors.jobs) {
+      const src = usingLive ? '' : 'Showing cached mock data.';
+      return `<div style="grid-column: 1 / -1; padding: 16px 20px; color: #f59e0b; background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.3); border-radius: var(--radius-lg); font-size: 12.5px;">API error: ${errors.jobs} ${src}</div>`;
+    }
+    return '';
+  },
+
   render() {
     const jobs = this.getFilteredJobs();
+    const banner = this._stateBanner();
 
     if (this.filteredJobCount) {
-      this.filteredJobCount.textContent = jobs.length;
+      const live = JobAgent.store.state.jobs.length;
+      const src = JobAgent.store.state.dataSource || 'mock';
+      const tag = live ? ` (${src}: ${live})` : '';
+      this.filteredJobCount.textContent = jobs.length + tag;
     }
 
     // 1. Render Card Grid
     if (this.jobsGridContainer) {
-      if (jobs.length === 0) {
-        this.jobsGridContainer.innerHTML = `
+      if (jobs.length === 0 && !JobAgent.store.state.loading.jobs) {
+        this.jobsGridContainer.innerHTML = banner + `
           <div style="grid-column: 1 / -1; padding: 48px; text-align: center; color: var(--text-muted); background: var(--bg-card); border-radius: var(--radius-lg); border: 1px dashed var(--border-subtle);">
             <p style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">No remote jobs match current filters</p>
             <p style="font-size: 12.5px;">Try lowering the minimum score slider or clearing role/location filters.</p>
           </div>
         `;
       } else {
-        const selectedId = JobAgent.store.state.selectedJob ? JobAgent.store.state.selectedJob.id : null;
-        this.jobsGridContainer.innerHTML = jobs.map(job => `
-          <div class="job-card ${selectedId === job.id ? 'is-selected' : ''}" data-id="${job.id}">
+        const selected = JobAgent.store.state.selectedJob;
+        const selectedId = selected ? String(selected.id) : null;
+        const stackOf = (job) => Array.isArray(job.tech_stack) ? job.tech_stack : [];
+        this.jobsGridContainer.innerHTML = banner + jobs.map(job => `
+          <div class="job-card ${selectedId === String(job.id) ? 'is-selected' : ''}" data-id="${String(job.id).replace(/"/g, '&quot;')}">
             <div class="job-card-top">
               <div class="job-title-group">
-                <h3 class="job-role-title">${job.job_title}</h3>
+                <h3 class="job-role-title">${this.escapeHtml(job.job_title)}</h3>
                 <div class="job-company-name">
-                  <span>${job.company}</span>
+                  <span>${this.escapeHtml(job.company)}</span>
                   <span>•</span>
-                  <span class="text-muted" style="font-size: 11.5px;">${job.posted_text}</span>
+                  <span class="text-muted" style="font-size: 11.5px;">${this.escapeHtml(job.posted_text)}</span>
                 </div>
               </div>
               <div class="match-score-badge ${this.getScoreTierClass(job.match_score)}" title="ATS Match Score">
@@ -189,24 +244,24 @@ JobAgent.jobDesk = {
             </div>
 
             <div class="job-meta-chips">
-              <span class="meta-chip">📍 ${job.timezone}</span>
-              ${job.salary ? `<span class="meta-chip salary">💰 ${job.salary}</span>` : ''}
-              <span class="meta-chip">🏷️ ${job.role.toUpperCase()}</span>
+              <span class="meta-chip">📍 ${this.escapeHtml(job.timezone)}</span>
+              ${job.salary ? `<span class="meta-chip salary">💰 ${this.escapeHtml(job.salary)}</span>` : ''}
+              <span class="meta-chip">🏷️ ${this.escapeHtml((job.role || '').toUpperCase())}</span>
             </div>
 
-            <p class="job-summary-snippet">${job.summary}</p>
+            <p class="job-summary-snippet">${this.escapeHtml(this.plainText(job.summary).slice(0, 220))}</p>
 
             <div class="job-tech-pills">
-              ${job.tech_stack.map(t => `<span class="tech-tag">${t}</span>`).join('')}
+              ${stackOf(job).slice(0, 6).map(t => `<span class="tech-tag">${this.escapeHtml(t)}</span>`).join('')}
             </div>
 
             <div class="job-card-footer">
-              <span class="job-source-tag">${job.source}</span>
+              <span class="job-source-tag">${this.escapeHtml(job.source)}</span>
               <div class="card-action-group">
-                <button class="action-btn secondary small btn-tailor-job" data-id="${job.id}" title="Tailor 1-page ATS resume">
+                <button class="action-btn secondary small btn-tailor-job" data-id="${String(job.id).replace(/"/g, '&quot;')}" title="Tailor 1-page ATS resume">
                   ✨ Tailor
                 </button>
-                <button class="action-btn primary small btn-open-drawer" data-id="${job.id}">
+                <button class="action-btn primary small btn-open-drawer" data-id="${String(job.id).replace(/"/g, '&quot;')}">
                   Inspect
                 </button>
               </div>
@@ -218,8 +273,9 @@ JobAgent.jobDesk = {
 
     // 2. Render Table View
     if (this.jobsTableBody) {
+      const stackOf = (job) => Array.isArray(job.tech_stack) ? job.tech_stack : [];
       this.jobsTableBody.innerHTML = jobs.map(job => `
-        <tr data-id="${job.id}">
+        <tr data-id="${String(job.id).replace(/"/g, '&quot;')}">
           <td>
             <span class="score-cell-pill ${this.getScorePillClass(job.match_score)}">${job.match_score}%</span>
           </td>
@@ -227,20 +283,20 @@ JobAgent.jobDesk = {
             <strong style="color: #fff; display: block;">${job.job_title}</strong>
             <span style="color: var(--text-muted); font-size: 11.5px;">${job.company}</span>
           </td>
-          <td style="color: var(--text-secondary); font-size: 12px;">${job.timezone}</td>
+          <td style="color: var(--text-secondary); font-size: 12px;">${job.timezone || ''}</td>
           <td>
             <div style="display: flex; gap: 4px; flex-wrap: wrap; max-width: 220px;">
-              ${job.tech_stack.slice(0, 3).map(t => `<span class="tech-tag">${t}</span>`).join('')}
-              ${job.tech_stack.length > 3 ? `<span class="tech-tag">+${job.tech_stack.length - 3}</span>` : ''}
+              ${stackOf(job).slice(0, 3).map(t => `<span class="tech-tag">${t}</span>`).join('')}
+              ${stackOf(job).length > 3 ? `<span class="tech-tag">+${stackOf(job).length - 3}</span>` : ''}
             </div>
           </td>
           <td style="font-family: var(--font-mono); font-size: 12px; color: var(--accent-cyan);">
             ${job.salary || '—'}
           </td>
-          <td style="color: var(--text-muted); font-size: 12px;">${job.source}</td>
-          <td style="color: var(--text-muted); font-size: 12px;">${job.posted_text}</td>
+          <td style="color: var(--text-muted); font-size: 12px;">${job.source || ''}</td>
+          <td style="color: var(--text-muted); font-size: 12px;">${job.posted_text || ''}</td>
           <td style="text-align: right;">
-            <button class="action-btn secondary small btn-open-drawer" data-id="${job.id}">Inspect</button>
+            <button class="action-btn secondary small btn-open-drawer" data-id="${String(job.id).replace(/"/g, '&quot;')}">Inspect</button>
           </td>
         </tr>
       `).join('');
@@ -249,21 +305,38 @@ JobAgent.jobDesk = {
     // Bind item click interactions
     document.querySelectorAll('.job-card, .jobs-table tbody tr').forEach(el => {
       el.addEventListener('click', (e) => {
-        // Direct tailor action
+        // Direct tailor action: sync Studio dropdown to THIS job, then switch tab.
         if (e.target.closest('.btn-tailor-job')) {
           e.stopPropagation();
-          const id = parseInt(e.target.closest('.btn-tailor-job').dataset.id);
-          const job = JobAgent.MOCK_JOBS.find(j => j.id === id);
-          if (job && JobAgent.navigation) {
+          const id = e.target.closest('.btn-tailor-job').dataset.id;
+          const job = this._findJob(id);
+          if (job) {
+            let synced = false;
+            if (JobAgent.resumeStudio && typeof JobAgent.resumeStudio.setSelectedJob === 'function') {
+              synced = JobAgent.resumeStudio.setSelectedJob(job);
+            } else {
+              // Studio not ready yet: persist raw id so its next populate picks it up.
+              try {
+                let v = String(job.job_fingerprint || job.id || id || '');
+                if (/^[1-9]\d*$/.test(v)) v = 'mock-' + v;
+                localStorage.setItem('rja_tailor_fp', v);
+                if (JobAgent.resumeStudio) JobAgent.resumeStudio._pendingTailorFp = v;
+              } catch (_) { /* storage unavailable */ }
+            }
+            if (JobAgent.navigation) JobAgent.navigation.switchTab('resume');
+            if (JobAgent.toast) {
+              JobAgent.toast.show(synced
+                ? `Tailor target set: ${job.job_title} @ ${job.company}`
+                : `Tailor target saved: ${job.job_title} @ ${job.company} — select it in Studio dropdown.`);
+            }
+          } else if (JobAgent.navigation) {
             JobAgent.navigation.switchTab('resume');
-            const tailorSelect = document.getElementById('tailorJobSelect');
-            if (tailorSelect) tailorSelect.value = id;
           }
           return;
         }
 
-        const id = parseInt(el.dataset.id);
-        const job = JobAgent.MOCK_JOBS.find(j => j.id === id);
+        const id = el.dataset.id;
+        const job = this._findJob(id);
         if (job && JobAgent.jobDrawer) {
           JobAgent.jobDrawer.open(job);
         }

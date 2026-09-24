@@ -240,6 +240,18 @@
   animation: pulseGlow 2s infinite ease-in-out;
 }
 
+.pulse-amber {
+  background: var(--accent-amber, #f59e0b);
+  box-shadow: 0 0 6px var(--accent-amber, #f59e0b);
+  animation: pulseGlow 1s infinite ease-in-out;
+}
+
+.pulse-red {
+  background: var(--accent-danger, #ef4444);
+  box-shadow: 0 0 6px var(--accent-danger, #ef4444);
+  animation: pulseGlow 1s infinite ease-in-out;
+}
+
 .status-sub {
   font-size: 11.5px;
   color: #94a3b8;
@@ -273,6 +285,7 @@
 .app-main {
   margin-left: var(--sidebar-width);
   flex: 1;
+  min-width: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
