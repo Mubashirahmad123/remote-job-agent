@@ -7,6 +7,8 @@
  *   tracker -> GET /api/tracker, PATCH /api/tracker/{fp}
  *   system  -> POST /api/jobs/refresh
  *   runs    -> POST /api/scrape, GET /api/scrape[/{run_id}]
+ *   materials -> POST /api/resume/{fp}, GET download, POST /api/cover-letter/{fp}, GET download
+ *   cv        -> GET /api/cv/profile, GET /api/cv/variants (Phase 2, may 404/501)
  * Backend contract: api/schemas.py (JobOut, TrackerEntry, HealthOut).
  */
 
@@ -130,6 +132,55 @@ JobAgent.api = (() => {
     return request('/api/scrape');
   }
 
+  async function createResume(fingerprint) {
+    return request('/api/resume/' + encodeURIComponent(fingerprint), {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async function createCoverLetter(fingerprint) {
+    return request('/api/cover-letter/' + encodeURIComponent(fingerprint), {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  // ---- CV studio (Phase 2 — backend may not have these yet) ----
+  // Defensive: a 404/501 means "endpoint not available", NOT a failure.
+  // Callers keep the static fallback panels and show a quiet note instead
+  // of a red error banner. All other errors still throw.
+
+  async function getCvProfile() {
+    try {
+      return await request('/api/cv/profile');
+    } catch (e) {
+      if (e && (e.status === 404 || e.status === 501)) return { _unavailable: true };
+      throw e;
+    }
+  }
+
+  async function updateCvProfile(patch) {
+    try {
+      return await request('/api/cv/profile', {
+        method: 'PUT',
+        body: JSON.stringify(patch || {}),
+      });
+    } catch (e) {
+      if (e && (e.status === 404 || e.status === 501)) return { _unavailable: true };
+      throw e;
+    }
+  }
+
+  async function getCvVariants() {
+    try {
+      return await request('/api/cv/variants');
+    } catch (e) {
+      if (e && (e.status === 404 || e.status === 501)) return { _unavailable: true };
+      throw e;
+    }
+  }
+
   return {
     baseUrl,
     getHealth,
@@ -142,5 +193,10 @@ JobAgent.api = (() => {
     startScrape,
     getScrape,
     listScrapes,
+    createResume,
+    createCoverLetter,
+    getCvProfile,
+    updateCvProfile,
+    getCvVariants,
   };
 })();

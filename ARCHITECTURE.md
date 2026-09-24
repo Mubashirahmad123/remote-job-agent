@@ -31,7 +31,7 @@ Two rhythms: **write path** (scheduler/CLI → Sheets, minutes) and **read path*
 | Scraping | `agents/scrapper.py`, `tools/*scraper*.py` | 45+ boards → raw jobs | stateless per run |
 | Curation | `agents/curator.py`, `tools/cv_*.py`, `tools/deduplicator.py` | dedup (MD5 `job_fingerprint`), keyword + optional FAISS scoring, rank | `seen_jobs.json`, `cv_embeddings.pkl` |
 | Persistence | Google Sheets via `tools/sheet_writer.py` | 5 tabs: ALL JOBS, TOP MATCHES, GOOD MATCHES, APPLIED, STATS | the Sheet |
-| Read API | `api/` | TTL cache over Sheets + `curated_jobs.json` enrichment left-join | in-process cache (90s) |
+| Read API | `api/` | TTL cache over Sheets + `curated_jobs.json` enrichment left-join; action routers (scrape runs, tailored materials, CV profile edits) | in-process cache (90s) |
 | Dashboard | `frontend/` | bento metrics, job desk, drawer, resume studio, auto-apply cockpit, kanban | browser + `localStorage` (token/base URL) |
 | Automation | `scheduler.py`, `track.py`, `main.py`, `Run.py` | cron, tracker CLI, pipeline entry points | `data/`, `logs/` |
 

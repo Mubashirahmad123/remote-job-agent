@@ -117,21 +117,29 @@ def get_tab_rows(tab: str, force: bool = False) -> List[Dict[str, Any]]:
     """Return cached header->dict rows for a tab (TTL-guarded).
 
     Returns shallow copies so callers mutating a dict can't pollute the cache.
-    Falls back to the local scrape snapshot for ALL JOBS when Sheets is
-    unreachable (see _local_snapshot_rows) so the UI shows real project
-    data instead of nothing. TOP/GOOD MATCHES never fall back — without
-    sheet scores there is nothing honest to put there.
+    Falls back to the local scrape snapshot for ALL JOBS only when Sheets is
+    unwired (sheets_configured() False) so offline UI shows real project
+    data instead of nothing. When Sheets is configured, an empty read stays
+    empty — never mask live-source trouble with days-old snapshot rows.
+    TOP/GOOD MATCHES never fall back — without sheet scores there is
+    nothing honest to put there.
     """
     if tab not in ALL_TABS:
         raise ValueError(f"Unknown tab '{tab}'. Choose from: {', '.join(ALL_TABS)}")
-    now = time.monotonic()
     with _lock:
         cached = _tab_cache.get(tab)
         if cached is not None and not force and _is_fresh(cached["at"]):
             return [dict(r) for r in cached["rows"]]
     rows = _rows_to_dicts(_read_tab_values(tab))
-    if not rows and tab == "ALL JOBS":
+    if not rows and tab == "ALL JOBS" and not sheets_configured():
+        # Offline-only fallback: Sheets unwired -> serve the local scrape
+        # snapshot so the UI shows real project data. When Sheets IS the
+        # configured source of truth, an empty read must stay empty —
+        # otherwise a transient quota/network blip serves days-old
+        # snapshot rows (stale Studio dropdown) for the full TTL window
+        # while /api/health still reports data_source=sheets.
         rows = _local_snapshot_rows()
+    now = time.monotonic()
     with _lock:
         _tab_cache[tab] = {"at": now, "rows": rows}
     return [dict(r) for r in rows]
@@ -253,7 +261,6 @@ def _load_enrichment_map(force: bool = False) -> Dict[str, Dict[str, Any]]:
     Mirrors main._load_curated_jobs (main.py:512-529). Missing file or bad
     JSON -> {} (never crash).
     """
-    now = time.monotonic()
     with _lock:
         if not force and _is_fresh(_enrichment_cache["at"]):
             return dict(_enrichment_cache["map"])
@@ -275,6 +282,7 @@ def _load_enrichment_map(force: bool = False) -> Dict[str, Dict[str, Any]]:
                     }
     except Exception:
         enriched = {}
+    now = time.monotonic()
     with _lock:
         _enrichment_cache["at"] = now
         _enrichment_cache["map"] = enriched
@@ -439,6 +447,220 @@ def update_tracker_and_get(
         if (row.get("apply_url") or "").strip() == apply_url:
             return row
     return {"apply_url": apply_url, "status": normalized}
+
+
+# --- CV Studio reads ---------------------------------------------------------
+
+# In-memory copy of the last cheap CV-profile read (no TTL — the on-disk
+# cv_parser cache already expires entries >7 days; this just avoids
+# re-reading the JSON file on every request). Never triggers LLM parsing.
+_cv_profile_cache: Dict[str, Any] = {"profile": None, "source": None}
+
+
+def _resolve_primary_cv_path() -> Optional[Path]:
+    """Primary CV file (CV_PATH env, default my_cv.pdf). None on any error."""
+    try:
+        raw = (os.getenv("CV_PATH", "").strip() or "my_cv.pdf")
+        path = Path(raw)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        return path
+    except Exception:
+        return None
+
+
+def get_cv_profile(force: bool = False) -> Optional[Dict[str, Any]]:
+    """Return the cached parsed-CV profile dict, or None when unavailable.
+
+    Cheap path only: tools.cv_parser._load_cached_profile (reads
+    cache/cv_profile_*.json when fresh, <7 days). Never calls parse_cv, so
+    no LLM/network work happens per request. Missing CV file, missing/expired
+    disk cache, or missing loader -> None (router maps to 501). Never crashes.
+    """
+    try:
+        with _lock:
+            cached = _cv_profile_cache.get("profile")
+            if cached is not None and not force:
+                return dict(cached)
+        cv_path = _resolve_primary_cv_path()
+        if cv_path is None:
+            return None
+        try:
+            if not cv_path.exists():
+                return None
+        except Exception:
+            return None
+        try:
+            from tools.cv_parser import _load_cached_profile
+        except Exception:
+            return None
+        try:
+            profile = _load_cached_profile(str(cv_path))
+        except Exception:
+            return None
+        if not isinstance(profile, dict) or not profile:
+            return None
+        with _lock:
+            _cv_profile_cache["profile"] = dict(profile)
+            try:
+                _cv_profile_cache["source"] = str(cv_path)
+            except Exception:
+                _cv_profile_cache["source"] = None
+        return dict(profile)
+    except Exception:
+        return None
+
+
+def reset_cv_profile_cache() -> None:
+    """Test helper: clear the in-memory CV profile copy."""
+    with _lock:
+        _cv_profile_cache["profile"] = None
+        _cv_profile_cache["source"] = None
+
+
+def save_cv_profile(patch: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Merge user edits into the on-disk cv_parser cache. Never crashes.
+
+    Only whitelisted contact + skill fields are merged; empty strings clear
+    a field (stored as "" on disk, read back as null via schemas). Returns
+    the merged profile dict, or None when there is no CV file to anchor the
+    cache to (router maps to 501). Never triggers LLM parsing.
+    """
+    try:
+        if not isinstance(patch, dict):
+            return None
+        cv_path = _resolve_primary_cv_path()
+        if cv_path is None:
+            return None
+        try:
+            if not cv_path.exists():
+                return None
+        except Exception:
+            return None
+        try:
+            from tools.cv_parser import _load_cached_profile, _save_cached_profile
+        except Exception:
+            return None
+        try:
+            current = _load_cached_profile(str(cv_path)) or {}
+        except Exception:
+            current = {}
+        if not isinstance(current, dict):
+            current = {}
+        merged = dict(current)
+        # Whitelist: contact fields (strings) + skills (list of strings).
+        for key in ("name", "full_name", "email", "phone", "linkedin",
+                    "linkedin_url", "location"):
+            if key in patch:
+                val = patch.get(key)
+                if val is None:
+                    merged[key] = ""
+                elif isinstance(val, str):
+                    merged[key] = val.strip()
+                else:
+                    merged[key] = str(val).strip()
+        for key in ("skills", "core_skills"):
+            if key in patch:
+                val = patch.get(key)
+                if val is None:
+                    merged[key] = []
+                elif isinstance(val, list):
+                    merged[key] = [str(s).strip() for s in val if str(s).strip()]
+                elif isinstance(val, str):
+                    merged[key] = [s.strip() for s in val.replace("\n", ",").split(",") if s.strip()]
+        # Keep name/full_name in sync so both readers see the edit.
+        if "full_name" in patch and "name" not in patch:
+            merged["name"] = merged.get("full_name", "")
+        if "name" in patch and "full_name" not in patch:
+            merged["full_name"] = merged.get("name", "")
+        if "linkedin_url" in patch and "linkedin" not in patch:
+            merged["linkedin"] = merged.get("linkedin_url", "")
+        if "linkedin" in patch and "linkedin_url" not in patch:
+            merged["linkedin_url"] = merged.get("linkedin", "")
+        try:
+            _save_cached_profile(str(cv_path), merged)
+        except Exception:
+            return None
+        with _lock:
+            _cv_profile_cache["profile"] = dict(merged)
+            try:
+                _cv_profile_cache["source"] = str(cv_path)
+            except Exception:
+                _cv_profile_cache["source"] = None
+        return dict(merged)
+    except Exception:
+        return None
+
+
+def list_cv_variants() -> List[Dict[str, Any]]:
+    """List CV variants as [{name, tags}]. Missing dir/library -> [], never 500.
+
+    Preferred path: tools.cv_library.CVLibrary() discovery (profiles stay
+    lazy — no parsing here). Fallback: scan <CV_DIR or cvs/> for
+    *.pdf/*.docx with safe basenames. Safe tags via
+    cv_library._extract_domain_tags when present, else ["general"].
+    """
+    try:
+        try:
+            from tools import cv_library as _cvlib
+        except Exception:
+            _cvlib = None
+        if _cvlib is not None and hasattr(_cvlib, "CVLibrary"):
+            try:
+                library = _cvlib.CVLibrary()
+                entries = list(getattr(library, "cvs", []) or [])
+                out: List[Dict[str, Any]] = []
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    raw_name = str(entry.get("name") or entry.get("path") or "")
+                    if not raw_name.strip():
+                        continue
+                    name = Path(raw_name).name.strip()
+                    if not name:
+                        continue
+                    tags = entry.get("tags") or ["general"]
+                    if not isinstance(tags, list):
+                        tags = [str(tags)]
+                    tags = [str(t).strip() for t in tags if str(t).strip()]
+                    out.append({"name": name, "tags": tags or ["general"]})
+                return out
+            except Exception:
+                pass  # fall through to directory scan
+        # Fallback: direct directory scan (no library).
+        try:
+            dir_raw = (os.getenv("CV_DIR", "").strip() or "cvs")
+        except Exception:
+            dir_raw = "cvs"
+        try:
+            directory = Path(dir_raw)
+            if not directory.is_absolute():
+                directory = PROJECT_ROOT / directory
+            if not directory.is_dir():
+                return []
+            tag_fn = getattr(_cvlib, "_extract_domain_tags", None) if _cvlib else None
+            exts = {".pdf", ".docx"}
+            try:
+                files = sorted(
+                    f for f in directory.iterdir()
+                    if f.is_file() and f.suffix.lower() in exts
+                )
+            except Exception:
+                return []
+            out = []
+            for f in files:
+                try:
+                    tags = list(tag_fn(f.name)) if callable(tag_fn) else ["general"]
+                except Exception:
+                    tags = ["general"]
+                if not tags:
+                    tags = ["general"]
+                out.append({"name": f.name, "tags": [str(t) for t in tags]})
+            return out
+        except Exception:
+            return []
+    except Exception:
+        return []
 
 
 def sheets_configured() -> bool:

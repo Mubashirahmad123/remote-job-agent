@@ -4,8 +4,12 @@
 
 .studio-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
+}
+
+.studio-grid > * {
+  min-width: 0;
 }
 
 .dropzone-box {
@@ -46,7 +50,10 @@
   margin-top: 16px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 10px;
+  max-width: 100%;
   padding: 6px 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -61,6 +68,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 10px;
 }
 
@@ -77,6 +85,7 @@
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .cv-variant-list {
@@ -93,6 +102,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -106,23 +117,29 @@
   background: var(--bg-surface-hover);
 }
 
+.variant-info {
+  min-width: 0;
+}
+
 .variant-name {
   font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .variant-meta {
   font-size: 11.5px;
   color: var(--text-muted);
   margin-top: 2px;
+  overflow-wrap: anywhere;
 }
 
 /* Profile Summary Grid */
 .profile-summary-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -131,6 +148,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 12px 16px;
+  min-width: 0;
 }
 
 .profile-field.full-width {
@@ -150,6 +168,7 @@
   color: var(--text-primary);
   margin-top: 3px;
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .skills-wrap {
@@ -157,6 +176,103 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+/* Preview tabs: switch the sheet between tailored resume and cover letter */
+.doc-preview-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.preview-tab {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.preview-tab:hover {
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+.preview-tab.active {
+  background: var(--primary-blue);
+  border-color: var(--primary-blue);
+  color: #ffffff;
+}
+
+.preview-tab-link {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--primary-blue);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 6px 4px;
+}
+
+/* Edit mode: the skills textarea must escape the .filter-select select
+   styling (fixed height in jobs.css). ID selector wins on specificity
+   regardless of which classes the textarea carries, so this holds even
+   if JS/CSS versions are briefly out of sync (cached files). */
+#profSkills textarea {
+  display: block;
+  width: 100%;
+  min-height: 140px;
+  max-height: 300px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  line-height: 1.6;
+  font-size: 13px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  resize: vertical;
+  cursor: text;
+}
+
+#profSkills.editing {
+  display: block;
+  margin-top: 8px;
+}
+
+/* Edit mode: textarea replaces tags — needs full-width block layout,
+   not the flex tag row, or it renders as a tiny clipped box. */
+.skills-wrap.editing {
+  display: block;
+  margin-top: 8px;
+}
+
+.skills-wrap.editing textarea,
+.profile-skills-input {
+  display: block;
+  width: 100% !important;
+  min-height: 110px;
+  max-height: 260px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Inline edit inputs inside profile fields */
+.profile-field input.filter-select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.profile-field.full-width {
+  overflow: visible;
 }
 
 .skill-tag {
@@ -173,6 +289,13 @@
 /* Tailor Action Box */
 .tailor-selector-box {
   margin-bottom: 20px;
+}
+
+.tailor-selector-box .filter-select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .tailor-action-bar {
@@ -192,6 +315,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
@@ -206,6 +330,7 @@
   font-size: 11.5px;
   font-weight: 700;
   color: var(--accent-cyan);
+  white-space: nowrap;
 }
 
 .shrink-steps {
@@ -234,6 +359,7 @@
 .step-num {
   width: 20px;
   height: 20px;
+  flex-shrink: 0;
   border-radius: 50%;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -262,19 +388,27 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 18px;
+  min-width: 0;
 }
 
 .doc-preview-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 14px;
+}
+
+.doc-preview-meta {
+  min-width: 0;
 }
 
 .doc-preview-meta h4 {
   font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .doc-meta-info {
@@ -291,6 +425,32 @@
   font-family: var(--font-sans);
   color: var(--text-primary);
   margin-bottom: 16px;
+  overflow-wrap: anywhere;
+  /* Document-viewer scroll: short docs show fully, long docs scroll
+     inside the pane so the whole resume/letter is reachable. */
+  min-height: 200px;
+  max-height: min(560px, 62vh);
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-active) transparent;
+}
+
+.doc-mock-preview::-webkit-scrollbar {
+  width: 8px;
+}
+
+.doc-mock-preview::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.doc-mock-preview::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 4px;
+}
+
+.doc-mock-preview::-webkit-scrollbar-thumb:hover {
+  background: var(--border-active);
 }
 
 .mock-name {
@@ -304,6 +464,7 @@
   font-size: 11px;
   color: var(--text-muted);
   margin-top: 2px;
+  overflow-wrap: anywhere;
 }
 
 .mock-rule {
@@ -335,10 +496,37 @@
 .doc-download-bar {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.doc-download-bar .action-btn {
+  flex: 1 1 180px;
 }
 
 @media (max-width: 1200px) {
   .studio-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .view-panel#view-resume {
+    padding: 16px;
+  }
+
+  .view-panel#view-resume .dash-widget {
+    padding: 16px;
+  }
+
+  .profile-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-field.full-width {
+    grid-column: auto;
+  }
+
+  .doc-download-bar .action-btn {
+    flex-basis: 100%;
   }
 }

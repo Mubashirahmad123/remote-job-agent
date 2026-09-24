@@ -1,8 +1,10 @@
 # TESTER.md — Testing Guide
 
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Suite is pytest,
-currently **82 passed** across `tests/test_api_phase1.py`,
-`tests/test_auto_applier.py`, `tests/test_country_filter.py`.
+currently **136 passed** across 8 files: `test_api_phase1.py`,
+`test_api_phase2.py`, `test_api_cv.py`, `test_api_materials.py`,
+`test_api_freshness.py`, `test_api_jobs_contract.py`, `test_auto_applier.py`,
+`test_country_filter.py`.
 
 ---
 

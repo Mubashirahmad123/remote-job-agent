@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/dashboard.css">
   <link rel="stylesheet" href="css/jobs.css">
-  <link rel="stylesheet" href="css/resume.css">
+  <link rel="stylesheet" href="css/resume.css?v=2">
   <link rel="stylesheet" href="css/autoapply.css">
   <link rel="stylesheet" href="css/tracker.css">
 </head>
@@ -342,7 +342,7 @@
                   <span class="sub-label">Multi-CV Variants (from <code>cvs/</code>)</span>
                   <button class="text-link-btn" id="btnAddVariant">+ Add Variant</button>
                 </div>
-                <div class="cv-variant-list">
+                <div class="cv-variant-list" id="cvVariantList">
                   <div class="cv-variant-card selected">
                     <div class="variant-info">
                       <span class="variant-name">Frontend Specialist CV</span>
@@ -363,6 +363,7 @@
                     </div>
                   </div>
                 </div>
+                <div id="variantsStatusNote" role="status" style="font-size: 11.5px; color: var(--text-muted); margin-top: 8px;"></div>
               </div>
             </div>
 
@@ -374,6 +375,7 @@
                 </div>
                 <button class="action-btn secondary small" id="btnEditProfile">Edit</button>
               </div>
+              <div id="profileStatusNote" role="status" style="font-size: 11.5px; color: var(--text-muted); padding: 0 20px 4px;"></div>
 
               <div class="profile-summary-grid">
                 <div class="profile-field">
@@ -425,10 +427,9 @@
               <div class="tailor-selector-box">
                 <label for="tailorJobSelect">Target Job Posting:</label>
                 <select id="tailorJobSelect" class="filter-select full-width">
-                  <option value="1">Frontend Web Application Developer @ KoboToolbox (92% Match)</option>
-                  <option value="2">Frontend Engineer @ Bjak (88% Match)</option>
-                  <option value="3">Backend Software Engineer @ Airspace Link (85% Match)</option>
+                  <option value="">Loading live jobs from /api/jobs…</option>
                 </select>
+                <div id="tailorSelectNote" role="status" style="font-size: 11.5px; color: var(--text-muted); margin-top: 6px;"></div>
 
                 <div class="tailor-action-bar">
                   <button class="action-btn primary full-width" id="btnGenerateTailored">
@@ -459,26 +460,30 @@
                 </div>
               </div>
 
-              <div class="generated-preview-card" id="generatedPreviewCard">
+              <div class="generated-preview-card hidden" id="generatedPreviewCard">
                 <div class="doc-preview-header">
                   <div class="doc-preview-meta">
-                    <h4>Tailored Package Generated: <code>KoboToolbox_Frontend.pdf</code></h4>
-                    <span class="doc-meta-info">1 Page ATS Verified • Slate Header • Unicode Compliant</span>
+                    <h4>No package generated yet</h4>
+                    <span class="doc-meta-info">Select a target job, then press Generate — preview appears here.</span>
                   </div>
                   <span class="badge-emerald">READY TO DOWNLOAD</span>
                 </div>
 
+                <div class="doc-preview-tabs" role="tablist" aria-label="Package preview">
+                  <button class="preview-tab active" id="tabPreviewResume" type="button" role="tab">Resume</button>
+                  <button class="preview-tab" id="tabPreviewCover" type="button" role="tab">Cover Letter</button>
+                  <button class="preview-tab-link" id="btnOpenPdf" type="button" title="Open the generated resume PDF in a new tab (live results only)">Open PDF &#8599;</button>
+                </div>
+
                 <div class="doc-mock-preview">
                   <div class="mock-sheet">
-                    <div class="mock-name">MUBASHIR AHMAD</div>
-                    <div class="mock-sub">Frontend Engineer • Remote • mubashir.dev@example.com • github.com/mubashir1</div>
+                    <div class="mock-name">—</div>
+                    <div class="mock-sub">—</div>
                     <div class="mock-rule"></div>
                     <div class="mock-section-title">TECHNICAL EXPERTISE</div>
-                    <div class="mock-text">React, TypeScript, Next.js, Redux, TailwindCSS, REST APIs, Jest, Webpack, Git</div>
+                    <div class="mock-text">—</div>
                     <div class="mock-section-title">PROFESSIONAL EXPERIENCE</div>
-                    <div class="mock-bullet">• Architected responsive web applications using React & TypeScript, boosting Lighthouse score by 35%</div>
-                    <div class="mock-bullet">• Engineered component libraries and unified design system tokens with zero layout shift</div>
-                    <div class="mock-bullet">• Integrated automated Playwright testing pipelines reducing regression bugs by 40%</div>
+                    <div class="mock-bullet">• —</div>
                   </div>
                 </div>
 

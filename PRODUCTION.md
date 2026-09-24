@@ -91,6 +91,8 @@ docker compose run --rm runner python -m pytest tests/
 | `API_TOKEN` | empty | When set, all `/api/*` need `Authorization: Bearer <token>` (even reads) |
 | `API_CORS_ORIGINS` | localhost:3000/5173/8000/8080 | Comma-separated override; `file://` (`null` origin) is never allowed — serve the UI from the API |
 | `API_CACHE_TTL` | `90` | Seconds, clamped to 60–120 |
+| `CV_PATH` | `my_cv.pdf` | Primary CV (matching fallback, profile-cache anchor) |
+| `CV_DIR` | empty | Optional CV-variants folder (`cvs/`); `GET /api/cv/variants` lists it, best CV picked per job |
 | `MIN_MATCH_SCORE` | `70` | Curator threshold for GOOD MATCHES tab |
 | `AUTO_APPLY_CONFIRM` | `false` | `false` = fill & review; `true` = live submit (danger) |
 

@@ -10,9 +10,9 @@ Tracker header choice (documented):
   get_applied_sheet() creates on a fresh tab.
 """
 
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _empty_to_none(value: Any) -> Any:
@@ -181,3 +181,89 @@ class HealthOut(BaseModel):
     sheets_configured: bool = False
     curated_jobs_loaded: int = 0
     data_source: str = "empty"  # sheets|snapshot|empty (see api.cache.data_source)
+
+
+_CV_TEXT_FIELDS = (
+    "name", "email", "phone", "location", "seniority",
+    "_source_file", "_parsed_at",
+)
+
+_CV_LIST_FIELDS = (
+    "skills", "frameworks", "databases", "languages", "preferred_titles",
+)
+
+
+class CvVariant(BaseModel):
+    """One CV file discovered by tools/cv_library.py (name + domain tags)."""
+
+    name: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+
+    @field_validator("name", mode="before", check_fields=False)
+    @classmethod
+    def _normalize_name(cls, v: Any) -> Any:
+        return _empty_to_none(v)
+
+
+class CvProfileOut(BaseModel):
+    """Cached CV profile from tools/cv_parser.py (cheap cache read only).
+
+    Extra keys pass through (model_config extra="allow") so future parser
+    fields don't break the API. Empty strings -> null, like JobOut.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    seniority: Optional[str] = None
+    years_experience: Optional[float] = None
+    skills: Optional[List[str]] = None
+    frameworks: Optional[List[str]] = None
+    databases: Optional[List[str]] = None
+    languages: Optional[List[str]] = None
+    preferred_titles: Optional[List[Any]] = None
+    experience: Optional[List[Any]] = None
+    education: Optional[List[Any]] = None
+
+    @field_validator(*_CV_TEXT_FIELDS, mode="before", check_fields=False)
+    @classmethod
+    def _normalize_empty(cls, v: Any) -> Any:
+        return _empty_to_none(v)
+
+    @field_validator("years_experience", mode="before", check_fields=False)
+    @classmethod
+    def _normalize_years(cls, v: Any) -> Any:
+        return _parse_optional_float(v)
+
+
+class CvProfileUpdate(BaseModel):
+    """PUT /api/cv/profile body — user edits from Resume Studio.
+
+    All fields optional; only whitelisted contact + skill fields are merged
+    into the on-disk cv_parser cache. Extra keys allowed but ignored on save
+    (never crash on future frontend fields).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    name: Optional[str] = None
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    linkedin: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    location: Optional[str] = None
+    skills: Optional[List[str]] = None
+    core_skills: Optional[List[str]] = None
+
+    @field_validator("skills", "core_skills", mode="before", check_fields=False)
+    @classmethod
+    def _coerce_skill_list(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return [s.strip() for s in v.replace("\n", ",").split(",") if s.strip()]
+        return v

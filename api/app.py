@@ -17,8 +17,9 @@ Router layout (one file per group for easy debugging):
   api/routers/jobs.py    — GET /api/jobs, GET /api/jobs/{fp}
   api/routers/stats.py   — GET /api/stats
   api/routers/tracker.py — GET/PATCH /api/tracker
-  api/routers/system.py  — POST /api/jobs/refresh
-  api/runs.py + api/routers/runs.py — POST/GET /api/scrape (background runs)
+   api/routers/system.py  — POST /api/jobs/refresh
+   api/runs.py + api/routers/runs.py — POST/GET /api/scrape (background runs)
+   api/routers/cv.py      — GET /api/cv/profile, GET /api/cv/variants (CV Studio reads)
 """
 
 import os
@@ -29,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from api.deps import cors_origins
-from api.routers import health, jobs, runs, stats, system, tracker
+from api.routers import health, jobs, cv, materials, runs, stats, system, tracker
 
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
@@ -41,7 +42,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=cors_origins(),
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
     )
 
@@ -52,6 +53,8 @@ def create_app() -> FastAPI:
     app.include_router(tracker.router)
     app.include_router(system.router)
     app.include_router(runs.router)
+    app.include_router(materials.router)
+    app.include_router(cv.router)
 
     # Serve the dashboard UI same-origin so file:// CORS ("null" origin)
     # is never an issue: open http://127.0.0.1:8000/ instead of index.html.

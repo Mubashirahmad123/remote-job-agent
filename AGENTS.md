@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 
 - `agents/` — pipeline modules: `scrapper.py` (45+ job-board scrapers), `curator.py` (dedup, CV matching, ranking), `gemini_tools.py` (LLM cover letters with fallback), `auto_applier.py` (auto-apply).
-- `api/` — FastAPI Phase 1 reads: `app.py` (thin factory), `deps.py` (auth/CORS), `cache.py` (Sheets TTL cache + snapshot fallback), `schemas.py`, `mappers.py`, `routers/` (one file per group: health, jobs, stats, tracker, system).
+- `api/` — FastAPI backend (reads + actions): `app.py` (thin factory), `deps.py` (auth/CORS), `cache.py` (Sheets TTL cache + snapshot fallback + CV profile/variants), `schemas.py`, `mappers.py`, `materials.py` + `runs.py` (registries), `routers/` (one file per group: health, jobs, stats, tracker, system, runs, materials, cv).
 - `frontend/` — vanilla-JS dashboard, no build step: `js/api.js` (one fn per endpoint group), `js/store.js` (state + normalization + mock fallback), `js/components/` (dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply).
 - `tests/` — pytest suites mirroring the modules they test (e.g., `test_auto_applier.py`, `test_api_phase1.py` — faked Sheets, no network).
 - `tools/` — reusable utilities: `cv_parser.py`, `cv_matcher.py`, `deduplicator.py`, `sheet_writer.py`, `resume_generator.py`, and scraper helpers.

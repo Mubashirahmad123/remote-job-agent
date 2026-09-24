@@ -32,8 +32,12 @@ frontend/
 - Token: `localStorage rja_api_token` → `Authorization: Bearer` header.
 - Errors carry `.code`: `UNREACHABLE` (server down), `UNAUTHORIZED` (bad token),
   `HTTP_nnn`. All throw — callers show banners/toasts, never silent-fail.
-- One fn per backend router: `getHealth/getJobs/getJob/getStats/getTracker/
-  patchTracker/refreshJobs` — mirror `api/routers/` when adding endpoints.
+- One fn per backend router: `getHealth` / `getJobs/getJob` / `getStats` /
+  `getTracker/patchTracker` / `refreshJobs` / `startScrape/getScrape/listScrapes` /
+  `createResume/createCoverLetter` / `getCvProfile/updateCvProfile/getCvVariants`
+  — mirror `api/routers/` when adding endpoints. The three `getCv*` fns
+  swallow 404/501 into `{_unavailable: true}` (endpoint not ready / no cache);
+  all other errors still throw.
 
 ## 3. Store (`js/store.js`)
 
@@ -62,7 +66,7 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
 | `jobDesk.js` | filters, grid/table views, count | `store.state.jobs` (client-side filter; backend handles `q/source/tab/limit`) | `jobFilterSearch`, `rolePillGroup`, `scoreRange`, `location/source/statusFilter`, `jobsGridContainer/TableBody`, `filteredJobCount` (`(source: N)` suffix) |
 | `jobDrawer.js` | slide-over detail | receives job object (defensive: string-or-array stack, missing skills/CV) | `jobDetailDrawer`, `drawerBody`, `btnDrawerApplyNow/Save` |
 | `tracker.js` | kanban + status cycling | `GET/PATCH /api/tracker`; click cycles `applied→interviewing→offer→rejected`, sync button refreshes APPLIED tab | `kanbanColApplied/Review/Interview/Offer/Rejected`, `count*`, `btnSyncTrackerSheets` |
-| `resumeStudio.js` | CV upload, tailor engine UI | static demo (Phase 2: wire to resume/cover-letter endpoints) | `cvDropzone`, `tailorJobSelect`, `btnGenerateTailored` |
+| `resumeStudio.js` | CV upload (local demo), tailor engine, profile edit + variants panels, Resume/Cover-Letter preview tabs + Open-PDF | `POST /api/resume` + `/api/cover-letter`, `GET` + `PUT /api/cv/profile`, `GET /api/cv/variants` (quiet fallback to dynamic demo preview when 404/501/unreachable) | `tailorJobSelect`, `btnGenerateTailored`, `cvVariantList`, `btnEditProfile`, `profSkills`, `generatedPreviewCard`, `tabPreviewResume`, `tabPreviewCover`, `btnOpenPdf` |
 | `autoApply.js` | safety cockpit, telemetry | static demo (Phase 2: wire to apply endpoints) | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider`, `terminalLog` |
 | `toast.js` | notifications | `JobAgent.toast.show(msg)` | — |
 | `app.js` | boot: `init()` all → `store.loadAll()` → wire Sync Sheets + global search | `/api/jobs/refresh` | `btnSyncSheets`, `globalSearchInput`, `btnScrapeNow` (Phase 2: scrape trigger) |
@@ -75,5 +79,9 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
 - `job.id` is a **string fingerprint**, not a number — compare with `String()`
   and escape it into `data-id` (fingerprints are hex-safe, URLs are not).
 - Keep API-shape defense in the drawer/normalizers, not in templates.
-- Skills cloud, resume studio, auto-apply telemetry are static demos until
-  Phase 2 endpoints land — don't mistake them for live data.
+- Resume Studio is live (profile/variants/tailor wired); its offline fallback is
+  a *dynamic* preview built from the selected job + parsed profile — never
+  hardcoded fixture HTML. The preview card starts hidden until first generate.
+- Skills cloud and auto-apply telemetry are still static demos until their
+  endpoints land (`GET /api/skills`, apply endpoints) — don't mistake them
+  for live data.

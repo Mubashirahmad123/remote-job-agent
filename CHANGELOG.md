@@ -1,6 +1,22 @@
 # CHANGELOG.md
 
-## Unreleased (Phase 2 next — see `PM.md` §2)
+## Unreleased (2026-09-24 — Phase 2 actions + Studio fixes)
+
+- Action API: `POST /api/scrape` + `GET /api/scrape[/{run_id}]` (single-active-run
+  registry `api/runs.py`); `POST /api/resume/{fp}` + `POST /api/cover-letter/{fp}`
+  with downloads (`api/materials.py`, fp-mapped files only); `PUT /api/cv/profile`
+  (Studio edits into on-disk cache, no LLM per request).
+- New tests: `test_api_cv.py`, `test_api_materials.py`, `test_api_freshness.py`,
+  `test_api_jobs_contract.py` (+ `test_api_phase2.py`) — suite now **136 passed**.
+- Resume Studio: live tailor flow (fingerprint select, progress steps, cover-letter
+  preview), profile Edit/Save with local override + API sync, variant select/add;
+  preview card starts hidden and the demo fallback renders dynamically from the
+  selected job + profile (no hardcoded fixture); skills textarea fixed
+  (full-width block layout, min-height 110px, auto-grow).
+- Docs: BACKEND (×8 routers, new endpoints, PUT allow-method, test counts),
+  FRONTEND (api.js fns, Studio live state), PM (Phase 2 status + next),
+  TESTER (136/8 files), README (structure + endpoint table), AGENTS,
+  ARCHITECTURE.
 
 ## 2026-09-23 — Phase 1e: docs + live Sheets
 

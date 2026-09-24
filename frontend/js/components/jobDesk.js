@@ -105,7 +105,12 @@ JobAgent.jobDesk = {
   },
 
   _findJob(id) {
-    return this._allJobs().find(j => String(j.id) === String(id));
+    const key = String(id || '');
+    return this._allJobs().find(j =>
+      String(j.id) === key ||
+      String(j.job_fingerprint || '') === key ||
+      ('mock-' + String(j.id)) === key
+    );
   },
 
   getFilteredJobs() {
@@ -300,12 +305,31 @@ JobAgent.jobDesk = {
     // Bind item click interactions
     document.querySelectorAll('.job-card, .jobs-table tbody tr').forEach(el => {
       el.addEventListener('click', (e) => {
-        // Direct tailor action
+        // Direct tailor action: sync Studio dropdown to THIS job, then switch tab.
         if (e.target.closest('.btn-tailor-job')) {
           e.stopPropagation();
           const id = e.target.closest('.btn-tailor-job').dataset.id;
           const job = this._findJob(id);
-          if (job && JobAgent.navigation) {
+          if (job) {
+            let synced = false;
+            if (JobAgent.resumeStudio && typeof JobAgent.resumeStudio.setSelectedJob === 'function') {
+              synced = JobAgent.resumeStudio.setSelectedJob(job);
+            } else {
+              // Studio not ready yet: persist raw id so its next populate picks it up.
+              try {
+                let v = String(job.job_fingerprint || job.id || id || '');
+                if (/^[1-9]\d*$/.test(v)) v = 'mock-' + v;
+                localStorage.setItem('rja_tailor_fp', v);
+                if (JobAgent.resumeStudio) JobAgent.resumeStudio._pendingTailorFp = v;
+              } catch (_) { /* storage unavailable */ }
+            }
+            if (JobAgent.navigation) JobAgent.navigation.switchTab('resume');
+            if (JobAgent.toast) {
+              JobAgent.toast.show(synced
+                ? `Tailor target set: ${job.job_title} @ ${job.company}`
+                : `Tailor target saved: ${job.job_title} @ ${job.company} — select it in Studio dropdown.`);
+            }
+          } else if (JobAgent.navigation) {
             JobAgent.navigation.switchTab('resume');
           }
           return;
