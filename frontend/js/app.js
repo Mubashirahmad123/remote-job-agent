@@ -24,6 +24,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize Auto-Apply Safety Cockpit
   if (JobAgent.autoApply) JobAgent.autoApply.init();
 
+  // Initialize live scrape diagnostics
+  if (JobAgent.scrapeMonitor) JobAgent.scrapeMonitor.init();
+
   // Initialize Application Kanban Tracker
   if (JobAgent.tracker) JobAgent.tracker.init();
 
@@ -85,6 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function renderRunState(run) {
+    if (JobAgent.scrapeMonitor && run) JobAgent.scrapeMonitor.render(run);
     const label = btnScrape ? btnScrape.querySelector('span') : null;
     const setDot = (cls) => {
       if (!scrapeDot) return;
@@ -158,26 +162,49 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnScrape.dataset.wired = '1';
     const poll = async (runId) => {
       let last = null;
+      let consecutiveFailures = 0;
+      const resetToIdle = (message) => {
+        // The run is gone (server restarted) or unreachable: never leave the
+        // button disabled and the card on "Fetching boards…".
+        renderRunState(null);
+        if (JobAgent.scrapeMonitor) JobAgent.scrapeMonitor.loadHistory();
+        if (message && JobAgent.toast) JobAgent.toast.show(message, 'warn');
+      };
       for (let i = 0; i < 360; i++) { // up to ~30 min at 5s intervals
         await new Promise(r => setTimeout(r, 5000));
         try {
           const run = await JobAgent.api.getScrape(runId);
           last = run;
+          consecutiveFailures = 0;
           renderRunState(run);
           if (run.status === 'done') {
             const partial = run.boards_failed > 0 ? ` (${run.boards_failed} boards failed)` : '';
             if (JobAgent.toast) JobAgent.toast.show(`Scrape done: ${run.scraped} scraped, ${run.curated} curated${partial}.`);
             await JobAgent.store.loadAll();
+            if (JobAgent.scrapeMonitor) JobAgent.scrapeMonitor.loadHistory();
             if (!(run.boards_failed > 0)) setTimeout(() => renderRunState(null), 30000);
             return;
           }
           if (run.status === 'error') {
             if (JobAgent.toast) JobAgent.toast.show('Scrape failed: ' + (run.error || 'unknown error'));
+            if (JobAgent.scrapeMonitor) JobAgent.scrapeMonitor.loadHistory();
             return;
           }
         } catch (e) {
-          if (JobAgent.toast) JobAgent.toast.show('Scrape poll failed: ' + e.message);
-          return;
+          // 404 = run unknown on the server (restart wiped the in-memory
+          // registry): idle immediately, the run is unrecoverable.
+          if (e && e.status === 404) {
+            resetToIdle('Scrape run not found on server (was it restarted?). You can start a new scrape.');
+            return;
+          }
+          // Anything else (usually UNREACHABLE): tolerate a couple of
+          // transient blips, then idle rather than stick on "Scraping…" —
+          // a dead server means a dead run (registry is in-memory).
+          consecutiveFailures += 1;
+          if (consecutiveFailures >= 3) {
+            resetToIdle('Scrape poll failed (' + (e && e.message ? e.message : 'unknown error') + ') — showing idle. Start a new scrape if needed.');
+            return;
+          }
         }
       }
       // Poll window expired: re-sync once from the server so the button/card
@@ -195,6 +222,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const run = await JobAgent.api.startScrape();
         if (JobAgent.toast) JobAgent.toast.show('Scrape started (' + run.run_id + '). Polling…');
+        if (JobAgent.navigation) JobAgent.navigation.switchTab('scrape');
         renderRunState(run);
         await poll(run.run_id);
       } catch (e) {

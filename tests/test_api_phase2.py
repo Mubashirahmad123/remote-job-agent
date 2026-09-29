@@ -121,6 +121,20 @@ class TestGetScrape:
                       "boards_failed", "boards_empty", "fetched"):
             assert field in body, field
 
+    def test_run_record_has_structured_events(self, client, monkeypatch):
+        def pipeline(progress, tracker=None):
+            progress("scraping", 2)
+            progress("curating", 2)
+            return {"scraped": 2, "curated": 1}
+
+        monkeypatch.setattr(runs, "_run_simple_pipeline", pipeline)
+        run_id = client.post("/api/scrape").json()["run_id"]
+        final = _wait_for(client, run_id)
+        assert final["events"]
+        assert final["events"][0]["type"] == "lifecycle"
+        assert final["events"][-1]["type"] == "complete"
+        assert all(not key.startswith("_") for key in final)
+
 
 class TestSummarizeBoards:
     def test_rollup(self):

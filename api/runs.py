@@ -22,6 +22,7 @@ CURATED_JOBS_PATH = PROJECT_ROOT / "curated_jobs.json"
 _lock = threading.Lock()
 _runs: Dict[str, Dict[str, Any]] = {}
 _MAX_KEPT = 20
+_MAX_EVENTS = 120
 
 
 def _now_iso() -> str:
@@ -31,7 +32,43 @@ def _now_iso() -> str:
 
 
 def _public(run: Dict[str, Any]) -> Dict[str, Any]:
-    return dict(run)
+    return {key: value for key, value in run.items() if not key.startswith("_")}
+
+
+def _add_event(
+    run: Dict[str, Any],
+    message: str,
+    level: str = "info",
+    event_type: str = "status",
+    board: str = "",
+) -> None:
+    """Append a compact structured event while holding the registry lock."""
+    events = run.setdefault("events", [])
+    sequence = run.get("_event_sequence", 0) + 1
+    run["_event_sequence"] = sequence
+    events.append({
+        "sequence": sequence,
+        "timestamp": _now_iso(),
+        "level": level,
+        "type": event_type,
+        "board": board,
+        "message": message,
+    })
+    del events[:-_MAX_EVENTS]
+
+
+def _board_snapshot(boards: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Return JSON-safe board diagnostics without exposing tracker internals."""
+    snapshot = {}
+    for name, entry in (boards or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        snapshot[str(name)] = {
+            key: entry[key]
+            for key in ("status", "fetched", "error", "updated_at")
+            if key in entry
+        }
+    return snapshot
 
 
 def list_runs() -> List[Dict[str, Any]]:
@@ -149,6 +186,11 @@ def _worker(run_id: str) -> None:
             if run is not None:
                 run["phase"] = phase
                 run["scraped"] = scraped
+                _add_event(
+                    run,
+                    "Starting board scan" if phase == "scraping" else f"{phase.title()} phase started",
+                    event_type="phase",
+                )
 
     def pump() -> None:
         while not stop_pump.wait(5.0):
@@ -162,6 +204,21 @@ def _worker(run_id: str) -> None:
                 if run is None or run["status"] not in ("queued", "running"):
                     return
                 run.update(summary)
+                run["boards"] = _board_snapshot(tracker.boards)
+                previous = run.setdefault("_event_board_state", {})
+                for board, details in run["boards"].items():
+                    state = (details.get("status"), details.get("fetched", 0))
+                    if previous.get(board) == state:
+                        continue
+                    previous[board] = state
+                    status = details.get("status", "unknown")
+                    _add_event(
+                        run,
+                        f"{board}: {status} ({details.get('fetched', 0) or 0} jobs)",
+                        level="error" if status == "error" else "info",
+                        event_type="board",
+                        board=board,
+                    )
 
     with _lock:
         run = _runs.get(run_id)
@@ -169,6 +226,7 @@ def _worker(run_id: str) -> None:
             return
         run["status"] = "running"
         run["phase"] = "starting"
+        _add_event(run, "Scrape worker started", event_type="lifecycle")
     pump_thread = threading.Thread(target=pump, daemon=True)
     pump_thread.start()
     try:
@@ -182,6 +240,13 @@ def _worker(run_id: str) -> None:
                             "boards_ok", "boards_failed", "boards_empty", "fetched"):
                     if key in counts:
                         run[key] = counts[key]
+                run["boards"] = _board_snapshot(tracker.boards)
+                run.pop("_event_board_state", None)
+                _add_event(
+                    run,
+                    f"Scrape complete: {run.get('scraped', 0)} scraped, {run.get('curated', 0)} curated",
+                    event_type="complete",
+                )
                 run["finished_at"] = _now_iso()
         # Fresh reads after a run — never let cache refresh break the record.
         try:
@@ -197,6 +262,8 @@ def _worker(run_id: str) -> None:
                 run["status"] = "error"
                 run["phase"] = "error"
                 run["error"] = f"{type(e).__name__}: {e}"[:500]
+                run.pop("_event_board_state", None)
+                _add_event(run, run["error"], level="error", event_type="error")
                 run["finished_at"] = _now_iso()
     finally:
         stop_pump.set()
@@ -229,9 +296,12 @@ def start_scrape() -> Dict[str, Any]:
             "boards_failed": 0,
             "boards_empty": 0,
             "fetched": 0,
+            "boards": {},
+            "events": [],
             "started_at": _now_iso(),
             "finished_at": "",
         }
+        _add_event(_runs[run_id], "Scrape queued", event_type="lifecycle")
         # Keep memory bounded; drop oldest finished runs first.
         finished = sorted(
             (r for r in _runs.values() if r["status"] in ("done", "error")),

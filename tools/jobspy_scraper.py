@@ -23,8 +23,14 @@ def scrape_with_jobspy(debug=False):
     # and a JobType enum, not a "fulltime" string.
     proxy = proxies[0] if proxies else None
 
-    sites = ["linkedin", "indeed", "zip_recruiter"]  # drop glassdoor/google unless tuned separately
-    search_terms = ["backend developer", "fullstack developer", "node.js developer", "python developer"]
+    # Tunable scope: fewer sites/terms = fewer blockable requests.
+    # Defaults stay small (2 sites x 1 term) so an enabled run finishes fast.
+    default_sites = ["linkedin", "indeed", "zip_recruiter"]
+    default_terms = ["backend developer", "fullstack developer", "node.js developer", "python developer"]
+    sites = [s.strip().lower() for s in os.getenv("JOBSPY_SITES", "linkedin,indeed").split(",") if s.strip()]
+    sites = [s for s in sites if s in set(default_sites)] or ["linkedin"]
+    search_terms = [t.strip() for t in os.getenv("JOBSPY_TERMS", "backend developer").split(",") if t.strip()]
+    search_terms = search_terms or default_terms[:1]
 
     all_jobs = []
     for site in sites:

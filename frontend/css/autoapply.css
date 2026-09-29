@@ -84,6 +84,13 @@
 .mode-switch-btn .dot.green { background: var(--accent-emerald); }
 .mode-switch-btn .dot.red { background: var(--accent-rose); }
 
+/* Phase 2a: submit toggle is locked — visibly inert, not just unhandled. */
+.mode-switch-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
 .control-slider-box {
   margin-top: 16px;
   display: flex;

@@ -2139,10 +2139,115 @@ def fetch_jobs_from_board(name, info, debug=False):
         return []
 
 
-def _run_optional_scraper(label, scrape_func, jobs, working_scrapers, failed_scrapers, debug=False, tracker=None):
-    print(f"\n--- Processing {label} ---")
+def _scraper_timeout_seconds() -> float:
+    """Per-scraper time budget (env SCRAPER_TIMEOUT, default 300s, min 30s).
+
+    Read at call time (not import) so tests and long-running servers can
+    adjust it without a restart. A hung board (e.g. JobSpy on LinkedIn)
+    must never stall the whole run past this budget.
+    """
     try:
-        scraped = scrape_func(debug=debug)
+        return max(30.0, float(os.getenv("SCRAPER_TIMEOUT", "300") or 300))
+    except (TypeError, ValueError):
+        return 300.0
+
+
+def _jobspy_child_main(queue, debug=False):
+    """Child-process entry for JobSpy (must be module-level for spawn).
+
+    Never raises across the process boundary — always puts a
+    ("ok", jobs) or ("error", message) tuple so the parent can continue
+    the run even when the scraper lib misbehaves.
+    """
+    try:
+        from tools.jobspy_scraper import scrape_with_jobspy
+        jobs = scrape_with_jobspy(debug=debug)
+        queue.put(("ok", jobs or []))
+    except BaseException as exc:  # noqa: BLE001 — serialize, don't propagate
+        try:
+            queue.put(("error", f"{type(exc).__name__}: {exc}"[:500]))
+        except Exception:
+            pass
+
+
+def _run_jobspy_isolated(budget, debug=False):
+    """Run JobSpy in a spawn-context child process.
+
+    A native segfault (tls-client on Windows) kills only the child
+    (non-zero exitcode); the parent records the board as failed and the
+    overall run continues to summary/curate. Raises on timeout/crash so
+    the caller can mark the board failed uniformly.
+    """
+    import multiprocessing
+
+    ctx = multiprocessing.get_context("spawn")
+    queue = ctx.Queue()
+    proc = ctx.Process(target=_jobspy_child_main, args=(queue, debug), daemon=True)
+    proc.start()
+    proc.join(timeout=budget)
+    if proc.is_alive():
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        proc.join(timeout=10)
+        raise TimeoutError(f"timeout after {budget:.0f}s")
+    if proc.exitcode != 0:
+        raise RuntimeError(f"jobspy child crashed (exitcode={proc.exitcode})")
+    try:
+        status, payload = queue.get_nowait()
+    except Exception:
+        raise RuntimeError("jobspy child returned no result")
+    if status != "ok":
+        raise RuntimeError(payload or "jobspy child error")
+    return payload or []
+
+
+def _run_optional_scraper(label, scrape_func, jobs, working_scrapers, failed_scrapers, debug=False, tracker=None, timeout=None):
+    print(f"\n--- Processing {label} ---")
+    # Board-start visibility: the run pump surfaces this as
+    # "Label: running (0 jobs)" so the monitor never goes silent mid-board.
+    if tracker:
+        try:
+            tracker.scrape(label, "running", 0)
+        except Exception:
+            pass
+    budget = timeout if timeout is not None else _scraper_timeout_seconds()
+    try:
+        # Time-boxed execution: scrape_func runs on a DAEMON thread and its
+        # late result is discarded on timeout. Daemon (not a pool worker) so
+        # an abandoned hang can never block the caller or interpreter exit.
+        # Safe because scrapers return a NEW list (jobs.extend happens below,
+        # only on success) — an orphaned thread can never mutate the shared
+        # jobs list mid-curate.
+        import threading
+
+        result_box = {}
+        finished = threading.Event()
+
+        def _target():
+            try:
+                result_box["jobs"] = scrape_func(debug=debug)
+            except BaseException as exc:  # noqa: BLE001 — incl. SystemExit from scraper libs
+                result_box["error"] = exc
+            finally:
+                finished.set()
+
+        worker = threading.Thread(target=_target, daemon=True, name=f"scraper-{label}")
+        worker.start()
+        if not finished.wait(timeout=budget):
+            print(f"  {label} timed out after {budget:.0f}s — skipping, run continues")
+            failed_scrapers.append(label)
+            if tracker:
+                tracker.scrape(label, "error", 0)
+                try:
+                    tracker.boards[label]["error"] = f"timeout after {budget:.0f}s"
+                except Exception:
+                    pass
+            return
+        if "error" in result_box:
+            raise result_box["error"]
+        scraped = result_box.get("jobs")
         if scraped:
             print(f"Parsed {len(scraped)} jobs from {label}")
             jobs.extend(scraped)
@@ -2212,13 +2317,41 @@ def scrape_all(debug=False, tracker=None):
 
         time.sleep(random.uniform(2, 4))
 
-    try:
-        from tools.jobspy_scraper import scrape_with_jobspy
-        _run_optional_scraper("JobSpy", scrape_with_jobspy, jobs, working_scrapers, failed_scrapers, debug, tracker)
-    except Exception as e:
-        print(f"JobSpy setup failed: {e}")
+    # JobSpy (python-jobspy -> LinkedIn/Indeed via TLS client) can hard-crash
+    # the whole Python interpreter on Windows (native segfault), which no
+    # try/except or thread timeout can catch — the process just drops back
+    # to the shell with no summary. Opt-in only via ENABLE_JOBSPY=true.
+    if os.getenv("ENABLE_JOBSPY", "false").lower() != "true":
+        print("\n--- Processing JobSpy ---")
+        print("  Skipped (set ENABLE_JOBSPY=true to opt in — native crash risk)")
         failed_scrapers.append("JobSpy")
-        tracker.scrape("JobSpy", "error", 0)
+        tracker.scrape("JobSpy", "skipped-disabled", 0)
+    else:
+        print("\n--- Processing JobSpy ---")
+        try:
+            tracker.scrape("JobSpy", "running", 0)
+        except Exception:
+            pass
+        try:
+            budget = _scraper_timeout_seconds()
+            scraped = _run_jobspy_isolated(budget, debug=debug)
+            if scraped:
+                print(f"Parsed {len(scraped)} jobs from JobSpy")
+                jobs.extend(scraped)
+                working_scrapers.append("JobSpy")
+                tracker.scrape("JobSpy", "ok", len(scraped))
+            else:
+                print("  No jobs found from JobSpy")
+                failed_scrapers.append("JobSpy")
+                tracker.scrape("JobSpy", "empty", 0)
+        except Exception as e:
+            print(f"JobSpy failed (run continues): {e}")
+            failed_scrapers.append("JobSpy")
+            try:
+                tracker.scrape("JobSpy", "error", 0)
+                tracker.boards["JobSpy"]["error"] = str(e)[:200]
+            except Exception:
+                pass
 
     try:
         from tools.playwright_scraper import scrape_stealth_boards

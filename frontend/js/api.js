@@ -146,6 +146,13 @@ JobAgent.api = (() => {
     });
   }
 
+  async function applyReview(fingerprint) {
+    return request('/api/apply/' + encodeURIComponent(fingerprint), {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'review' }),
+    });
+  }
+
   // ---- CV studio (Phase 2 — backend may not have these yet) ----
   // Defensive: a 404/501 means "endpoint not available", NOT a failure.
   // Callers keep the static fallback panels and show a quiet note instead
@@ -195,6 +202,7 @@ JobAgent.api = (() => {
     listScrapes,
     createResume,
     createCoverLetter,
+    applyReview,
     getCvProfile,
     updateCvProfile,
     getCvVariants,

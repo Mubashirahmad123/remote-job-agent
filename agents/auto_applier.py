@@ -225,7 +225,10 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
     
     try:
         print(f"  🌐 Navigating to: {job_url}")
-        page.goto(job_url, wait_until="networkidle", timeout=30000)
+        # F2 (2b pre-fix): domcontentloaded + explicit selector wait.
+        # networkidle never fires on ATS pages (hcaptcha/LinkedIn/resume-
+        # parser third parties) and guarantees a 30s goto timeout.
+        page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
         page.wait_for_selector("#application-form, .application-form, form", timeout=10000)
         
         screenshot_dir = Path("screenshots")
@@ -309,8 +312,27 @@ def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
     
     try:
         print(f"  🌐 Navigating to: {job_url}")
-        page.goto(job_url, wait_until="networkidle", timeout=30000)
-        page.wait_for_selector(".application-form, form", timeout=10000)
+        # F2 (2b pre-fix): domcontentloaded + explicit selector wait (see
+        # _fill_greenhouse_form for why networkidle is wrong on ATS pages).
+        page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+        # F1 (2b pre-fix): the application form lives on the /apply sub-page,
+        # not the posting page (0 <form> tags on postings). Follow the
+        # show-page-apply anchor when the URL isn't already an /apply page.
+        try:
+            bare = (job_url or "").rstrip("/")
+            if not bare.lower().endswith("/apply"):
+                anchor = page.locator("a.show-page-apply").first
+                if anchor.count() > 0:
+                    href = anchor.get_attribute("href") or ""
+                    if href:
+                        from urllib.parse import urljoin
+
+                        apply_url = urljoin(job_url, href)
+                        print(f"  🔗 Following apply page: {apply_url}")
+                        page.goto(apply_url, wait_until="domcontentloaded", timeout=30000)
+        except Exception as e:
+            print(f"    ⚠️ Apply-page resolution: {e} (continuing on posting URL)")
+        page.wait_for_selector(".application-form, form", timeout=15000)
         
         screenshot_dir = Path("screenshots")
         screenshot_dir.mkdir(exist_ok=True)

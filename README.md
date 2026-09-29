@@ -114,6 +114,14 @@ AUTO_APPLY_PLAYWRIGHT=true python main.py apply
 AUTO_APPLY_PLAYWRIGHT=true AUTO_APPLY_CONFIRM=true python main.py apply
 ```
 
+> ⚠️ **UNVERIFIED SUBMIT — CLI ONLY, KNOWN BUG.** `AUTO_APPLY_CONFIRM=true`
+> clicks submit then records `status: "submitted"` after a blind 3-second wait
+> with **zero post-submit verification** (`agents/auto_applier.py`). A silently
+> failed click, an error page, and a real success all write the identical row.
+> Gating the dashboard (Phase 2a fill-only) does **not** make this flag safe —
+> it only stops the dashboard from reaching it. Do not run this flag until the
+> 2b verification protocol ships. When in doubt, fill-only + submit manually.
+
 The Playwright mode:
 - Detects the ATS platform (Greenhouse, Lever, Workday, Workable, Ashby, Breezy)
 - Fills name, email, phone, LinkedIn, portfolio
@@ -208,8 +216,12 @@ RUN_MODE=crewai          # crewai | simple | test | apply | resume
 # Job Scraping
 ADZUNA_APP_ID=your_id
 ADZUNA_APP_KEY=your_key
+SCRAPER_TIMEOUT=300  # per-board time budget in seconds (min 30); hung board is skipped, run continues
+ENABLE_JOBSPY=false  # true = run LinkedIn/Indeed via python-jobspy in an isolated child process
 JOBSPY_RESULTS_PER_SITE=20
 JOBSPY_DELAY=3
+JOBSPY_SITES=linkedin,indeed  # subset of linkedin,indeed,zip_recruiter
+JOBSPY_TERMS=backend developer  # comma-separated; 1 term default keeps the run fast
 PLAYWRIGHT_HEADLESS=true
 PLAYWRIGHT_TIMEOUT=30000
 
@@ -292,8 +304,10 @@ CV_EMBEDDINGS_PATH=cv_embeddings.pkl
 | Free APIs | Remotive, RemoteOK, Arbeitnow, Himalayas, Jobicy, The Muse, Adzuna, WorkingNomads, AuthenticJobs (RSS) |
 | HTML (requests+BS4) | RemoteOK, Jobspresso, EU Remote Jobs, Arc, Lemon, FlexJobs, Remote.co, JustRemote, NoDesk, RemoteTech, GoRemote, Remote4me, DailyRemote, Remojobs (×3), RemoteFrontendJobs, FindBacon, LandingJobs, WeAreDevelopers, NoFluffJobs, JustJoinIt, CWJobs, WorkInStartups, BuiltIn, Dice, GulfTalent, Naukri, NaukriGulf, FounditIN, Shine, TimesJobs, TrueUp, RemoteRocketship, RemoteJobsCom, Remotees |
 | Playwright stealth | WeWorkRemotely, Remote.co, Wellfound, NoDesk, YCombinator, Arc, GulfTalent, NoFluffJobs, Lemon, JustJoinIt |
-| JobSpy | LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter |
+| JobSpy (opt-in, isolated) | LinkedIn, Indeed, ZipRecruiter — off unless `ENABLE_JOBSPY=true`; runs in a child process so a native `tls-client` crash only fails that board, never the run |
 | Crawl4AI | JustRemote |
+
+> **Scraper safety:** every optional board runs under `SCRAPER_TIMEOUT` (default 300s, min 30s) — a hung board is recorded as `error` and the run continues to the summary. JobSpy is additionally gated by `ENABLE_JOBSPY` (default `false`, shows as `skipped-disabled`) and runs via `_run_jobspy_isolated()` in a `spawn` child process, with scope tuned by `JOBSPY_SITES` / `JOBSPY_TERMS`. Enable it only when you want the LinkedIn/Indeed pass.
 
 ---
 
@@ -359,6 +373,7 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `GET /api/cv/profile` | Cached parsed-CV profile → `CvProfileOut` (501 when no fresh `cache/cv_profile_*.json`; per-request LLM parsing disabled) |
 | `PUT /api/cv/profile` | Persist Resume Studio edits (contact + skills) into the profile cache → `CvProfileOut` (501 when uncached; never triggers LLM parsing) |
 | `GET /api/cv/variants` | CV variants `[{name, tags}]` via `CV_DIR`/`cvs/` discovery (missing dir → `[]`) |
+| `POST /api/apply/{fp}` | Phase 2a fill-only: `{mode:"review"}` → `{status: filled_ready, tier, package_path}`; other modes → 400, dream tier → 422, unknown → 404. No submit path exists (`api/safety.py`). |
 
 Notes:
 

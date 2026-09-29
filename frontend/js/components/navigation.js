@@ -7,6 +7,7 @@ window.JobAgent = window.JobAgent || {};
 JobAgent.navigation = {
   titles: {
     dashboard: 'Command Deck',
+    scrape: 'Scrape Monitor',
     jobs: 'Curated Jobs Matrix',
     resume: 'CV & Resume Studio',
     autoapply: 'Auto-Apply Cockpit',
@@ -20,6 +21,7 @@ JobAgent.navigation = {
     this.globalSearchInput = document.getElementById('globalSearchInput');
     this.btnSyncSheets = document.getElementById('btnSyncSheets');
     this.btnScrapeNow = document.getElementById('btnScrapeNow');
+    this.scrapeStatusCard = document.getElementById('scrapeStatusCard');
     this.btnThemeToggle = document.getElementById('btnThemeToggle');
     this.themeIconDark = document.getElementById('themeIconDark');
     this.themeIconLight = document.getElementById('themeIconLight');
@@ -91,17 +93,8 @@ JobAgent.navigation = {
       });
     }
 
-    if (this.btnScrapeNow) {
-      this.btnScrapeNow.addEventListener('click', () => {
-        this.btnScrapeNow.innerHTML = '<span>Scraping 45+...</span>';
-        setTimeout(() => {
-          this.btnScrapeNow.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-            <span>Scrape Now</span>
-          `;
-          JobAgent.toast.show('Scrape cycle complete. 18 new jobs evaluated against CV.');
-        }, 1400);
-      });
+    if (this.scrapeStatusCard) {
+      this.scrapeStatusCard.addEventListener('click', () => this.switchTab('scrape'));
     }
   },
 

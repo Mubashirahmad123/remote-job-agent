@@ -589,9 +589,19 @@ def run_test_tools():
 
 def run_auto_apply_cli(playwright=False):
     """CLI entry point for auto-apply."""
+    import os as _os
+
     print("\n" + "="*60)
     print("🤖 AUTO-APPLY MODE")
     print("="*60)
+    if (_os.getenv("AUTO_APPLY_CONFIRM", "false").lower() == "true"):
+        print("⚠️  WARNING: AUTO_APPLY_CONFIRM=true records 'submitted' after a")
+        print("   blind 3s wait with ZERO post-submit verification")
+        print("   (agents/auto_applier.py). Silent failure and real success are")
+        print("   indistinguishable in the record. Dashboard gating does NOT make")
+        print("   this flag safe. Prefer fill-only + manual submit until the 2b")
+        print("   verification protocol ships.")
+        print("="*60)
 
     jobs = _load_curated_jobs()
     if not jobs:
