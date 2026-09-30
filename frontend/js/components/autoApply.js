@@ -36,15 +36,11 @@ JobAgent.autoApply = {
       });
 
       this.btnModeSubmit.addEventListener('click', () => {
-        const confirmed = confirm('⚠️ CAUTION: AUTO_APPLY_CONFIRM=true will submit live applications automatically via Playwright!\n\nAre you sure you want to activate live auto-submit mode?');
-        if (confirmed) {
-          this.btnModeSubmit.classList.add('active');
-          this.btnModeReview.classList.remove('active');
-          this.safetyStatusLabel.textContent = '⚡ LIVE AUTO-SUBMIT ACTIVE';
-          this.safetyStatusLabel.className = 'badge-rose';
-          JobAgent.store.setAutoApply('mode', 'submit');
-          JobAgent.toast.show('WARNING: Live Auto-Submit mode engaged. Daily cap strictly enforced.');
-        }
+        // Phase 2a: submit is locked at three layers — disabled attribute
+        // (index.html, no click events fire), this toast (defense in depth
+        // if re-enabled), and the API rejects mode != review with 400.
+        // No HTTP submit path exists (api/safety.py SUBMIT_ENABLED=False).
+        JobAgent.toast.show('Locked: submit unlocks only when all four 2b gates close (see PM.md). No application was sent.');
       });
     }
 
@@ -91,25 +87,28 @@ JobAgent.autoApply = {
     }
   },
 
-  triggerQueue() {
-    this.appendTerminalLine('[QUEUE] Auto-apply batch triggered for candidate jobs scoring >= ' + JobAgent.store.state.autoApply.threshold + '%', 'term-indigo');
-
-    setTimeout(() => {
-      this.appendTerminalLine('[BROWSER] Launching Chromium (Playwright stealth headless)...', 'term-cyan');
-    }, 600);
-
-    setTimeout(() => {
-      this.appendTerminalLine('[FILL] Navigating to Greenhouse ATS: KoboToolbox...', 'term-cyan');
-    }, 1200);
-
-    setTimeout(() => {
-      this.appendTerminalLine('[FORM] Fields populated: Mubashir Ahmad, mubashir.dev@example.com', 'term-green');
-    }, 1900);
-
-    setTimeout(() => {
-      this.appendTerminalLine('[SCREENSHOT] Verification captured: screenshots/kobo_review.png', 'term-amber');
-      JobAgent.toast.show('Auto-apply batch finished. Screenshot saved for review.');
-    }, 2600);
+  async triggerQueue() {
+    const threshold = JobAgent.store.state.autoApply.threshold;
+    const jobs = (JobAgent.store.state.jobs || []).filter(
+      (j) => (j.match_score || 0) >= threshold
+    );
+    if (!jobs.length) {
+      this.appendTerminalLine('[QUEUE] No candidate jobs scoring >= ' + threshold + '% — nothing to fill.', 'term-amber');
+      JobAgent.toast.show('Auto-apply queue: no candidates at current threshold.');
+      return;
+    }
+    const job = jobs[0];
+    this.appendTerminalLine('[QUEUE] Fill-only review for: ' + job.job_title + ' @ ' + job.company, 'term-indigo');
+    this.appendTerminalLine('[FILL] POST /api/apply/' + job.id + ' {mode: review} — submit unreachable by design', 'term-cyan');
+    try {
+      const res = await JobAgent.api.applyReview(job.id || job.job_fingerprint);
+      this.appendTerminalLine('[READY] tier=' + (res.tier || '?') + ' status=' + (res.status || 'filled_ready'), 'term-green');
+      this.appendTerminalLine('[PACKAGE] ' + (res.package_path || '(no path)'), 'term-amber');
+      JobAgent.toast.show('Fill ready for review: ' + (res.job_title || job.job_title) + '. Package saved — open the job site to submit manually.');
+    } catch (e) {
+      this.appendTerminalLine('[ERROR] ' + (e && e.message ? e.message : e), 'term-rose');
+      JobAgent.toast.show('Fill failed: ' + (e && e.message ? e.message : e));
+    }
   },
 
   appendTerminalLine(text, cssClass) {

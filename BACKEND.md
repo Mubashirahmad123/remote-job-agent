@@ -5,7 +5,7 @@ tailored materials, CV profile edits) — see `PM.md` for what is still backlog
 (apply submit, skills aggregate).
 
 Run: `venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000`
-Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (136 green, 8 files)
+Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (154 green, 9 files)
 
 ---
 
@@ -34,6 +34,7 @@ api/
     cv.py           GET /api/cv/profile (cached parse, 501 when uncached),
                     PUT /api/cv/profile (Studio edits → on-disk cache, 501 when uncached),
                     GET /api/cv/variants (CVLibrary discovery w/ cvs/ fallback; missing dir → [])
+    apply.py        POST /api/apply/{fp} fill-only (service: api/apply.py, gate: api/safety.py)
 ```
 
 To debug: comment out one `include_router` line in `app.py` to isolate a group.
@@ -73,7 +74,18 @@ Clears cache (+ enrichment map), re-warms, returns `{status, cleared[], warmed{t
 Starts a background scrape run via `api/runs.py` (single active run; no
 multi-scrape overlap). Writes go through curator → Sheets; callers poll
 `GET /api/scrape/{run_id}` (`{status, phase, scraped, curated, error}`) or
-`GET /api/scrape` (run list), then `POST /api/jobs/refresh`.
+`GET /api/scrape` (run list), then `POST /api/jobs/refresh`. Each board runs
+under a time budget (`SCRAPER_TIMEOUT`, default 300s, min 30s — see
+`agents/scrapper.py:_run_optional_scraper`): a hung board is recorded as an
+`error` with a timeout message and the run continues. JobSpy is special:
+`python-jobspy`'s native `tls-client` can segfault the whole interpreter on
+Windows, so it is opt-in only (`ENABLE_JOBSPY=true`, default `false` →
+`skipped-disabled`) and runs in an isolated `spawn` child process
+(`_run_jobspy_isolated`): a child crash/timeout fails just that board and
+the run still reaches summary/curate. Scope is tuned via `JOBSPY_SITES`
+(default `linkedin,indeed`) and `JOBSPY_TERMS` (default 1 term). Pollers must
+treat 404 (unknown run_id, e.g. after a server restart wipes the in-memory
+registry) as terminal — never poll forever.
 
 ### `POST /api/resume/{fp}` → `{status, filename}` (+ `GET …/download` PDF)
 ### `POST /api/cover-letter/{fp}` → `{status, filename, cover_letter}` (+ `GET …/download` text)
@@ -99,6 +111,15 @@ never 500 on bad input.
 basenames + `_extract_domain_tags`, else `["general"]`). Missing dir →
 `[]`, never 500.
 
+### `POST /api/apply/{fp}` ← `{mode:"review"}` → `{status, tier, package_path}` (Phase 2a fill-only)
+`api/apply.fill_review()` resolves the fingerprint via `cache.get_job`
+(404 unknown), classifies tier via `agents.auto_applier.classify_tier`
+(lazy import), dream tier → 422, else builds a local apply package via
+`generate_apply_package` (no browser, no sheet write, no submit click).
+Any `mode` other than `"review"` → 400. `AUTO_APPLY_CONFIRM` is never
+read — env cannot re-enable submit over HTTP (`api/safety.py`
+`SUBMIT_ENABLED=False`). Never writes `status:"submitted"`.
+
 ## 3. Cache (`cache.py`)
 
 - **Tabs:** `JOB_TABS = ALL JOBS, TOP MATCHES, GOOD MATCHES`; `APPLIED`; `STATS`.
@@ -119,19 +140,23 @@ basenames + `_extract_domain_tags`, else `["general"]`). Missing dir →
 
 - `API_TOKEN` empty → open (local-dev default). Set → exact-match Bearer required
   on **every** `/api/*`, reads included.
-- `__main__` guard refuses non-local bind without `API_TOKEN`.
+- Non-local bind refuses at import time inside `create_app()` (covers the
+  documented `uvicorn api.app:app` path, not just `python api/app.py`).
 - CORS: localhost `:3000/:5173/:8000/:8080` by default, override via
   `API_CORS_ORIGINS`. `allow_methods = GET, POST, PUT, PATCH, OPTIONS`.
 - Static UI mount is **last** so `/api/*` and `/docs` always win.
 
 ## 5. Testing
 
-136 tests across 8 files (`venv\Scripts\python.exe -m pytest tests/ -q`):
+154 tests across 9 files (`venv\Scripts\python.exe -m pytest tests/ -q`):
 `test_api_phase1.py` (18: faked `cache._read_tab_values` +
 `_load_enrichment_map` — no credentials, no network; covers list/tab-400,
 search+source+limit, enrichment join + `""→null`, get-one/404, stats snapshot,
 tracker list/filter/patch-400/patch-404/patch-ok, refresh + refresh-400, health
-secrets + heavy-import guards), `test_api_phase2.py`, `test_api_cv.py`
+secrets + heavy-import guards), `test_api_phase2.py`, `test_api_apply.py`
+(9: fill-only happy path, default-review, 404, non-review → 400 incl. submit
+with `AUTO_APPLY_CONFIRM=true` in env, dream → 422, no heavy imports,
+bind-guard refuse/allow), `test_api_cv.py`
 (profile GET/PUT + variants), `test_api_materials.py` (resume/cover-letter),
 `test_api_freshness.py` (12-row Sheet mirror, refresh drops stale),
 `test_api_jobs_contract.py` (ground-truth window + stale-row handling),

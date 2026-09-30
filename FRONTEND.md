@@ -24,6 +24,11 @@ frontend/
 `index.html` script order matters: `mockData → api → store → components → app`.
 `mockData.js` is fallback paint, not the data model — new code must read
 `store.state`, never `MOCK_*` directly (grep before adding usages).
+| `autoApply.js` | safety cockpit, telemetry | live fill-only: `triggerQueue` → `POST /api/apply/{fp}` `{mode:review}` → terminal log + package path; submit toggle is a gated no-op (toast, no HTTP submit) | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider`, `terminalLog` |
+| `scrapeMonitor.js` | scrape run monitor, board diagnostics, structured event stream, run history | `/api/scrape` polling | `scrapeMonitorStatus/Phase/Progress/Summary`, `scrapeMonitorBoards`, `scrapeMonitorEvents`, `scrapeMonitorHistory` |
+- Scrape Monitor is live through the existing five-second run polling. `GET /api/scrape/{run_id}` now includes additive `boards` and bounded `events` fields; scraper events stay separate from the Auto-Apply `terminalLog`.
+- Board statuses include `running` (mid-board, so the monitor never goes silent), `ok` / `empty` / `error` (timeout message on `error`), `skipped-js`, and `skipped-disabled` (JobSpy when `ENABLE_JOBSPY != true`). A crashed/isolated JobSpy surfaces as `error` and the run still completes.
+- `Scrape Now` has one authoritative handler in `app.js`; `navigation.js` only routes the sidebar status card to the Scrape Monitor.
 
 ## 2. API client (`js/api.js`)
 
@@ -34,7 +39,7 @@ frontend/
   `HTTP_nnn`. All throw — callers show banners/toasts, never silent-fail.
 - One fn per backend router: `getHealth` / `getJobs/getJob` / `getStats` /
   `getTracker/patchTracker` / `refreshJobs` / `startScrape/getScrape/listScrapes` /
-  `createResume/createCoverLetter` / `getCvProfile/updateCvProfile/getCvVariants`
+  `createResume/createCoverLetter` / `applyReview` / `getCvProfile/updateCvProfile/getCvVariants`
   — mirror `api/routers/` when adding endpoints. The three `getCv*` fns
   swallow 404/501 into `{_unavailable: true}` (endpoint not ready / no cache);
   all other errors still throw.
@@ -67,7 +72,7 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
 | `jobDrawer.js` | slide-over detail | receives job object (defensive: string-or-array stack, missing skills/CV) | `jobDetailDrawer`, `drawerBody`, `btnDrawerApplyNow/Save` |
 | `tracker.js` | kanban + status cycling | `GET/PATCH /api/tracker`; click cycles `applied→interviewing→offer→rejected`, sync button refreshes APPLIED tab | `kanbanColApplied/Review/Interview/Offer/Rejected`, `count*`, `btnSyncTrackerSheets` |
 | `resumeStudio.js` | CV upload (local demo), tailor engine, profile edit + variants panels, Resume/Cover-Letter preview tabs + Open-PDF | `POST /api/resume` + `/api/cover-letter`, `GET` + `PUT /api/cv/profile`, `GET /api/cv/variants` (quiet fallback to dynamic demo preview when 404/501/unreachable) | `tailorJobSelect`, `btnGenerateTailored`, `cvVariantList`, `btnEditProfile`, `profSkills`, `generatedPreviewCard`, `tabPreviewResume`, `tabPreviewCover`, `btnOpenPdf` |
-| `autoApply.js` | safety cockpit, telemetry | static demo (Phase 2: wire to apply endpoints) | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider`, `terminalLog` |
+| `autoApply.js` | safety cockpit, telemetry | live fill-only: `triggerQueue` → `POST /api/apply/{fp}` `{mode:review}` → terminal log + package path; submit toggle is a gated no-op (toast, no HTTP submit) | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider`, `terminalLog` |
 | `toast.js` | notifications | `JobAgent.toast.show(msg)` | — |
 | `app.js` | boot: `init()` all → `store.loadAll()` → wire Sync Sheets + global search | `/api/jobs/refresh` | `btnSyncSheets`, `globalSearchInput`, `btnScrapeNow` (Phase 2: scrape trigger) |
 
@@ -82,6 +87,5 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
 - Resume Studio is live (profile/variants/tailor wired); its offline fallback is
   a *dynamic* preview built from the selected job + parsed profile — never
   hardcoded fixture HTML. The preview card starts hidden until first generate.
-- Skills cloud and auto-apply telemetry are still static demos until their
-  endpoints land (`GET /api/skills`, apply endpoints) — don't mistake them
-  for live data.
+- Skills cloud is still a static demo until `GET /api/skills` lands — don't mistake it
+  for live data. Auto-apply telemetry is live fill-only (package path + terminal log).

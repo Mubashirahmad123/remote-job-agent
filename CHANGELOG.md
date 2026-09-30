@@ -17,6 +17,15 @@
   FRONTEND (api.js fns, Studio live state), PM (Phase 2 status + next),
   TESTER (136/8 files), README (structure + endpoint table), AGENTS,
   ARCHITECTURE.
+- Scrape robustness: per-board time budget (`SCRAPER_TIMEOUT`, default 300s)
+  so a hung board is skipped instead of stalling the run; board-start
+  "running" state for the monitor; poll loop resets to idle on
+  404/unreachable instead of sticking on "Scraping…" (`tests/test_scraper_timeout.py`).
+- JobSpy isolation: opt-in only (`ENABLE_JOBSPY`, default `false` →
+  `skipped-disabled`); when enabled it runs in a `spawn` child process
+  (`_run_jobspy_isolated`) so a native `tls-client` segfault fails just that
+  board and the run still reaches summary/curate; scope via `JOBSPY_SITES` /
+  `JOBSPY_TERMS` (defaults: `linkedin,indeed` × 1 term).
 
 ## 2026-09-23 — Phase 1e: docs + live Sheets
 

@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="css/resume.css?v=2">
   <link rel="stylesheet" href="css/autoapply.css">
   <link rel="stylesheet" href="css/tracker.css">
+  <link rel="stylesheet" href="css/scrape-monitor.css">
 </head>
 <body class="theme-dark">
   <!-- App Shell -->
@@ -41,6 +42,12 @@
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
           <span class="nav-label">Command Deck</span>
           <span class="nav-counter" id="activeJobsBadge">24</span>
+        </button>
+
+        <button class="nav-item" data-tab="scrape" id="navScrape">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6 4 4 6-7"></path><path d="M4 21h16"></path></svg>
+          <span class="nav-label">Scrape Monitor</span>
+          <span class="nav-pulse-dot" id="scrapeNavPulse" title="Scrape status"></span>
         </button>
 
         <button class="nav-item" data-tab="jobs" id="navJobs">
@@ -212,6 +219,36 @@
               </div>
             </div>
             <div class="skill-cloud" id="topSkillsCloud"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 1.5: Scrape Monitor -->
+      <section class="view-panel" id="view-scrape">
+        <div class="scrape-monitor-container">
+          <div class="scrape-monitor-header">
+            <div>
+              <h2>Scrape Monitor</h2>
+              <p>Board-level progress, structured run events, and recent scrape history.</p>
+              <div class="scrape-monitor-meta" id="scrapeMonitorPhase">Waiting for a scrape</div>
+            </div>
+            <span class="scrape-monitor-status is-running" id="scrapeMonitorStatus">Ready</span>
+          </div>
+          <div class="scrape-progress-track"><div class="scrape-progress-bar" id="scrapeMonitorProgress"></div></div>
+          <div class="scrape-stat-grid" id="scrapeMonitorSummary"></div>
+          <div class="scrape-monitor-grid">
+            <div class="scrape-monitor-panel">
+              <h3>Scraper event stream</h3>
+              <div class="scrape-terminal" id="scrapeMonitorEvents"></div>
+            </div>
+            <div class="scrape-monitor-panel">
+              <h3>Board diagnostics</h3>
+              <div class="scrape-board-list" id="scrapeMonitorBoards"></div>
+            </div>
+          </div>
+          <div class="scrape-monitor-panel">
+            <h3>Recent runs</h3>
+            <div class="scrape-history-list" id="scrapeMonitorHistory"></div>
           </div>
         </div>
       </section>
@@ -525,14 +562,14 @@
               <div class="safety-control-card">
                 <div class="control-label-group">
                   <strong>Safety Submission Mode</strong>
-                  <span class="control-desc">Controls whether Playwright actually clicks Submit or pauses for review</span>
+                  <span class="control-desc">Fill-only in Phase 2a — submit unlocks only when all four 2b gates close (see PM.md)</span>
                 </div>
                 <div class="mode-switch-container">
                   <button class="mode-switch-btn active" id="btnModeReview">
                     <span class="dot green"></span> Fill & Review Only
                   </button>
-                  <button class="mode-switch-btn danger" id="btnModeSubmit">
-                    <span class="dot red"></span> Auto-Submit (Live)
+                  <button class="mode-switch-btn danger" id="btnModeSubmit" disabled title="Locked — submit unlocks only when all four 2b gates close (verification, claim-first idempotency, router auth, triple-gate). See PM.md.">
+                    <span class="dot red"></span> 🔒 Auto-Submit (Locked)
                   </button>
                 </div>
               </div>
@@ -727,6 +764,7 @@
   <script src="js/store.js"></script>
   <script src="js/components/toast.js"></script>
   <script src="js/components/navigation.js"></script>
+  <script src="js/components/scrapeMonitor.js"></script>
   <script src="js/components/dashboard.js"></script>
   <script src="js/components/jobDesk.js"></script>
   <script src="js/components/jobDrawer.js"></script>

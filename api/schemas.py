@@ -267,3 +267,28 @@ class CvProfileUpdate(BaseModel):
         if isinstance(v, str):
             return [s.strip() for s in v.replace("\n", ",").split(",") if s.strip()]
         return v
+
+
+class ApplyRequest(BaseModel):
+    """POST /api/apply/{fp} body — Phase 2a fill-only.
+
+    `mode` is a plain str (not Literal) so the router can return 400 for
+    anything other than "review" instead of FastAPI's automatic 422.
+    No confirm/submit fields exist by design — submit is unreachable.
+    """
+
+    mode: str = "review"
+
+
+class ApplyOut(BaseModel):
+    """Phase 2a fill-review result (terminal state: screenshot + package)."""
+
+    status: str = "filled_ready"
+    mode: str = "review"
+    job_fingerprint: Optional[str] = None
+    job_title: Optional[str] = None
+    company: Optional[str] = None
+    tier: Optional[str] = None
+    package_path: Optional[str] = None
+    screenshot_path: Optional[str] = None
+    submit_enabled: bool = False

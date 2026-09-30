@@ -27,7 +27,7 @@ def run_scraper():
         os.makedirs("logs", exist_ok=True)
         
         # Log the output
-        with open("logs/scraper.log", "a") as f:
+        with open("logs/scraper.log", "a", encoding="utf-8") as f:
             f.write(f"\n{'='*50}\n")
             f.write(f"Run started: {timestamp}\n")
             f.write(f"{'='*50}\n")
@@ -46,7 +46,7 @@ def run_scraper():
         print("⏰ Job scraper timed out (1 hour limit)")
     except Exception as e:
         print(f"💥 Error running scraper: {e}")
-        with open("logs/scraper.log", "a") as f:
+        with open("logs/scraper.log", "a", encoding="utf-8") as f:
             f.write(f"\nERROR: {e}\n")
 
 def next_run_time():
