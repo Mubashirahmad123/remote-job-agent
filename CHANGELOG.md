@@ -11,6 +11,8 @@
   cards still progress `applied/review→interviewing→offer→rejected`.
 - Command Deck pipeline metrics now render from tracker rows instead of the
   old static sample counts, so empty/live API states stay honest.
+- Sidebar count badges now render from live `/api/stats` totals (`ALL JOBS` and
+  `TOP MATCHES`) instead of hardcoded demo values.
 - Pipeline Tracker now preserves the auto-apply APPLIED-sheet header fork in
   `TrackerEntry` (`job_fingerprint`, `applied_at`, `scraped_at`, job context),
   so fill/review rows are not flattened by the API.

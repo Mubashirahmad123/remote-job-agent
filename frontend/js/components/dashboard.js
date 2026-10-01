@@ -18,17 +18,35 @@ JobAgent.dashboard = {
     if (el) el.textContent = val;
   },
 
+  _count(value, fallback = 0) {
+    if (value === undefined || value === null || value === '') return fallback;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Math.max(0, numeric) : fallback;
+  },
+
+  _formatCount(value) {
+    if (value === undefined || value === null || value === '') return '—';
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '—';
+    return Math.max(0, numeric).toLocaleString();
+  },
+
   _applyMetrics(stats) {
-    if (!stats) return;
-    this._setText('metricTotalJobs', stats.total_jobs ?? '—');
-    const tabs = stats.tabs || {};
-    this._setText('metricTopMatches', tabs['TOP MATCHES'] ?? '—');
-    // Sidebar "Hot" badge shows the same live TOP MATCHES count — it was
-    // hardcoded in index.html and never updated, drifting from this metric.
-    if (tabs['TOP MATCHES'] != null) {
-      const hot = document.getElementById('topMatchCountBadge');
-      if (hot) hot.textContent = tabs['TOP MATCHES'] + ' Hot';
+    if (!stats) {
+      this._setText('activeJobsBadge', '—');
+      this._setText('topMatchCountBadge', '— Hot');
+      return;
     }
+    const tabs = stats.tabs || {};
+    const totalJobs = this._count(stats.total_jobs, this._count(tabs['ALL JOBS'], 0));
+    const topMatches = this._count(tabs['TOP MATCHES'], 0);
+
+    this._setText('metricTotalJobs', this._formatCount(totalJobs));
+    this._setText('metricTopMatches', this._formatCount(topMatches));
+    // Sidebar badges use the same live /api/stats counts as the dashboard
+    // metrics, so they never drift back to the old static demo values.
+    this._setText('activeJobsBadge', this._formatCount(totalJobs));
+    this._setText('topMatchCountBadge', this._formatCount(topMatches) + ' Hot');
   },
 
   _trackerColumn(status) {
