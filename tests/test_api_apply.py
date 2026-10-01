@@ -67,7 +67,13 @@ def _fake_env(monkeypatch, good=True):
     monkeypatch.setattr(
         apply_service,
         "_fill_ats_form",
-        lambda job, *args, **kwargs: {"status": "filled_ready", "screenshot_path": "screenshots/fake.png", "error": None},
+        lambda job, *args, **kwargs: {
+            "status": "filled_ready",
+            "screenshot_path": "screenshots/fake.png",
+            "error": None,
+            "field_verification": "verified",
+            "profile_fields_verified": ["first_name", "last_name", "email"],
+        },
     )
     monkeypatch.setattr(
         apply_service,
@@ -113,6 +119,8 @@ def _seed_greenhouse_submit(monkeypatch, tmp_path, job=GREENHOUSE_SUBMIT_JOB):
         "created_at": "2026-09-29T12:00:00+00:00",
         "resume_path": str(resume),
         "cover_letter_text": "Seeded cover letter for submit tests.",
+        "field_verification": "verified",
+        "profile_fields_verified": ["first_name", "last_name", "email"],
     })
     monkeypatch.setattr(
         apply_service,
@@ -227,6 +235,59 @@ class TestApplyFillOnly:
         assert response.json()["status"] == "package_only"
         assert response.json()["screenshot_path"] is None
         assert response.json()["package_path"]
+
+    def test_greenhouse_missing_required_maps_to_needs_review(self, client, monkeypatch):
+        _fake_env(monkeypatch)
+        monkeypatch.setattr(
+            apply_service,
+            "_fill_ats_form",
+            lambda job, *args, **kwargs: {
+                "status": "filled_ready",
+                "screenshot_path": "screenshots/fake.png",
+                "error": None,
+                "field_verification": "missing_required",
+                "profile_fields_verified": [],
+            },
+        )
+        response = client.post(f"/api/apply/{FP_GOOD}", json={"mode": "review"})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "needs_review"
+        assert body["field_verification"] == "missing_required"
+        assert body["profile_fields_verified"] == []
+        assert "Required applicant fields" in (body["fill_error"] or "")
+
+    def test_greenhouse_verified_fill_stays_filled_ready(self, client, monkeypatch):
+        _fake_env(monkeypatch)
+        monkeypatch.setattr(
+            apply_service,
+            "_fill_ats_form",
+            lambda job, *args, **kwargs: {
+                "status": "filled_ready",
+                "screenshot_path": "screenshots/fake.png",
+                "error": None,
+                "field_verification": "verified",
+                "profile_fields_verified": ["first_name", "email"],
+            },
+        )
+        response = client.post(f"/api/apply/{FP_GOOD}", json={"mode": "review"})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "filled_ready"
+        assert body["profile_fields_verified"] == ["first_name", "email"]
+
+    def test_needs_review_artifact_blocks_intent(self, client, monkeypatch, tmp_path):
+        import api.apply_state as apply_state
+
+        _seed_greenhouse_submit(monkeypatch, tmp_path)
+        artifact = apply_state.get_review_artifact(FP_SUBMIT)
+        artifact["fill_status"] = "needs_review"
+        artifact["field_verification"] = "missing_required"
+        artifact["profile_fields_verified"] = []
+        apply_state.save_review_artifact(artifact)
+        monkeypatch.setenv("APPLY_API_TOKEN", "test-apply-secret")
+        r = _issue_intent(client)
+        assert r.status_code == 409
 
     def test_no_heavy_imports_at_startup(self, client, monkeypatch):
         _fake_env(monkeypatch)
@@ -447,6 +508,8 @@ class TestGreenhouseIntentAndSubmit:
                 "resume_verify": "files_present",
                 "cover_letter_pasted": True,
                 "cover_letter_verify": "verified",
+                "field_verification": "verified",
+                "profile_fields_verified": ["first_name", "last_name", "email"],
             }
 
         monkeypatch.setattr(aa, "_fill_greenhouse_form", _fake_filler)

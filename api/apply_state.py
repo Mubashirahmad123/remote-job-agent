@@ -32,7 +32,9 @@ def connect() -> sqlite3.Connection:
             fill_status TEXT NOT NULL,
             created_at TEXT NOT NULL,
             resume_path TEXT,
-            cover_letter_text TEXT
+            cover_letter_text TEXT,
+            field_verification TEXT,
+            profile_fields_verified TEXT
         )"""
     )
     columns = {
@@ -52,19 +54,39 @@ def connect() -> sqlite3.Connection:
         connection.execute(
             "ALTER TABLE apply_review_artifacts ADD COLUMN cover_letter_text TEXT"
         )
+    if "field_verification" not in columns:
+        connection.execute(
+            "ALTER TABLE apply_review_artifacts ADD COLUMN field_verification TEXT"
+        )
+    if "profile_fields_verified" not in columns:
+        connection.execute(
+            "ALTER TABLE apply_review_artifacts ADD COLUMN profile_fields_verified TEXT"
+        )
     connection.commit()
     return connection
 
 
 def save_review_artifact(artifact: dict[str, Any]) -> None:
+    import json as _json
+
+    profile_raw = artifact.get("profile_fields_verified")
+    if isinstance(profile_raw, (list, tuple)):
+        profile_json = _json.dumps(list(profile_raw))
+    elif isinstance(profile_raw, str):
+        profile_json = profile_raw
+    elif profile_raw is None:
+        profile_json = None
+    else:
+        profile_json = _json.dumps(list(profile_raw))
     connection = connect()
     try:
         connection.execute(
             """INSERT INTO apply_review_artifacts
             (job_fingerprint, platform, job_title, apply_url, package_path,
              screenshot_path, confirmation_path, confirmation_message,
-             match_ratio, fill_status, created_at, resume_path, cover_letter_text)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             match_ratio, fill_status, created_at, resume_path, cover_letter_text,
+             field_verification, profile_fields_verified)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(job_fingerprint) DO UPDATE SET
               platform=excluded.platform,
               job_title=excluded.job_title,
@@ -77,7 +99,9 @@ def save_review_artifact(artifact: dict[str, Any]) -> None:
               fill_status=excluded.fill_status,
               created_at=excluded.created_at,
               resume_path=excluded.resume_path,
-              cover_letter_text=excluded.cover_letter_text""",
+              cover_letter_text=excluded.cover_letter_text,
+              field_verification=excluded.field_verification,
+              profile_fields_verified=excluded.profile_fields_verified""",
             (
                 artifact["job_fingerprint"],
                 artifact["platform"],
@@ -92,6 +116,8 @@ def save_review_artifact(artifact: dict[str, Any]) -> None:
                 artifact["created_at"],
                 artifact.get("resume_path"),
                 artifact.get("cover_letter_text"),
+                artifact.get("field_verification"),
+                profile_json,
             ),
         )
         connection.commit()
@@ -100,13 +126,27 @@ def save_review_artifact(artifact: dict[str, Any]) -> None:
 
 
 def get_review_artifact(job_fingerprint: str) -> dict[str, Any] | None:
+    import json as _json
+
     connection = connect()
     try:
         row = connection.execute(
             "SELECT * FROM apply_review_artifacts WHERE job_fingerprint = ?",
             (job_fingerprint,),
         ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        artifact = dict(row)
+        raw = artifact.get("profile_fields_verified")
+        if isinstance(raw, str):
+            try:
+                parsed = _json.loads(raw)
+                artifact["profile_fields_verified"] = list(parsed) if isinstance(parsed, list) else []
+            except Exception:
+                artifact["profile_fields_verified"] = []
+        elif raw is None:
+            artifact["profile_fields_verified"] = []
+        return artifact
     finally:
         connection.close()
 
