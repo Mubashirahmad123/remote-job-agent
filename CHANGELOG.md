@@ -9,6 +9,8 @@
 - Tracker terminal archive behavior: `rejected`, `withdrawn`, and `ghosted`
   cards now remain terminal on click with an explanatory toast, while active
   cards still progress `applied/review→interviewing→offer→rejected`.
+- Command Deck pipeline metrics now render from tracker rows instead of the
+  old static sample counts, so empty/live API states stay honest.
 - Pipeline Tracker now preserves the auto-apply APPLIED-sheet header fork in
   `TrackerEntry` (`job_fingerprint`, `applied_at`, `scraped_at`, job context),
   so fill/review rows are not flattened by the API.
