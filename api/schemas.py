@@ -314,4 +314,5 @@ class ApplyOut(BaseModel):
     tier: Optional[str] = None
     package_path: Optional[str] = None
     screenshot_path: Optional[str] = None
+    screenshot_url: Optional[str] = None
     submit_enabled: bool = False
