@@ -24,7 +24,7 @@ frontend/
 `index.html` script order matters: `mockData → api → store → components → app`.
 `mockData.js` is fallback paint, not the data model — new code must read
 `store.state`, never `MOCK_*` directly (grep before adding usages).
-| `autoApply.js` | safety cockpit, telemetry | live fill-only: `triggerQueue` → `POST /api/apply/{fp}` `{mode:review}` → terminal log + package path; submit toggle is a gated no-op (toast, no HTTP submit) | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider`, `terminalLog` |
+| `autoApply.js` | fill-and-review queue, safety lock, per-run results and activity log | up to three highest-scoring eligible jobs sequentially → `POST /api/apply/{fp}` `{mode:review}` → visible Greenhouse/Lever fill window or package-only fallback; submit toggle disabled | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider` (preference only), `btnRunAutoApplyQueue`, `btnViewScreenshots` (labelled View Review Results), `terminalLog`, `reviewQueueResults` |
 | `scrapeMonitor.js` | scrape run monitor, board diagnostics, structured event stream, run history | `/api/scrape` polling | `scrapeMonitorStatus/Phase/Progress/Summary`, `scrapeMonitorBoards`, `scrapeMonitorEvents`, `scrapeMonitorHistory` |
 - Scrape Monitor is live through the existing five-second run polling. `GET /api/scrape/{run_id}` now includes additive `boards` and bounded `events` fields; scraper events stay separate from the Auto-Apply `terminalLog`.
 - Board statuses include `running` (mid-board, so the monitor never goes silent), `ok` / `empty` / `error` (timeout message on `error`), `skipped-js`, and `skipped-disabled` (JobSpy when `ENABLE_JOBSPY != true`). A crashed/isolated JobSpy surfaces as `error` and the run still completes.
@@ -72,7 +72,7 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
 | `jobDrawer.js` | slide-over detail | receives job object (defensive: string-or-array stack, missing skills/CV) | `jobDetailDrawer`, `drawerBody`, `btnDrawerApplyNow/Save` |
 | `tracker.js` | kanban + status cycling | `GET/PATCH /api/tracker`; click cycles `applied→interviewing→offer→rejected`, sync button refreshes APPLIED tab | `kanbanColApplied/Review/Interview/Offer/Rejected`, `count*`, `btnSyncTrackerSheets` |
 | `resumeStudio.js` | CV upload (local demo), tailor engine, profile edit + variants panels, Resume/Cover-Letter preview tabs + Open-PDF | `POST /api/resume` + `/api/cover-letter`, `GET` + `PUT /api/cv/profile`, `GET /api/cv/variants` (quiet fallback to dynamic demo preview when 404/501/unreachable) | `tailorJobSelect`, `btnGenerateTailored`, `cvVariantList`, `btnEditProfile`, `profSkills`, `generatedPreviewCard`, `tabPreviewResume`, `tabPreviewCover`, `btnOpenPdf` |
-| `autoApply.js` | safety cockpit, telemetry | live fill-only: `triggerQueue` → `POST /api/apply/{fp}` `{mode:review}` → terminal log + package path; submit toggle is a gated no-op (toast, no HTTP submit) | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider`, `terminalLog` |
+| `autoApply.js` | fill-and-review queue, safety lock, activity and latest results | API fills supported Greenhouse/Lever forms in visible windows and captures screenshot paths; unsupported ATSs remain package-only; per-job failures do not stop later jobs | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider` (preference only), `btnRunAutoApplyQueue`, `btnViewScreenshots`, `terminalLog`, `reviewQueueResults` |
 | `toast.js` | notifications | `JobAgent.toast.show(msg)` | — |
 | `app.js` | boot: `init()` all → `store.loadAll()` → wire Sync Sheets + global search | `/api/jobs/refresh` | `btnSyncSheets`, `globalSearchInput`, `btnScrapeNow` (Phase 2: scrape trigger) |
 
@@ -88,4 +88,6 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
   a *dynamic* preview built from the selected job + parsed profile — never
   hardcoded fixture HTML. The preview card starts hidden until first generate.
 - Skills cloud is still a static demo until `GET /api/skills` lands — don't mistake it
-  for live data. Auto-apply telemetry is live fill-only (package path + terminal log).
+  for live data. Auto-Apply opens visible review windows for supported ATS forms,
+  leaves them open for manual submission, and never clicks submit. The daily-cap
+  slider is only a preference; it is not enforced by this fill-only API flow.

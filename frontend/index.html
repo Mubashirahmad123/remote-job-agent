@@ -587,8 +587,8 @@
 
               <div class="safety-control-card">
                 <div class="control-label-group">
-                  <strong>Daily Application Cap</strong>
-                  <span class="control-desc">Hard limit to prevent rate limits and ensure profile quality</span>
+                  <strong>Daily Cap Preference</strong>
+                  <span class="control-desc">Display preference only; review-package preparation does not submit or consume daily slots</span>
                 </div>
                 <div class="control-slider-box">
                   <span class="slider-badge" id="dailyCapVal">5 / Day</span>
@@ -600,11 +600,11 @@
             <div class="cockpit-action-row">
               <button class="action-btn primary large" id="btnRunAutoApplyQueue">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                <span>Trigger Auto-Apply for Top 3 Jobs Now</span>
+                <span>Fill &amp; Review Up to 3 Jobs</span>
               </button>
               <button class="action-btn secondary large" id="btnViewScreenshots">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                <span>Open Pre-Submit Verification Screenshots (4)</span>
+                <span>View Review Results</span>
               </button>
             </div>
           </div>
@@ -613,20 +613,13 @@
             <div class="dash-widget flex-2">
               <div class="widget-header">
                 <div class="widget-title-group">
-                  <h3>Playwright Execution Telemetry</h3>
-                  <span class="widget-sub">Real-time terminal stream from <code>agents/auto_applier.py</code></span>
+                  <h3>Review Queue Activity</h3>
+                  <span class="widget-sub">ATS form-fill and review-only results</span>
                 </div>
-                <span class="badge-tag">STREAM ACTIVE</span>
+                <span class="badge-tag">REVIEW ONLY</span>
               </div>
               <div class="terminal-window" id="terminalLog">
-                <div class="term-line timestamp">[14:32:01] <span class="term-cyan">[INIT]</span> AutoApplier loaded with state database: data/job_agent.db</div>
-                <div class="term-line timestamp">[14:32:02] <span class="term-indigo">[QUEUE]</span> Loaded 3 candidate jobs scoring >= 75%</div>
-                <div class="term-line timestamp">[14:32:04] <span class="term-green">[JOB #1]</span> Evaluating KoboToolbox (Frontend Developer) - Score: 92%</div>
-                <div class="term-line timestamp">[14:32:06] <span class="term-cyan">[ATS]</span> Detected Greenhouse form at https://boards.greenhouse.io/...</div>
-                <div class="term-line timestamp">[14:32:08] <span class="term-indigo">[FILL]</span> Populating fields: First Name, Last Name, Email, Phone, LinkedIn</div>
-                <div class="term-line timestamp">[14:32:11] <span class="term-indigo">[UPLOAD]</span> Uploaded tailored resume: apply_packages/job_1/resume.pdf</div>
-                <div class="term-line timestamp">[14:32:14] <span class="term-green">[SCREENSHOT]</span> Captured pre-submission verification proof: screenshots/kobo_review.png</div>
-                <div class="term-line timestamp">[14:32:15] <span class="term-amber">[GATE]</span> AUTO_APPLY_CONFIRM=false. Paused form before submit for human review. Ready!</div>
+                <div class="term-line timestamp">Review queue idle. Greenhouse/Lever open filled for review; no applications are submitted.</div>
               </div>
             </div>
 
@@ -737,21 +730,16 @@
       <div class="drawer-body" id="drawerBody"></div>
     </aside>
 
-    <!-- Screenshot Lightbox Modal -->
+    <!-- Latest fill-and-review queue results -->
     <div class="modal-overlay hidden" id="screenshotModal">
-      <div class="modal-box modal-lg">
+      <div class="modal-box modal-lg review-results-modal">
         <div class="modal-header">
-          <h3>Pre-Submission Form Screenshot</h3>
-          <button class="modal-close-btn" id="btnCloseModal">✕</button>
+          <h3>Latest Review Queue</h3>
+          <button class="modal-close-btn" id="btnCloseModal" type="button" aria-label="Close review results">✕</button>
         </div>
         <div class="modal-body">
-          <div class="screenshot-viewer">
-            <img id="modalScreenshotImg" src="" alt="Application Form Screenshot">
-          </div>
-          <div class="screenshot-meta">
-            <span id="modalScreenshotJob">Job: Frontend Engineer @ KoboToolbox</span>
-            <span class="badge-tag" id="modalScreenshotTimestamp">Form Filled: Today 14:32</span>
-          </div>
+          <p class="review-results-note">Greenhouse and Lever open in a review window with fields filled. Review the open form and submit manually if ready. Other ATSs receive a package only.</p>
+          <div class="review-results-list" id="reviewQueueResults" aria-live="polite"></div>
         </div>
       </div>
     </div>

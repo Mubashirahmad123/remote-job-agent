@@ -49,3 +49,20 @@ def require_token(
     if not provided or provided != expected:
         raise HTTPException(status_code=401, detail="Unauthorized")
     return None
+
+
+def require_apply_token(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> None:
+    """Require a valid Bearer secret for apply actions even in local dev.
+
+    APPLY_API_TOKEN is dedicated to apply routes. API_TOKEN is accepted as a
+    backwards-compatible fallback, but an unset token never opens these routes.
+    """
+    expected = (
+        os.getenv("APPLY_API_TOKEN") or os.getenv("API_TOKEN") or ""
+    ).strip()
+    provided = (creds.credentials or "").strip() if creds else ""
+    if not expected or not provided or provided != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return None

@@ -21,8 +21,9 @@ Router layout (one file per group for easy debugging):
     api/routers/system.py  — POST /api/jobs/refresh
     api/runs.py + api/routers/runs.py — POST/GET /api/scrape (background runs)
     api/routers/cv.py      — GET /api/cv/profile, GET /api/cv/variants (CV Studio reads)
-    api/safety.py + api/apply.py + api/routers/apply.py — POST /api/apply/{fp}
-      Phase 2a fill-only (mode=review terminal state, no submit opcode)
+     api/safety.py + api/apply.py + api/routers/apply.py — POST /api/apply/{fp}
+      fill-only (mode=review) + Greenhouse-only /intent + /submit (2b split;
+      Lever has no submit path)
 """
 
 import os

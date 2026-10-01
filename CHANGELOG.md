@@ -1,5 +1,22 @@
 # CHANGELOG.md
 
+## Unreleased (2026-09-29 — Auto-Apply cockpit fill-and-review)
+
+- Connected the fill-only API to the existing Greenhouse/Lever form fillers.
+  Each supported job opens a visible review window, fills supported fields,
+  captures a pre-submit screenshot, and stays open for manual review/submission;
+  the backend never clicks submit. Unsupported ATSs remain package-only.
+- Auto-Apply Cockpit processes up to three eligible jobs sequentially, reports
+  per-job fill/package outcomes without aborting later jobs, and shows actual
+  latest-run results instead of a static screenshot mockup.
+- Replaced placeholder Playwright telemetry with actual review-queue activity.
+  Auto-Submit remains disabled and there are still no HTTP submit routes.
+- Terminal messages render as text nodes so untrusted job titles and API errors
+  cannot inject markup into the cockpit log.
+- 2b submit remains gated: F1/F2 and independent test primitives are in place; Lever
+  confirmation-copy observation is blocked on a legitimate isolated trial
+  posting. Latest full suite: 222 passed, 1 expected xfail.
+
 ## Unreleased (2026-09-24 — Phase 2 actions + Studio fixes)
 
 - Action API: `POST /api/scrape` + `GET /api/scrape[/{run_id}]` (single-active-run
