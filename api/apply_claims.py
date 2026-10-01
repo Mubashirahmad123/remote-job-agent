@@ -92,6 +92,13 @@ def claim_first(
                 else:
                     retry_after = max(1, math.ceil((expires_at - timestamp).total_seconds()))
                     raise ClaimConflict(retry_after=retry_after)
+            elif status == "failed_refunded":
+                # Pre-click failure already refunded its cap slot at mark time;
+                # drop the spent row so a corrected retry can claim fresh.
+                connection.execute(
+                    "DELETE FROM apply_claims WHERE job_fingerprint = ?",
+                    (job_fingerprint,),
+                )
             else:
                 raise ClaimConflict()
 

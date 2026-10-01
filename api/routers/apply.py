@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 from api import apply as apply_service
+from api import safety
 from api.deps import require_apply_token, require_token
 from api.schemas import ApplyIntentOut, ApplyIntentRequest, ApplyRequest, ApplySubmitOut, ApplySubmitRequest
 
@@ -43,6 +44,8 @@ def apply_intent(
     raw_mode = body.mode if body is not None else "review"
     if raw_mode.strip().lower() != "review":
         raise HTTPException(status_code=400, detail="Intent requires mode='review'")
+    if not safety.SUBMIT_ENABLED:
+        raise HTTPException(status_code=403, detail="Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
     try:
         return apply_service.create_greenhouse_intent(job_fingerprint)
     except LookupError:
@@ -66,6 +69,8 @@ def apply_submit(
     body: ApplySubmitRequest | None = None,
     _: None = Depends(require_apply_token),
 ) -> dict:
+    if not safety.SUBMIT_ENABLED:
+        raise HTTPException(status_code=403, detail="Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
     try:
         return apply_service.submit_greenhouse(
             path_fingerprint=job_fingerprint,

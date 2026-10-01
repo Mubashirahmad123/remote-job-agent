@@ -51,8 +51,16 @@ class SubmitUnavailable(Exception):
     """Raised when submit is intentionally unsupported for this ATS."""
 
 
-def _fill_ats_form(job: Dict[str, Any]) -> Dict[str, Any] | None:
-    """Fill a supported ATS form in a review window; never click submit."""
+def _fill_ats_form(
+    job: Dict[str, Any],
+    resume_path: str | None = None,
+    cover_letter: str = "",
+) -> Dict[str, Any] | None:
+    """Fill a supported ATS form in a review window; never click submit.
+
+    Carries the final submit materials (tailored resume path + cover text)
+    so the visible review form shows exactly what a later submit would send.
+    """
     from agents.auto_applier import (
         APPLICANT_EMAIL,
         APPLICANT_LINKEDIN,
@@ -98,7 +106,7 @@ def _fill_ats_form(job: Dict[str, Any]) -> Dict[str, Any] | None:
                 browser = playwright.chromium.launch(headless=container)
                 page = browser.new_page(viewport={"width": 1280, "height": 900})
                 filler = _fill_greenhouse_form if platform == "greenhouse" else _fill_lever_form
-                result = filler(page, apply_url, None, "", profile)
+                result = filler(page, apply_url, resume_path, cover_letter, profile)
                 result["browser_opened"] = not container
                 results.put(result)
                 completed.set()
@@ -151,11 +159,26 @@ def fill_review(job_fingerprint: str) -> Dict[str, Any]:
     if tier == "dream":
         raise DreamTierForbidden("Dream-tier jobs require manual application")
 
-    package_path = generate_apply_package(job, None, "")
+    # Generate the final submit materials FIRST so the visible review form
+    # carries exactly what a later submit would send (never blank placeholders
+    # while submit uses different files). Falls back to empty materials when
+    # generation is unavailable (no LLM keys in dev/test) — the response then
+    # says so honestly via materials_note.
+    materials_note = "final"
+    try:
+        _materials = _prepare_submit_materials(job)
+        review_resume = _materials["resume_path"]
+        review_cover = _materials["cover_letter_text"]
+    except Exception as error:
+        review_resume = None
+        review_cover = ""
+        materials_note = f"fallback-empty: {error}"
+
+    package_path = generate_apply_package(job, review_resume, review_cover)
     if not package_path:
         raise RuntimeError("Apply package generation returned no path")
 
-    fill_result = _fill_ats_form(job)
+    fill_result = _fill_ats_form(job, review_resume, review_cover)
     apply_url = job.get("apply_url", "")
     platform = detect_ats_platform(apply_url) if apply_url else "unknown"
     if platform in {"greenhouse", "lever"} and fill_result and fill_result.get("screenshot_path"):
@@ -175,6 +198,8 @@ def fill_review(job_fingerprint: str) -> Dict[str, Any]:
             "match_ratio": match_ratio,
             "fill_status": fill_result["status"],
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "resume_path": review_resume,
+            "cover_letter_text": review_cover,
         })
 
     return {
@@ -193,6 +218,7 @@ def fill_review(job_fingerprint: str) -> Dict[str, Any]:
             else None
         ),
         "fill_error": fill_result.get("error") if fill_result else None,
+        "materials_note": materials_note,
         "confirmation_metadata_available": bool(
             fill_result
             and fill_result.get("confirmation_path")
@@ -268,10 +294,13 @@ def _prepare_submit_materials(job: Dict[str, Any]) -> Dict[str, str]:
 
 def create_greenhouse_intent(job_fingerprint: str) -> Dict[str, str]:
     """Issue a five-minute one-use intent after a real GH fill and screenshot."""
+    from api import safety
+    from agents.auto_applier import classify_tier, detect_ats_platform, generate_apply_package
     from api.apply_intents import ActiveIntentConflict, create_intent
     from api.apply_state import connect, get_review_artifact, save_review_artifact
-    from agents.auto_applier import classify_tier, detect_ats_platform, generate_apply_package
 
+    if not safety.SUBMIT_ENABLED:
+        raise SubmitRejected(403, "Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
     job = _get_cached_job(job_fingerprint)
     if detect_ats_platform(job.get("apply_url", "")) != "greenhouse":
         raise SubmitUnavailable("Submit is not available for this ATS")
@@ -365,6 +394,24 @@ def _run_greenhouse_submit(artifact: Dict[str, Any], job: Dict[str, Any]) -> Dic
             if fill_result.get("status") != "filled_ready":
                 result["error"] = fill_result.get("error") or fill_result.get("status")
                 return result
+            # Attachment gate: the refill must prove the files actually landed
+            # (files.length readback), not merely that set_input_files() did not
+            # throw. Anything unverified fails closed before any submit click.
+            if fill_result.get("resume_attached") is not True:
+                result["error"] = (
+                    "Resume attachment unverified in submit refill "
+                    f"(verify={fill_result.get('resume_verify')!r})"
+                )
+                return result
+            if not (
+                fill_result.get("cover_letter_pasted") is True
+                or fill_result.get("cover_letter_attached") is True
+            ):
+                result["error"] = (
+                    "Cover letter unverified in submit refill "
+                    f"(verify={fill_result.get('cover_letter_verify')!r})"
+                )
+                return result
             if (
                 fill_result.get("confirmation_path") != artifact["confirmation_path"]
                 or fill_result.get("confirmation_message") != artifact["confirmation_message"]
@@ -416,6 +463,7 @@ def submit_greenhouse(
     typed_title: str | None,
 ) -> Dict[str, Any]:
     """Validate the request, claim/cap atomically, then submit Greenhouse only."""
+    from api import safety
     from agents.auto_applier import classify_tier, detect_ats_platform
     from api.apply_claims import (
         ClaimConflict,
@@ -428,6 +476,8 @@ def submit_greenhouse(
     from api.apply_state import connect, get_review_artifact
     from api.apply_validation import validate_confirmation_echo, validate_submit_inputs
 
+    if not safety.SUBMIT_ENABLED:
+        raise SubmitRejected(403, "Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
     job = _get_cached_job(path_fingerprint)
     if detect_ats_platform(job.get("apply_url", "")) != "greenhouse":
         raise SubmitUnavailable("Submit is not available for this ATS")

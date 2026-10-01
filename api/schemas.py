@@ -315,4 +315,5 @@ class ApplyOut(BaseModel):
     package_path: Optional[str] = None
     screenshot_path: Optional[str] = None
     screenshot_url: Optional[str] = None
+    materials_note: Optional[str] = None
     submit_enabled: bool = False

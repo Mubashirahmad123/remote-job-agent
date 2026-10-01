@@ -94,7 +94,7 @@ docker compose run --rm runner python -m pytest tests/
 | `CV_PATH` | `my_cv.pdf` | Primary CV (matching fallback, profile-cache anchor) |
 | `CV_DIR` | empty | Optional CV-variants folder (`cvs/`); `GET /api/cv/variants` lists it, best CV picked per job |
 | `MIN_MATCH_SCORE` | `70` | Curator threshold for GOOD MATCHES tab |
-| `AUTO_APPLY_CONFIRM` | `false` | Affects the standalone CLI only; `true` can submit without post-submit verification and is unsafe. The HTTP API ignores it, opens Greenhouse/Lever forms for fill-and-review only, and has no submit route. |
+| `AUTO_APPLY_CONFIRM` | `false` | Legacy CLI flag, now ignored everywhere (blind submit permanently disabled). The HTTP API ignores it; Greenhouse `/intent` + `/submit` are gated by `SUBMIT_ENABLED=False` (403) plus `APPLY_API_TOKEN`. |
 
 ---
 

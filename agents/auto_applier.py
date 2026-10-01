@@ -5,7 +5,9 @@ Auto-apply agent with tiered strategy, SQLite state tracking, and safety gates.
 TIER STRATEGY:
     dream      → Auto-prepare, notify human, NEVER auto-submit
     good_fit   → Auto-fill form, pause for human review (default)
-    batch      → Auto-fill + auto-submit (if AUTO_APPLY_CONFIRM=true)
+    batch      → Auto-fill, pause for human review (CLI auto-submit permanently
+                 disabled — the legacy blind click is removed; submit only via
+                 the verified HTTP intent/claim/verify flow in api/apply.py)
 
 Usage:
     python main.py apply                    # Simple mode
@@ -162,9 +164,31 @@ def _save_application(job: Dict, result: Dict, tier: str):
 # TIER CLASSIFICATION
 # =============================================================================
 
+def _safe_score(job: Dict) -> int:
+    """Parse a match score that may arrive as float str, percent, blank, or None.
+
+    Sheet values like "85.0", "", None, or "87%" all coerce instead of raising.
+    Anything unparseable scores 0 (excluded by thresholds downstream).
+    """
+    raw = job.get("match_score", job.get("score", 0))
+    if raw is None:
+        return 0
+    if isinstance(raw, bool):
+        return int(raw)
+    if isinstance(raw, (int, float)):
+        return int(raw)
+    text = str(raw).strip().rstrip("%").strip()
+    if not text:
+        return 0
+    try:
+        return int(float(text))
+    except (ValueError, TypeError):
+        return 0
+
+
 def classify_tier(job: Dict) -> str:
     """Classify job into tier based on match score and other signals."""
-    score = int(job.get("match_score", job.get("score", 0)))
+    score = _safe_score(job)
     
     if score >= TIER_DREAM_THRESHOLD:
         return "dream"
@@ -779,8 +803,18 @@ def generate_apply_package(job: Dict, resume_path: Optional[str], cover_letter: 
         with open(os.path.join(package_path, "form_data.json"), "w", encoding="utf-8") as f:
             json.dump(form_data, f, indent=2)
         
+        import html as _html
+
+        def _esc(value) -> str:
+            # Package HTML is opened in a browser; job fields + cover text are
+            # untrusted scraped/LLM content — escape before interpolating.
+            return _html.escape(str(value or ""), quote=True)
+
+        _pkg_url = str(job.get('apply_url', '') or '')
+        if not _pkg_url.lower().startswith(("http://", "https://")):
+            _pkg_url = "#"
         html = f"""<!DOCTYPE html>
-<html><head><title>Apply: {job.get('job_title')} at {job.get('company')}</title>
+<html><head><title>Apply: {_esc(job.get('job_title'))} at {_esc(job.get('company'))}</title>
 <style>
 body {{ font-family: Arial; max-width: 700px; margin: 30px auto; padding: 20px; }}
 .header {{ background: #f5f5f5; padding: 20px; border-radius: 8px; }}
@@ -795,16 +829,16 @@ a {{ color: #2196F3; }}
 <body>
 <div class="header">
     <h2>📝 Apply Package</h2>
-    <h3>{job.get('job_title')} at {job.get('company')}</h3>
-    <p><a href="{job.get('apply_url', '')}" target="_blank">Open Application ↗</a></p>
+    <h3>{_esc(job.get('job_title'))} at {_esc(job.get('company'))}</h3>
+    <p><a href="{_esc(_pkg_url)}" target="_blank" rel="noopener noreferrer">Open Application ↗</a></p>
 </div>
-<div class="field"><label>Name:</label><input value="{APPLICANT_NAME}" id="n" readonly><button onclick="copy('n')">Copy</button></div>
-<div class="field"><label>Email:</label><input value="{APPLICANT_EMAIL}" id="e" readonly><button onclick="copy('e')">Copy</button></div>
-<div class="field"><label>Phone:</label><input value="{APPLICANT_PHONE}" id="p" readonly><button onclick="copy('p')">Copy</button></div>
-<div class="field"><label>LinkedIn:</label><input value="{APPLICANT_LINKEDIN}" id="l" readonly><button onclick="copy('l')">Copy</button></div>
-<div class="field"><label>Portfolio:</label><input value="{APPLICANT_PORTFOLIO}" id="pf" readonly><button onclick="copy('pf')">Copy</button></div>
+<div class="field"><label>Name:</label><input value="{_esc(APPLICANT_NAME)}" id="n" readonly><button onclick="copy('n')">Copy</button></div>
+<div class="field"><label>Email:</label><input value="{_esc(APPLICANT_EMAIL)}" id="e" readonly><button onclick="copy('e')">Copy</button></div>
+<div class="field"><label>Phone:</label><input value="{_esc(APPLICANT_PHONE)}" id="p" readonly><button onclick="copy('p')">Copy</button></div>
+<div class="field"><label>LinkedIn:</label><input value="{_esc(APPLICANT_LINKEDIN)}" id="l" readonly><button onclick="copy('l')">Copy</button></div>
+<div class="field"><label>Portfolio:</label><input value="{_esc(APPLICANT_PORTFOLIO)}" id="pf" readonly><button onclick="copy('pf')">Copy</button></div>
 <h3>Cover Letter</h3>
-<textarea readonly>{cover_letter}</textarea>
+<textarea readonly>{_esc(cover_letter)}</textarea>
 <script>function copy(id) {{ var el=document.getElementById(id); el.select(); document.execCommand('copy'); }}</script>
 </body></html>"""
         
@@ -954,15 +988,16 @@ def auto_apply(job, mark_sheet=True, open_browser=True, use_playwright=False):
                     result["playwright_result"] = pw_result
                     result["screenshot_path"] = pw_result.get("screenshot_path")
                     
-                    # SUBMIT LOGIC
+                    # SUBMIT LOGIC — PERMANENTLY DISABLED (legacy blind path).
+                    # The old AUTO_APPLY_CONFIRM click submitted without
+                    # post-submit verification and bypassed the verified
+                    # Greenhouse intent/claim/verify pipeline in api/apply.py.
+                    # It must never click again: report fill-only and let the
+                    # operator submit through the reviewed HTTP 2b flow.
                     if pw_result["status"] == "filled_ready" and tier_action["auto_submit"]:
-                        submit_btn = page.locator("input[type='submit'], button[type='submit'], #submit_app, .postings-btn").first
-                        if submit_btn.count() > 0:
-                            print(f"    🚀 Auto-submitting...")
-                            submit_btn.click()
-                            time.sleep(3)
-                            result["status"] = "submitted"
-                            _increment_daily_stat("auto_submitted")
+                        print(f"    ⛔ CLI auto-submit is disabled (legacy blind path) — fill only, no click.")
+                        result["status"] = "filled_ready_submit_disabled"
+                        _increment_daily_stat("filled_ready")
                     else:
                         result["status"] = pw_result["status"]
                         if result["status"] == "filled_ready":
@@ -1074,12 +1109,12 @@ def batch_auto_apply(jobs, limit=None, score_threshold=None):
     # Filter: score + not already applied
     scored_jobs = []
     for j in jobs:
-        score = int(j.get("match_score", j.get("score", 0)))
+        score = _safe_score(j)
         fp = j.get("job_fingerprint", j.get("apply_url", ""))
         if score >= score_threshold and not _already_applied(fp):
             scored_jobs.append(j)
     
-    scored_jobs.sort(key=lambda j: int(j.get("match_score", j.get("score", 0))), reverse=True)
+    scored_jobs.sort(key=_safe_score, reverse=True)
 
     print(f"\n{'='*60}")
     print(f"BATCH AUTO-APPLY")

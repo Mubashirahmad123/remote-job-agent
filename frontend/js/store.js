@@ -108,11 +108,6 @@ JobAgent.store = {
     }
   },
 
-  remainingQuota() {
-    const cap = parseInt(this.state.autoApply.dailyCap, 10) || 0;
-    return Math.max(0, cap - this.getDailyUsage());
-  },
-
   consumeDailyQuota(n) {
     const used = this.getDailyUsage() + Math.max(0, parseInt(n, 10) || 0);
     try {

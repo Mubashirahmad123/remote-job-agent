@@ -36,18 +36,19 @@ JobAgent.dashboard = {
       if (loading.stats) {
         this.sourcesGrid.innerHTML = `<div style="color: var(--text-muted); font-size: 12.5px; padding: 12px;">Loading live stats from <code>/api/stats</code>…</div>`;
       } else if (stats && stats.by_source) {
+        const esc = (JobAgent.escapeHtml || ((v) => String(v ?? '')));
         const entries = Object.entries(stats.by_source).sort((a, b) => b[1] - a[1]).slice(0, 8);
         this.sourcesGrid.innerHTML = entries.map(([name, count]) => `
           <div class="source-item-card">
             <div class="source-meta">
-              <span class="source-meta-name">${name}</span>
+              <span class="source-meta-name">${esc(name)}</span>
               <span class="source-meta-status">Live • Online</span>
             </div>
-            <span class="source-count-pill">${count} jobs</span>
+            <span class="source-count-pill">${esc(count)} jobs</span>
           </div>
         `).join('') || `<div style="color: var(--text-muted); font-size: 12.5px;">No live sources yet.</div>`;
       } else if (JobAgent.MOCK_SOURCES) {
-        const err = errors.stats ? `<div style="font-size:11.5px;color:#f59e0b;margin-bottom:8px;">API error: ${errors.stats} — showing mock.</div>` : '';
+        const err = errors.stats ? `<div style="font-size:11.5px;color:#f59e0b;margin-bottom:8px;">API error: ${(JobAgent.escapeHtml || ((v) => String(v ?? '')))(errors.stats)} — showing mock.</div>` : '';
         this.sourcesGrid.innerHTML = err + JobAgent.MOCK_SOURCES.map(src => `
           <div class="source-item-card">
             <div class="source-meta">

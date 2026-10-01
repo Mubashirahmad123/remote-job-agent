@@ -31,7 +31,14 @@ JobAgent.toast = {
     `;
 
     const icon = type === 'success' ? '✓' : '⚠';
-    toast.innerHTML = `<span style="color: ${type === 'success' ? 'var(--accent-emerald)' : 'var(--accent-amber)'}; font-weight: bold;">${icon}</span> <span>${message}</span>`;
+    // Message is rendered via textContent (never innerHTML): toast callers
+    // pass through server error details and job titles, which are untrusted.
+    const iconSpan = document.createElement('span');
+    iconSpan.style.cssText = `color: ${type === 'success' ? 'var(--accent-emerald)' : 'var(--accent-amber)'}; font-weight: bold;`;
+    iconSpan.textContent = icon;
+    const messageSpan = document.createElement('span');
+    messageSpan.textContent = String(message ?? '');
+    toast.append(iconSpan, messageSpan);
     document.body.appendChild(toast);
 
     setTimeout(() => {

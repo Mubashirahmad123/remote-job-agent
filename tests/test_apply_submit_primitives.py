@@ -15,6 +15,8 @@ from agents.auto_applier import (
     _fill_greenhouse_form,
     _fill_lever_form,
     _greenhouse_confirmation_data,
+    _safe_score,
+    classify_tier,
 )
 from api.apply_claims import (
     ClaimConflict,
@@ -910,3 +912,77 @@ def test_concurrent_intent_requests_have_one_live_winner(tmp_path):
     connection = sqlite3.connect(database)
     assert connection.execute("SELECT COUNT(*) FROM apply_intents").fetchone()[0] == 1
     connection.close()
+
+
+def test_consumed_intent_is_replaceable_without_waiting():
+    connection = _new_intent_db()
+    now = datetime(2026, 9, 29, 12, tzinfo=timezone.utc)
+    create_intent(connection, "fp-1", "intent-1", now + timedelta(minutes=5), now)
+    consume_intent(connection, "fp-1", "intent-1", now)
+
+    replacement = create_intent(connection, "fp-1", "intent-2", now + timedelta(minutes=5), now)
+
+    assert replacement["token_hash"] == hashlib.sha256(b"intent-2").hexdigest()
+    validate_intent(connection, "fp-1", "intent-2", now)
+    connection.close()
+
+
+def test_unconsumed_live_intent_still_conflicts():
+    connection = _new_intent_db()
+    now = datetime(2026, 9, 29, 12, tzinfo=timezone.utc)
+    create_intent(connection, "fp-1", "intent-1", now + timedelta(minutes=5), now)
+
+    with pytest.raises(ActiveIntentConflict):
+        create_intent(connection, "fp-1", "intent-2", now + timedelta(minutes=5), now)
+    connection.close()
+
+
+def test_failed_refunded_claim_allows_fresh_retry():
+    connection = _new_claim_db()
+    now = datetime(2026, 9, 29, 12, tzinfo=timezone.utc)
+    claim_first(connection, "fp-1", daily_cap=2, now=now)
+    assert mark_pre_click_failure(connection, "fp-1") is True
+
+    retry = claim_first(connection, "fp-1", daily_cap=2, now=now + timedelta(minutes=1))
+
+    assert retry["status"] == "submit_in_progress"
+    count = connection.execute(
+        "SELECT count FROM daily_apply_caps WHERE cap_date = '2026-09-29'"
+    ).fetchone()[0]
+    assert count == 1  # refunded slot reused, not double-counted
+    connection.close()
+
+
+def test_terminal_submitted_claim_still_conflicts():
+    connection = _new_claim_db()
+    now = datetime(2026, 9, 29, 12, tzinfo=timezone.utc)
+    claim_first(connection, "fp-1", daily_cap=2, now=now)
+    finalize_claim(connection, "fp-1", "submitted")
+
+    with pytest.raises(ClaimConflict):
+        claim_first(connection, "fp-1", daily_cap=2, now=now + timedelta(minutes=1))
+    connection.close()
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (85, 85),
+        (76.5, 76),
+        ("85.0", 85),
+        ("87%", 87),
+        ("  72  ", 72),
+        ("", 0),
+        (None, 0),
+        ("not-a-score", 0),
+    ],
+)
+def test_safe_score_coerces_sheet_values(raw, expected):
+    assert _safe_score({"match_score": raw}) == expected
+
+
+def test_safe_score_never_crashes_tier_classification():
+    assert classify_tier({"match_score": "85.0"}) == "good_fit"
+    assert classify_tier({"match_score": ""}) == "batch"
+    assert classify_tier({"match_score": None}) == "batch"
+    assert classify_tier({"match_score": "95%"}) == "dream"

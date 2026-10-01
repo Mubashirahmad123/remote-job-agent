@@ -34,8 +34,18 @@ JobAgent.autoApply = {
     try {
       const cap = parseInt(JobAgent.store.state.autoApply.dailyCap, 10) || 0;
       const used = JobAgent.store.getDailyUsage ? JobAgent.store.getDailyUsage() : 0;
+      const remaining = Math.max(0, cap - used);
+      const pct = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
       if (this.dailyCapSlider) this.dailyCapSlider.value = String(cap);
       if (this.dailyCapVal) this.dailyCapVal.textContent = `${used}/${cap} today`;
+      const sidebar = document.getElementById('sidebarCapVal');
+      if (sidebar) sidebar.innerHTML = `Daily Apply Cap: <strong>${used} / ${cap}</strong>`;
+      const metric = document.getElementById('metricDailyCap');
+      if (metric) metric.textContent = `${used} / ${cap}`;
+      const sub = document.getElementById('metricDailyCapSub');
+      if (sub) sub.textContent = `Remaining: ${remaining} slot${remaining === 1 ? '' : 's'}`;
+      const bar = document.getElementById('metricDailyCapBar');
+      if (bar) bar.style.width = pct + '%';
     } catch (_) { /* ignore */ }
   },
 
@@ -55,7 +65,8 @@ JobAgent.autoApply = {
         // Phase 2a: submit is locked at three layers — disabled attribute
         // (index.html, no click events fire), this toast (defense in depth
         // if re-enabled), and the API rejects mode != review with 400.
-        // No HTTP submit path exists (api/safety.py SUBMIT_ENABLED=False).
+        // Greenhouse /intent + /submit routes exist but fail closed with 403
+        // while api/safety.py SUBMIT_ENABLED=False (plus APPLY_API_TOKEN auth).
         JobAgent.toast.show('Locked: submit unlocks only when all four 2b gates close (see PM.md). No application was sent.');
       });
     }
@@ -202,6 +213,14 @@ JobAgent.autoApply = {
 
   renderQueueResults() {
     if (!this.reviewQueueResults) return;
+    // Revoke prior preview blob URLs before re-rendering so re-running the
+    // queue without closing the modal does not leak object URLs.
+    try {
+      if (this._objectUrls && this._objectUrls.length) {
+        for (const url of this._objectUrls) URL.revokeObjectURL(url);
+      }
+      this._objectUrls = [];
+    } catch (_) { /* ignore */ }
     this.reviewQueueResults.replaceChildren();
 
     if (!this.latestQueueResults.length) {
