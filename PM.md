@@ -4,7 +4,7 @@ Living plan for the remote-job-agent build. Status last reconciled 2026-10-01.
 
 ---
 
-## 1. Status (2026-09-29)
+## 1. Status (2026-10-01)
 
 | Phase | Scope | State |
 |---|---|---|
@@ -25,7 +25,7 @@ Goal: dashboard buttons do real work, behind the existing safety gates.
 
 | Endpoint | Backend | Frontend | Safety |
 |---|---|---|---|
-| `POST /api/scrape` `{boards?, limit?}` | background run registry (no multi-scrape overlap), writes via curator → Sheets, `POST /api/jobs/refresh` after | `btnScrapeNow` → progress → refresh | ✅ done — cap boards/run, token required off-localhost |
+| `POST /api/scrape` (no params) | background run registry in the API process (single active run → 409 on overlap), writes via curator → Sheets, `POST /api/jobs/refresh` after | `btnScrapeNow` → Scrape Monitor progress → refresh | ✅ done — token required off-localhost |
 | `POST /api/apply/{fp}` | Phase 2a fill-and-review: `mode:"review"` only (other modes → 400); dream tier → 422; `AUTO_APPLY_CONFIRM` ignored over HTTP. Greenhouse/Lever use a visible review browser with supported fields filled and pre-submit screenshot; unsupported ATSs get a package only. No submit click. | Cockpit fills up to 3 eligible jobs sequentially, leaves supported ATS windows open for manual review, and shows fill/package outcomes. Submit toggle stays disabled. | ✅ Fill-and-review API; 2b submit remains gated |
 | `POST /api/resume/{fp}` | `resume_generator` 1-page tailor → serve PDF path/bytes | Resume Studio replaces static demo | ✅ done |
 | `POST /api/cover-letter/{fp}` | `gemini_tools` role-aware letter → serve text/PDF | same package card | ✅ done |
@@ -75,13 +75,14 @@ No gate is considered closed by documentation or a partial implementation:
 each must have its §2b.7 tests passing before the endpoint code in execution
 order step 4 is added. 2b has no target date.
 
-### Current 2b execution status (2026-09-29)
+### Current 2b execution status (2026-10-01)
 
 | Step | State | Evidence / remaining work |
 |---|---|---|
 | 1. F1/F2 Lever fixes | ✅ Done | Posting-page resolution follows `a.show-page-apply` or the current `a.postings-btn[href]` anchor to a validated `/apply` URL; navigation uses `domcontentloaded` and waits for the form selector. Three real postings were fill-only tested with dummy details; all reached `/apply`, filled dummy fields, then exited for custom-question review. No submit click. Fill path unchanged by the 2b split. |
 | 2. Lever confirmation observation | ➖ Deliberately out of scope | No Lever trial account will be purchased. Lever stays fill-only indefinitely (fill produces a real screenshot; no submit path). Exact-copy test is now `skip` with reason "Lever submit deferred — no live confirmation-text observation available without a paid account; revisit if a free path is found later". |
-| 4. Submit endpoint code (Greenhouse only) | ✅ Done, hardened 2026-10-01 | `POST /api/apply/{fp}/intent` + `POST /api/apply/{fp}/submit` implemented in `api/routers/apply.py` → `api/apply.py:create_greenhouse_intent/submit_greenhouse` with Greenhouse URL+message verification (`verify_greenhouse_confirmation`). Intent REUSES the reviewed artifact's tailored resume + cover letter verbatim — it never regenerates materials and never rewrites the artifact, so reviewed == submitted by construction; missing/stale materials fail closed (502, no token). The submit refill reuses exactly those files, and submit fails closed (410) if the resume file is gone or cover text empty. A duplicate intent while one is live is rejected (409) before any expensive work via a read-only pre-check (`live_intent_retry_after`), so it can neither burn generation cost nor mutate the first token's artifact. Non-Greenhouse platforms raise 422 "Submit is not available for this ATS". `SUBMIT_ENABLED` remains `False`; cockpit Auto-Submit control remains disabled pending separate unlock decision. Intent requires the dedicated `APPLY_API_TOKEN` (`API_TOKEN` is never accepted); no live runs yet (held per operator decision). |
+| 3. §7 tests | ✅ Done for Greenhouse | Primitives + Greenhouse route suite green: fill matrices, Greenhouse verification matrix, claim-first ordering incl. threaded exactly-one-winner concurrent test, stale-claim expiry, failed_refunded-claim retry, consumed-intent replacement, daily-cap, kill-switch 403s, attachment-gate refusals, score-coercion params, no-click-before-gate, triple-gate (a)/(b)/(c) incl. per-rejection audit-log tests, intent lifecycle, field-readback gate (verified/repaired proceed; mismatch/unavailable/error/missing_required never click) + minimum-profile gate (name first_name/full_name + email required) + review-honesty mapping (missing_required → needs_review blocks intent 409), dream-422, unconditional auth on both new routes + manual-PATCH, full status-code matrix. Last full suite: 291 passed, 1 skipped (Lever documented limitation). |
+| 4. Submit endpoint code (Greenhouse only) | ✅ Done, hardened 2026-10-01 | `POST /api/apply/{fp}/intent` + `POST /api/apply/{fp}/submit` implemented in `api/routers/apply.py` → `api/apply.py:create_greenhouse_intent/submit_greenhouse` with Greenhouse URL+message verification (`verify_greenhouse_confirmation`). Intent REUSES the reviewed artifact's tailored resume + cover letter verbatim — it never regenerates materials and never rewrites the artifact, so reviewed == submitted by construction; missing/stale materials fail closed (502, no token). The submit refill reuses exactly those files, requires typed-field readback `verified`/`repaired` plus minimum profile (name + email) plus attachment proof before any click, and fails closed (410) if the resume file is gone or cover text empty. A duplicate intent while one is live is rejected (409) before any expensive work via a read-only pre-check (`live_intent_retry_after`), so it can neither burn generation cost nor mutate the first token's artifact. A Greenhouse fill with missing/unverified required fields is stored/reported as `needs_review` (with `field_verification` + `profile_fields_verified`), never `filled_ready`. Non-Greenhouse platforms raise 422 "Submit is not available for this ATS". `SUBMIT_ENABLED` remains `False`; cockpit Auto-Submit control remains disabled pending separate unlock decision. Intent requires the dedicated `APPLY_API_TOKEN` (`API_TOKEN` is never accepted); no live runs yet (held per operator decision). |
 
 The Step 3 helper modules back the kill-switched submit pair. The dashboard
 Auto-Apply Cockpit now uses visible Greenhouse/Lever review windows; each stays
@@ -95,10 +96,9 @@ removed, so there is no unverified submit path left anywhere.
   first, scrape/match on that basis, and have Resume Studio surface CV
   sections not yet added (projects, certifications).
 - `POST /api/apply/{fp}/intent` and `/submit` are Greenhouse-only and implemented; Lever submit will not be built (fill-only indefinitely). UI toggle unlock stays a separate decision after review.
-- **Field-drift guard gap (known limitation, not fixed):** `_run_greenhouse_submit` refills in a fresh page and the metadata-change guard compares only `confirmation_path/message` + requires `filled_ready`. The filler returns no per-field snapshot and the artifact stores none, so a same-shape posting change that keeps identical confirmation metadata and still fills cleanly would pass the guard. Narrowed 2026-09-29: attachments are no longer part of the gap — intent generates the tailored resume + cover letter and the submit refill reuses exactly those files (fail-closed if missing). Remaining gap is field-shape drift only. Accepted risk for supervised single runs with human screenshot review; unattended/high-volume submit use must wait for a field-snapshot diff fix. Any future toggle unlock carries this caveat.
+- **Field-drift guard gap (known limitation, narrowed 2026-10-01):** `_run_greenhouse_submit` refills in a fresh page and the metadata-change guard compares only `confirmation_path/message` + requires `filled_ready`. The refill now verifies typed-field readback (`verified`/`repaired`), minimum profile (name + email), and attachment proof, and the artifact stores `field_verification` + `profile_fields_verified` — so a same-shape posting change that drops/renames fields fails closed instead of passing silently. What remains is pure field-shape drift that keeps identical confirmation metadata *and* still fills cleanly. Accepted risk for supervised single runs with human screenshot review; unattended/high-volume submit use must wait for a field-snapshot diff fix. Any future toggle unlock carries this caveat.
 - `GET /api/skills` aggregate → replace `MOCK_SKILLS` cloud.
-- Kanban `review` column has no backend status — decide: map to `applied+notes`,
-  add real status, or drop the column.
+- Kanban `review` column is now backed by fill-only/package statuses (`filled_ready`, `needs_review`, `package_only`, `custom_questions`, …) mapped in `tracker.js` — done 2026-10-01. Remaining: tracker E2E coverage.
 - `by_source` naming (`RemoteOK` vs `RemoteOKAPI`) — normalize at write or read.
 - Multi-worker cache: in-process TTL means `--workers 1`; shared cache (Redis/file)
   if workers ever needed.
@@ -309,6 +309,7 @@ The 2b feature will be shipped in this exact order, with no shortcuts:
 
 1. **F1/F2 Lever fixes** — done and verified with fill-only real-page checks; the current live apply anchor class is also supported. Unchanged by the split.
 2. **Lever observation** — deliberately out of scope (no trial purchase). Skip-flagged, not blocking.
-4. **Endpoint code (Greenhouse only)** — done: the two specified routes exist with full triple-gate + claim-first + verification. Keep the UI toggle disabled until the Greenhouse submit build is tested and reviewed — that unlock is a separate decision.
+3. **§7 tests (Greenhouse)** — done and green (291 passed, 1 skipped). Includes route-level kill-switch/auth/attachment-gate/field-readback/minimum-profile/review-honesty/manual-PATCH/no-browser assertions for the Greenhouse intent/submit pair.
+4. **Endpoint code (Greenhouse only)** — done: the two specified routes exist with full triple-gate + claim-first + verification + refill field-readback/minimum-profile/attachment gates. Keep the UI toggle disabled until the Greenhouse submit build is tested and reviewed — that unlock is a separate decision.
 
 After all four close, the UI toggle becomes enabled and the submit opcode is reachable.

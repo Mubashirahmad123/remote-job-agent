@@ -36,6 +36,10 @@ venv\Scripts\python.exe scheduler.py
 Keep `--workers 1`: the sheet cache is in-process per worker; multiple workers
 duplicate Sheet reads and can exceed quota.
 
+Dashboard Scrape Now needs no Docker: `POST /api/scrape` runs the scrape in a
+background thread inside this same API process (single active run; 409 while
+one is running), then `POST /api/jobs/refresh` picks up the fresh rows.
+
 ---
 
 ## 3. Docker deployment
@@ -89,6 +93,7 @@ docker compose run --rm runner python -m pytest tests/
 | `API_HOST` | `127.0.0.1` | Non-local bind refuses to start without `API_TOKEN` |
 | `API_PORT` | `8000` | — |
 | `API_TOKEN` | empty | When set, all `/api/*` need `Authorization: Bearer <token>` (even reads) |
+| `APPLY_API_TOKEN` | empty | Dedicated token for `POST /api/apply/{fp}/intent` + `/submit` (unconditional auth; `API_TOKEN` is never accepted there). Set before any submit unlock; unset fails closed with 401 |
 | `API_CORS_ORIGINS` | localhost:3000/5173/8000/8080 | Comma-separated override; `file://` (`null` origin) is never allowed — serve the UI from the API |
 | `API_CACHE_TTL` | `90` | Seconds, clamped to 60–120 |
 | `CV_PATH` | `my_cv.pdf` | Primary CV (matching fallback, profile-cache anchor) |

@@ -183,7 +183,7 @@ remote-job-agent/
 │       ├── store.js          # Reactive state + backend→UI normalization + mock fallback
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
 ├── tests/
-│   └── test_api_*.py etc.   # 288 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
+│   └── test_api_*.py etc.   # 291 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
 ├── apply_packages/           # Auto-generated apply packages (resume + cover letter + form data)
 ├── cover_letters/            # Generated PDF cover letters
 ├── resumes/                  # Generated tailored PDF resumes
@@ -377,7 +377,8 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `GET /api/cv/profile` | Cached parsed-CV profile → `CvProfileOut` (501 when no fresh `cache/cv_profile_*.json`; per-request LLM parsing disabled) |
 | `PUT /api/cv/profile` | Persist Resume Studio edits (contact + skills) into the profile cache → `CvProfileOut` (501 when uncached; never triggers LLM parsing) |
 | `GET /api/cv/variants` | CV variants `[{name, tags}]` via `CV_DIR`/`cvs/` discovery (missing dir → `[]`) |
-| `POST /api/apply/{fp}` | Phase 2a fill-and-review: `{mode:"review"}` → per-ATS fill status, package path, and screenshot path for Greenhouse/Lever; unsupported ATSs return `package_only`. Other modes → 400, dream tier → 422, unknown → 404. The browser never submits; no HTTP submit path exists (`api/safety.py`). |
+| `POST /api/apply/{fp}` | Phase 2a fill-and-review: `{mode:"review"}` → per-ATS fill status (`filled_ready`, or `needs_review` when Greenhouse required profile fields are missing/unverified), package path, and screenshot path for Greenhouse/Lever; unsupported ATSs return `package_only`. Other modes → 400, dream tier → 422, unknown → 404. The browser never submits. |
+| `POST /api/apply/{fp}/intent` + `POST /api/apply/{fp}/submit` | Greenhouse-only verified submit (kill-switched: 403 while `api/safety.py SUBMIT_ENABLED=False`; dedicated `APPLY_API_TOKEN` required) |
 
 Notes:
 

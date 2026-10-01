@@ -15,7 +15,7 @@ Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest 
 
 ```
 api/
-  app.py            thin factory: CORS → include_router ×8 → static UI mount (LAST)
+  app.py            thin factory: CORS → include_router ×9 → static UI mount (LAST)
   deps.py           cors_origins() + require_token() (Bearer <API_TOKEN> when set)
   cache.py          sheet reads, TTL cache, curated enrichment, snapshot fallback,
                     CV profile cache + variant discovery
@@ -28,7 +28,7 @@ api/
     health.py       GET /api/health
     jobs.py         GET /api/jobs, GET /api/jobs/{job_fingerprint}
     stats.py        GET /api/stats
-    tracker.py      GET /api/tracker, PATCH /api/tracker/{job_fingerprint}
+    tracker.py      GET /api/tracker, POST /api/tracker, PATCH /api/tracker/{job_fingerprint}
     system.py       POST /api/jobs/refresh
     runs.py         POST /api/scrape, GET /api/scrape[/{run_id}] (registry: api/runs.py)
     materials.py    POST /api/resume/{fp} + download, POST /api/cover-letter/{fp} + download
@@ -144,7 +144,11 @@ eligible jobs per trigger (enforced daily cap with per-day persisted count),
 then displays per-job status, in-browser screenshot preview
 (`GET /api/apply/{fp}/screenshot`), local package paths, and a posting link
 for package-only ATSs. The review fill carries the final tailored resume +
-cover letter (same files a later submit would send). The separate CLI
+cover letter (same files a later submit would send). A Greenhouse fill whose
+required applicant fields are missing/unverified is stored and returned as
+`needs_review` (with `field_verification` + `profile_fields_verified` exposed)
+instead of `filled_ready`, so intent (409) and submit (410) reject it before
+any browser work. The separate CLI
 `agents/auto_applier.py` path is fill-only; its legacy blind submit was
 permanently removed.
 
