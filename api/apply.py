@@ -406,6 +406,20 @@ def _run_greenhouse_submit(artifact: Dict[str, Any], job: Dict[str, Any]) -> Dic
                     f"(field_verification={fill_result.get('field_verification')!r})"
                 )
                 return result
+            # Minimum-profile gate: readback alone can pass vacuously when
+            # no text fields were found (selector drift). Require at least
+            # one name path (first_name or full_name) plus email to have
+            # been typed and verified before any click. Missing/empty list
+            # fails closed.
+            verified_fields = set(fill_result.get("profile_fields_verified") or [])
+            name_ok = ("first_name" in verified_fields) or ("full_name" in verified_fields)
+            email_ok = "email" in verified_fields
+            if not (name_ok and email_ok):
+                result["error"] = (
+                    "Applicant profile fields unverified in submit refill "
+                    f"(profile_fields_verified={sorted(verified_fields)!r})"
+                )
+                return result
             # Attachment gate: the refill must prove the files actually landed
             # (files.length readback), not merely that set_input_files() did not
             # throw. Anything unverified fails closed before any submit click.

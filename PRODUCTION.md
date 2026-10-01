@@ -138,11 +138,4 @@ docker compose run --rm runner python -m pytest tests/
 | A few Arbeitnow postings link to the company homepage, not the job page | Upstream API limitation (`url` = company site for a minority of postings); kept as-is — verified a slug-built `/jobs/<slug>` URL 404s, so no safe rewrite exists |
 | Bot-protected/generic-selector boards (Naukri, CWJobs, TimesJobs, GoRemote, etc.) repeatedly `empty` | Structural, not a regression: no dedicated parser exists (generic HTML selectors vs bot walls), GoRemote/FounditIN URLs duplicate other boards, Adzuna needs keys, JustRemote/NoDesk fail DNS. No earlier targeted fix found in history; leave as expected-empty |
 
-
-
-
-
-
-we need another thing where user first upload its cv on that basis he can scrap jobs and when in cv and resume studio that cAN TAKE INFO FROM THAT CV ALSO LIKE OTHER SECTIONS which are not added in cv like peijects certificatuions we will mke that one also as foe now we have to that cv is laready in repo ij that bais jobs are scrapped but we need one that first user can up;oad its on cv 
-
-
+> Note: CV-upload-first flow (upload CV -> scrape/match on it -> Resume Studio surfaces missing sections like projects/certifications) is tracked in PM.md section 3 Backlog, not here. Current behavior: CV must pre-exist in the repo (my_cv.pdf / CV_PATH).

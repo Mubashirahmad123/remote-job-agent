@@ -365,7 +365,11 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
         # Verify-then-repair: re-read every typed field and re-type any the
         # page dropped (React re-render), up to 3 passes. Best-effort on
         # harnesses without evaluate (verification reported as unavailable).
+        # Minimum-profile invariant: a "verified" with zero typed fields is
+        # vacuous (selector drift). The verified name list is emitted so the
+        # submit gate can require name + email before any click.
         result["field_verification"] = "unavailable"
+        result["profile_fields_verified"] = []
         def _gh_same(field_name: str, seen: str, expected: str) -> bool:
             if seen == expected:
                 return True
@@ -408,6 +412,14 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
             result["field_verification"] = "unavailable"
         except Exception as e:
             result["field_verification"] = f"error: {e}"
+
+        if result["field_verification"] in {"verified", "repaired"}:
+            verified_names = [field_name for field_name, _, _ in filled_fields]
+            result["profile_fields_verified"] = verified_names
+            name_ok = ("first_name" in verified_names) or ("full_name" in verified_names)
+            email_ok = "email" in verified_names
+            if not (name_ok and email_ok):
+                result["field_verification"] = "missing_required"
 
         result["resume_attached"] = False
         result["resume_verify"] = "skipped"

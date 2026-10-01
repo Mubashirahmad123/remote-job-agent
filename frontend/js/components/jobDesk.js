@@ -161,8 +161,8 @@ JobAgent.jobDesk = {
     }).sort((a, b) => {
       // Newest first: ISO dates (posted_date_iso, scraped_at fallback)
       // compare lexicographically; undated rows sink to the bottom.
-      const da = a.posted_date_iso || '';
-      const db = b.posted_date_iso || '';
+      const da = a.posted_date_iso || a.scraped_at || '';
+      const db = b.posted_date_iso || b.scraped_at || '';
       if (da === db) return 0;
       if (!da) return 1;
       if (!db) return -1;

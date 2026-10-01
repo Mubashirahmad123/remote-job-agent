@@ -7,7 +7,7 @@ closed with 403 while `api/safety.py SUBMIT_ENABLED=False`; Lever has no submit
 path by design. See the gated 2b spec and current execution status in `PM.md`.
 
 Run: `venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000`
-Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified 2026-10-01: 279 passed, 1 skipped)
+Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified 2026-10-01: 286 passed, 1 skipped)
 
 ---
 
@@ -176,7 +176,7 @@ no submit path by design.
 
 ## 5. Testing
 
-The suite was last fully verified 2026-10-01 at 279 passed, 1 skipped
+The suite was last fully verified 2026-10-01 at 286 passed, 1 skipped
 (`venv\Scripts\python.exe -m pytest tests/ -q`):
 `test_api_phase1.py` (18: faked `cache._read_tab_values` +
 `_load_enrichment_map` — no credentials, no network; covers list/tab-400,
@@ -186,7 +186,8 @@ secrets + heavy-import guards), `test_api_phase2.py`, `test_api_apply.py`
 (fill-only happy path, default-review, 404, non-review → 400, dream → 422,
 no heavy imports, kill-switch 403 on intent/submit when disabled,
 attachment-gate refusals, field-readback gate (verified/repaired proceed;
-mismatch/unavailable never click), bind-guard refuse/allow), `test_api_cv.py`
+mismatch/unavailable/missing_required never click) + minimum-profile gate
+(name first_name/full_name + email required), bind-guard refuse/allow), `test_api_cv.py`
 (profile GET/PUT + variants), `test_api_materials.py` (resume/cover-letter),
 `test_api_freshness.py` (12-row Sheet mirror, refresh drops stale),
 `test_api_jobs_contract.py` (ground-truth window + stale-row handling),
