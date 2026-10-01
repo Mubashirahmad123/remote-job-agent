@@ -1,4 +1,4 @@
-"""GET /api/tracker + PATCH /api/tracker/{fp} — application tracker."""
+"""GET/POST /api/tracker + PATCH /api/tracker/{fp} — application tracker."""
 
 from typing import List, Optional
 
@@ -8,7 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from api import cache
 from api.deps import _bearer, require_apply_token, require_token
 from api.mappers import to_tracker_entry
-from api.schemas import TrackerEntry, TrackerUpdate, VALID_TRACKER_STATUSES
+from api.schemas import TrackerCreate, TrackerEntry, TrackerUpdate, VALID_TRACKER_STATUSES
 
 router = APIRouter(tags=["tracker"])
 
@@ -19,6 +19,20 @@ def list_tracker(
     status: Optional[str] = Query(None),
 ) -> List[TrackerEntry]:
     return [to_tracker_entry(r) for r in cache.get_tracker_rows(status=status)]
+
+
+@router.post("/api/tracker", response_model=TrackerEntry, status_code=201)
+def create_tracker_entry(
+    body: TrackerCreate,
+    _: None = Depends(require_token),
+) -> TrackerEntry:
+    try:
+        row = cache.add_tracker_entry(body.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Tracker create failed: {e}")
+    return to_tracker_entry(row)
 
 
 @router.patch("/api/tracker/{job_fingerprint}", response_model=TrackerEntry)

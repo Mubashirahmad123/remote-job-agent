@@ -408,6 +408,39 @@ def _resolve_tracker_url(job_fingerprint: str) -> str:
     raise LookupError(f"No application or job found for '{key}'")
 
 
+def add_tracker_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+    """Append one manual application to APPLIED and refresh tracker cache."""
+    from tools.application_tracker import mark_applied
+    from tools.sheet_writer import get_sheet
+
+    apply_url = (entry.get("apply_url") or "").strip()
+    if not apply_url:
+        raise ValueError("apply_url is required")
+    spreadsheet = get_sheet()
+    created = mark_applied(
+        spreadsheet,
+        apply_url=apply_url,
+        job_title=entry.get("job_title") or "",
+        company=entry.get("company") or "",
+        match_score=int(float(entry.get("match_score") or 0)),
+        notes=entry.get("notes") or "",
+        source=entry.get("source") or "",
+        salary=entry.get("salary") or "",
+        contact=entry.get("contact") or "",
+        follow_up_days=int(entry.get("follow_up_days") if entry.get("follow_up_days") is not None else 7),
+    )
+    refresh(TRACKER_TAB)
+    return {
+        **entry,
+        **created,
+        "match_score": entry.get("match_score") or 0,
+        "notes": entry.get("notes") or "",
+        "source": entry.get("source") or "",
+        "salary": entry.get("salary") or "",
+        "contact": entry.get("contact") or "",
+    }
+
+
 def update_tracker_status(
     job_fingerprint: str, new_status: str, notes: str = ""
 ) -> bool:

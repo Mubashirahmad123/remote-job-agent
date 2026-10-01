@@ -107,6 +107,13 @@ JobAgent.api = (() => {
     return request('/api/tracker' + query({ status: status || undefined }));
   }
 
+  async function createTracker(entry) {
+    return request('/api/tracker', {
+      method: 'POST',
+      body: JSON.stringify(entry || {}),
+    });
+  }
+
   async function patchTracker(fingerprint, status, notes = '') {
     return request('/api/tracker/' + encodeURIComponent(fingerprint), {
       method: 'PATCH',
@@ -233,6 +240,7 @@ JobAgent.api = (() => {
     getJob,
     getStats,
     getTracker,
+    createTracker,
     patchTracker,
     refreshJobs,
     startScrape,

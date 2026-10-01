@@ -126,20 +126,29 @@ class JobOut(BaseModel):
 
 
 _TRACKER_TEXT_FIELDS = (
-    "job_title", "company", "apply_url", "applied_date", "status",
-    "follow_up_date", "notes", "source", "salary", "contact",
-    "last_updated",
+    "job_title", "company", "apply_url", "applied_date", "applied_at",
+    "status", "follow_up_date", "notes", "source", "salary", "contact",
+    "last_updated", "tech_stack", "timezone", "summary", "posted_date_iso",
+    "match_reason", "scraped_at", "job_fingerprint",
 )
 
 
 class TrackerEntry(BaseModel):
-    """One APPLIED-tab row per tools/application_tracker.py:12-16 header."""
+    """One APPLIED-tab row, tolerant of both tracker header forks.
+
+    `tools.application_tracker` creates the compact tracker header
+    (applied_date/follow_up_date/contact/last_updated). The auto-apply path
+    writes via `tools.sheet_writer.APPLIED_COLUMNS` (full job columns plus
+    applied_at/notes/job_fingerprint). Keep both shapes so the Pipeline
+    Tracker can show review/fill rows and patch by fingerprint when present.
+    """
 
     job_title: Optional[str] = None
     company: Optional[str] = None
     apply_url: Optional[str] = None
     match_score: Optional[float] = None
     applied_date: Optional[str] = None
+    applied_at: Optional[str] = None
     status: Optional[str] = None
     follow_up_date: Optional[str] = None
     notes: Optional[str] = None
@@ -147,6 +156,13 @@ class TrackerEntry(BaseModel):
     salary: Optional[str] = None
     contact: Optional[str] = None
     last_updated: Optional[str] = None
+    tech_stack: Optional[str] = None
+    timezone: Optional[str] = None
+    summary: Optional[str] = None
+    posted_date_iso: Optional[str] = None
+    match_reason: Optional[str] = None
+    scraped_at: Optional[str] = None
+    job_fingerprint: Optional[str] = None
 
     @field_validator(*_TRACKER_TEXT_FIELDS, mode="before", check_fields=False)
     @classmethod
@@ -157,6 +173,28 @@ class TrackerEntry(BaseModel):
     @classmethod
     def _normalize_score(cls, v: Any) -> Any:
         return _parse_optional_float(v)
+
+
+class TrackerCreate(BaseModel):
+    """POST /api/tracker body — add a manual application row."""
+
+    apply_url: str = Field(min_length=1)
+    job_title: Optional[str] = None
+    company: Optional[str] = None
+    match_score: Optional[float] = None
+    notes: Optional[str] = None
+    source: Optional[str] = None
+    salary: Optional[str] = None
+    contact: Optional[str] = None
+    follow_up_days: int = Field(default=7, ge=0, le=365)
+
+    @field_validator(
+        "apply_url", "job_title", "company", "notes", "source", "salary", "contact",
+        mode="before", check_fields=False,
+    )
+    @classmethod
+    def _normalize_text(cls, v: Any) -> Any:
+        return _empty_to_none(v)
 
 
 class TrackerUpdate(BaseModel):
