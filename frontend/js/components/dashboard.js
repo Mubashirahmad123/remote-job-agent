@@ -13,29 +13,90 @@ JobAgent.dashboard = {
     JobAgent.store.subscribe(() => this.render());
   },
 
+  _setText(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  },
+
+  _count(value, fallback = 0) {
+    if (value === undefined || value === null || value === '') return fallback;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Math.max(0, numeric) : fallback;
+  },
+
+  _formatCount(value) {
+    if (value === undefined || value === null || value === '') return '—';
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '—';
+    return Math.max(0, numeric).toLocaleString();
+  },
+
   _applyMetrics(stats) {
-    if (!stats) return;
-    const set = (id, val) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = val;
-    };
-    set('metricTotalJobs', stats.total_jobs ?? '—');
-    const tabs = stats.tabs || {};
-    set('metricTopMatches', tabs['TOP MATCHES'] ?? '—');
-    // Sidebar "Hot" badge shows the same live TOP MATCHES count — it was
-    // hardcoded in index.html and never updated, drifting from this metric.
-    if (tabs['TOP MATCHES'] != null) {
-      const hot = document.getElementById('topMatchCountBadge');
-      if (hot) hot.textContent = tabs['TOP MATCHES'] + ' Hot';
+    if (!stats) {
+      this._setText('activeJobsBadge', '—');
+      this._setText('topMatchCountBadge', '— Hot');
+      return;
     }
-    const applied = (stats.stats_rows || []).length;
-    void applied;
+    const tabs = stats.tabs || {};
+    const totalJobs = this._count(stats.total_jobs, this._count(tabs['ALL JOBS'], 0));
+    const topMatches = this._count(tabs['TOP MATCHES'], 0);
+
+    this._setText('metricTotalJobs', this._formatCount(totalJobs));
+    this._setText('metricTopMatches', this._formatCount(topMatches));
+    // Sidebar badges use the same live /api/stats counts as the dashboard
+    // metrics, so they never drift back to the old static demo values.
+    this._setText('activeJobsBadge', this._formatCount(totalJobs));
+    this._setText('topMatchCountBadge', this._formatCount(topMatches) + ' Hot');
+  },
+
+  _trackerColumn(status) {
+    const normalized = String(status || 'applied').trim().toLowerCase() || 'applied';
+    const reviewStatuses = new Set([
+      'review',
+      'filled_ready',
+      'filled_ready_submit_disabled',
+      'custom_questions',
+      'package_only',
+      'email_draft',
+      'playwright_not_installed',
+      'playwright_failed',
+      'dream_manual',
+      'submit_unverified',
+      'failed_refunded',
+    ]);
+    if (normalized === 'rejected' || normalized === 'withdrawn' || normalized === 'ghosted') return 'archived';
+    if (reviewStatuses.has(normalized) || normalized.startsWith('filled_')) return 'review';
+    if (normalized === 'interviewing' || normalized === 'interview') return 'interview';
+    if (normalized === 'offer') return 'offer';
+    return 'applied';
+  },
+
+  _applyPipelineMetrics(trackerRows) {
+    const counts = { applied: 0, review: 0, interview: 0, offer: 0, archived: 0 };
+    (trackerRows || []).forEach((row) => {
+      const key = this._trackerColumn(row.status);
+      counts[key] += 1;
+    });
+
+    this._setText('metricInterviews', counts.interview);
+    this._setText('metricPipelineSub', counts.interview === 1 ? 'Interview Scheduled' : 'Interviews Scheduled');
+    const offerLabel = counts.offer === 1 ? 'Offer' : 'Offers';
+    this._setText(
+      'metricPipelineFootnote',
+      `${counts.applied + counts.review} Applied/Review • ${counts.offer} ${offerLabel} • ${counts.archived} Archived`,
+    );
+
+    const total = counts.applied + counts.review + counts.interview + counts.offer + counts.archived;
+    const progress = total > 0 ? Math.round(((counts.interview + counts.offer) / total) * 100) : 0;
+    const bar = document.getElementById('metricPipelineBar');
+    if (bar) bar.style.width = progress + '%';
   },
 
   render() {
-    const { stats, loading, errors } = JobAgent.store.state;
+    const { stats, tracker, loading, errors } = JobAgent.store.state;
 
     this._applyMetrics(stats);
+    this._applyPipelineMetrics(tracker);
 
     // 1. Scraper Sources Grid — live by_source, else mock.
     if (this.sourcesGrid) {

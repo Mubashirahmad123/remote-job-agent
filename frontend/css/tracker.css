@@ -103,6 +103,16 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+.kanban-card-archived {
+  border-color: rgba(239, 68, 68, 0.28);
+  cursor: default;
+}
+
+.kanban-card-archived:hover {
+  border-color: rgba(239, 68, 68, 0.5);
+  transform: none;
+}
+
 .k-company {
   font-size: 11px;
   color: var(--text-muted);
@@ -134,6 +144,173 @@
   color: var(--accent-emerald);
 }
 
+.manual-application-modal {
+  width: min(94vw, 760px);
+  max-width: 760px;
+}
+
+.manual-application-modal .modal-header {
+  height: auto;
+  min-height: 64px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  gap: 16px;
+}
+
+.manual-application-subtitle {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.manual-application-body {
+  padding: 22px;
+}
+
+.manual-application-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.manual-application-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.manual-application-field-wide {
+  grid-column: 1 / -1;
+}
+
+.manual-application-field label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.manual-application-field label span {
+  color: var(--accent-rose);
+}
+
+.manual-application-field input,
+.manual-application-field textarea {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), opacity var(--transition-fast);
+}
+
+.manual-application-field input {
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.manual-application-field textarea {
+  min-height: 96px;
+  padding: 11px 12px;
+  resize: vertical;
+}
+
+.manual-application-field input::placeholder,
+.manual-application-field textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.manual-application-field input:focus,
+.manual-application-field textarea:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--primary-blue-glow);
+  background: var(--bg-surface);
+}
+
+.manual-application-field input.is-invalid,
+.manual-application-field textarea.is-invalid,
+.manual-application-field input[aria-invalid="true"],
+.manual-application-field textarea[aria-invalid="true"] {
+  border-color: var(--accent-rose);
+  box-shadow: 0 0 0 3px var(--accent-rose-bg);
+}
+
+.manual-application-field input:disabled,
+.manual-application-field textarea:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  background: var(--bg-surface-hover);
+}
+
+.manual-field-hint {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.manual-field-hint code {
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.manual-field-error {
+  min-height: 14px;
+  color: var(--accent-rose);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+
+.manual-application-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-glass);
+}
+
+.manual-application-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.manual-application-status {
+  min-height: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.manual-application-status.is-info {
+  color: var(--accent-cyan);
+}
+
+.manual-application-status.is-success {
+  color: var(--accent-emerald);
+}
+
+.manual-application-status.is-error {
+  color: var(--accent-rose);
+}
+
+.manual-application-form .action-btn.is-loading {
+  cursor: wait;
+}
+
+.manual-application-modal .modal-close-btn:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 @media (max-width: 1200px) {
   .kanban-board {
     grid-template-columns: repeat(2, 1fr);
@@ -141,7 +318,35 @@
 }
 
 @media (max-width: 768px) {
+  .tracker-header-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .tracker-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
   .kanban-board {
     grid-template-columns: 1fr;
+  }
+
+  .manual-application-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-application-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .manual-application-actions {
+    width: 100%;
+  }
+
+  .manual-application-actions .action-btn {
+    flex: 1;
   }
 }

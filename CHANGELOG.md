@@ -18,6 +18,17 @@
 
 ## Unreleased (2026-10-01 — Pipeline Tracker review mapping)
 
+- Professional manual tracker form: `+ Add Manual Application` now opens an
+  in-app modal with required URL/title/company fields, optional source/salary/
+  contact/follow-up/notes metadata, inline validation, URL normalization, and
+  `POST /api/tracker` saving state instead of browser prompts.
+- Tracker terminal archive behavior: `rejected`, `withdrawn`, and `ghosted`
+  cards now remain terminal on click with an explanatory toast, while active
+  cards still progress `applied/review→interviewing→offer→rejected`.
+- Command Deck pipeline metrics now render from tracker rows instead of the
+  old static sample counts, so empty/live API states stay honest.
+- Sidebar count badges now render from live `/api/stats` totals (`ALL JOBS` and
+  `TOP MATCHES`) instead of hardcoded demo values.
 - Pipeline Tracker now preserves the auto-apply APPLIED-sheet header fork in
   `TrackerEntry` (`job_fingerprint`, `applied_at`, `scraped_at`, job context),
   so fill/review rows are not flattened by the API.
