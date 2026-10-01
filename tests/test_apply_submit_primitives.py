@@ -199,6 +199,36 @@ def test_greenhouse_form_timeout_never_clicks():
     assert page.click_count == 0
 
 
+def test_greenhouse_fill_reports_verified_profile_fields():
+    page = FakePage(custom_question_count=0, submit_count=1)
+
+    result = _fill_greenhouse_form(
+        page, "https://boards.greenhouse.io/example/jobs/1", None, "", PROFILE
+    )
+
+    assert result["status"] == "filled_ready"
+    assert result["field_verification"] in {"verified", "repaired"}
+    verified = set(result.get("profile_fields_verified") or [])
+    assert ("first_name" in verified or "full_name" in verified)
+    assert "email" in verified
+    assert page.click_count == 0
+
+
+def test_greenhouse_fill_with_no_profile_fields_is_missing_required():
+    page = FakePage(
+        custom_question_count=0, submit_count=1, form_fields_present=False
+    )
+
+    result = _fill_greenhouse_form(
+        page, "https://boards.greenhouse.io/example/jobs/1", None, "", PROFILE
+    )
+
+    # Vacuous pass is closed: zero typed fields must not verify.
+    assert result["profile_fields_verified"] == []
+    assert result["field_verification"] == "missing_required"
+    assert page.click_count == 0
+
+
 @pytest.mark.parametrize(
     ("custom_questions", "submit_count", "expected"),
     [

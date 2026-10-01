@@ -1,5 +1,19 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-01 — Submit minimum-profile gate)
+
+- `_fill_greenhouse_form` (`agents/auto_applier.py`) now emits
+  `profile_fields_verified` and downgrades a vacuous `verified` (zero typed
+  fields, selector drift) to `missing_required`, which fails closed.
+- `_run_greenhouse_submit` (`api/apply.py`) requires name (`first_name` or
+  `full_name`) + `email` in `profile_fields_verified` before any click.
+- Tests: no-profile / no-email / no-name / missing_required → no click;
+  `full_name`+email passes; filler vacuous case → `missing_required`.
+  `jobDesk.js` sort now honors the `scraped_at` fallback from its comment.
+  `PRODUCTION.md` free-form CV note folded into a `PM.md` backlog pointer.
+- `SUBMIT_ENABLED` stays `False` — live submit still locked.
+- Full suite: 286 passed, 1 skipped (+7 profile-gate tests).
+
 ## Unreleased (2026-10-01 — Submit field-readback hard gate)
 
 - `_run_greenhouse_submit` (`api/apply.py`) now treats the filler's

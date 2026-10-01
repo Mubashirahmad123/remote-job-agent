@@ -1118,14 +1118,25 @@ class TestSubmitAttachmentGate:
         )
 
     def test_refill_without_resume_proof_never_clicks(self, monkeypatch):
-        outcome = self._run_refill(monkeypatch, {"field_verification": "verified"})
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "field_verification": "verified",
+                "profile_fields_verified": ["first_name", "last_name", "email"],
+            },
+        )
         assert outcome["clicked"] is False
         assert "Resume attachment unverified" in (outcome["error"] or "")
 
     def test_refill_without_cover_proof_never_clicks(self, monkeypatch):
         outcome = self._run_refill(
             monkeypatch,
-            {"resume_attached": True, "resume_verify": "files_present", "field_verification": "verified"},
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "field_verification": "verified",
+                "profile_fields_verified": ["first_name", "last_name", "email"],
+            },
         )
         assert outcome["clicked"] is False
         assert "Cover letter unverified" in (outcome["error"] or "")
@@ -1139,6 +1150,7 @@ class TestSubmitAttachmentGate:
                 "cover_letter_pasted": True,
                 "cover_letter_verify": "verified",
                 "field_verification": "verified",
+                "profile_fields_verified": ["first_name", "last_name", "email"],
             },
         )
         # No submit button on the stub page, but the attachment gate passed:
@@ -1182,6 +1194,7 @@ class TestSubmitAttachmentGate:
                 "cover_letter_pasted": True,
                 "cover_letter_verify": "verified",
                 "field_verification": "verified",
+                "profile_fields_verified": ["first_name", "email"],
             },
         )
         # No submit button on the stub page, but the field gate passed:
@@ -1197,8 +1210,85 @@ class TestSubmitAttachmentGate:
                 "cover_letter_pasted": True,
                 "cover_letter_verify": "verified",
                 "field_verification": "repaired",
+                "profile_fields_verified": ["first_name", "last_name", "email"],
             },
         )
         # No submit button on the stub page, but the field gate passed:
         assert outcome["error"] == "Greenhouse submit button was not found"
         assert outcome["clicked"] is False
+
+    def test_refill_without_profile_fields_never_clicks(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
+                "field_verification": "verified",
+                "profile_fields_verified": [],
+            },
+        )
+        assert outcome["clicked"] is False
+        assert "Applicant profile fields unverified" in (outcome["error"] or "")
+
+    def test_refill_without_email_never_clicks(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
+                "field_verification": "verified",
+                "profile_fields_verified": ["first_name", "last_name"],
+            },
+        )
+        assert outcome["clicked"] is False
+        assert "Applicant profile fields unverified" in (outcome["error"] or "")
+
+    def test_refill_without_name_never_clicks(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
+                "field_verification": "verified",
+                "profile_fields_verified": ["email"],
+            },
+        )
+        assert outcome["clicked"] is False
+        assert "Applicant profile fields unverified" in (outcome["error"] or "")
+
+    def test_refill_full_name_path_satisfies_name_requirement(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
+                "field_verification": "verified",
+                "profile_fields_verified": ["full_name", "email"],
+            },
+        )
+        # Name via full_name fallback + email passes the profile gate:
+        assert outcome["error"] == "Greenhouse submit button was not found"
+        assert outcome["clicked"] is False
+
+    def test_refill_missing_required_state_never_clicks(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
+                "field_verification": "missing_required",
+                "profile_fields_verified": [],
+            },
+        )
+        assert outcome["clicked"] is False
+        assert "Field readback unverified" in (outcome["error"] or "")
