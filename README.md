@@ -18,7 +18,7 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS — with colored score bands, hyperlinks, frozen headers |
 | **AI cover letters with role detection** | ✅ | Detects backend/frontend/fullstack/mobile role from job title and tailors tone, skills, and experience accordingly |
 | **LLM fallback chain** | ✅ | Gemini → Groq → Mistral → GLM → Ollama Cloud — pipeline never crashes from API quota errors |
-| **Auto-apply pipeline** | ✅ | Generates tailored resume + cover letter, opens apply URL in browser or auto-fills Greenhouse/Lever via Playwright, tracks in APPLIED sheet |
+| **Auto-apply workflow** | 🟡 Fill/review only over dashboard API | The cockpit prepares up to three jobs per run; Greenhouse/Lever open visibly with supported fields filled and paused for manual review. Other ATSs receive a package only. No dashboard submit route exists. CLI `AUTO_APPLY_CONFIRM=true` remains unsafe and unverified; see warning below. |
 | **Tailored resume generation** | ✅ | Generates ATS-optimized resume PDF matched to each job's tech stack `python main.py resume` |
 | **Country/location filter** | ✅ | 452-country detection — blocks jobs from non-whitelisted countries, allows 198 whitelisted terms |
 | **Cross-platform Unicode PDFs** | ✅ | Auto-downloads DejaVu fonts — works on Windows/macOS/Linux; covers accents, Arabic, Cyrillic |
@@ -98,7 +98,9 @@ You can also set `RUN_MODE` in `.env`:
 
 ### Auto-Apply
 
-The auto-apply agent generates a tailored resume + cover letter, then applies in one of two modes:
+The auto-apply tooling has separate CLI and dashboard flows. The dashboard cockpit calls the fill-only review API and processes up to three eligible jobs sequentially. For Greenhouse and Lever it opens a visible Playwright review window, fills supported fields, captures a pre-submit screenshot, and leaves the form open for you to review and submit manually. It never clicks submit. Unsupported ATSs get a local apply package and a link to the posting. The Review Results panel shows per-job outcomes and local package/screenshot paths; the daily-cap slider is a preference only and is not enforced by this review flow.
+
+The standalone CLI generates a tailored resume + cover letter, then can use one of two modes:
 
 **Simple mode** (default) — opens the apply URL in your browser and creates an apply package:
 ```bash
@@ -107,10 +109,10 @@ python main.py apply
 
 **Playwright mode** — automatically fills Greenhouse/Lever application forms:
 ```bash
-# Fill forms + take screenshots (review before submitting)
+# Standalone CLI: fill forms + take screenshots (review before submitting)
 AUTO_APPLY_PLAYWRIGHT=true python main.py apply
 
-# Full auto-submit (confirms — use with caution)
+# UNSAFE: unverified CLI auto-submit; do not use for real applications
 AUTO_APPLY_PLAYWRIGHT=true AUTO_APPLY_CONFIRM=true python main.py apply
 ```
 
@@ -122,7 +124,7 @@ AUTO_APPLY_PLAYWRIGHT=true AUTO_APPLY_CONFIRM=true python main.py apply
 > it only stops the dashboard from reaching it. Do not run this flag until the
 > 2b verification protocol ships. When in doubt, fill-only + submit manually.
 
-The Playwright mode:
+The standalone CLI Playwright mode:
 - Detects the ATS platform (Greenhouse, Lever, Workday, Workable, Ashby, Breezy)
 - Fills name, email, phone, LinkedIn, portfolio
 - Uploads generated resume PDF
@@ -147,7 +149,7 @@ remote-job-agent/
 │   ├── scrapper.py           # 45+ job board scrapers (API, HTML, RSS)
 │   ├── curator.py            # Dedup, CV matching, quality ranking, sheet save
 │   ├── gemini_tools.py       # Cover letters with LLM fallback (Gemini→Groq→Mistral→GLM→Ollama); ATS 1-page cover-letter PDF
-│   └── auto_applier.py       # Auto-apply: resume + cover letter + Playwright form fill (fill-and-review while AUTO_APPLY_CONFIRM=false; never auto-submits)
+│   └── auto_applier.py       # Standalone CLI: resume + cover letter + optional Greenhouse/Lever Playwright fill; legacy AUTO_APPLY_CONFIRM submit is unverified and unsafe
 ├── tools/
 │   ├── __init__.py
 │   ├── cv_library.py          # Multi-CV library: CV_DIR discovery, per-job pick_best(), single-CV fallback
@@ -252,7 +254,7 @@ AUTO_APPLY_ENABLED=false  # auto-apply after pipeline
 AUTO_APPLY_THRESHOLD=70   # minimum match score
 AUTO_APPLY_LIMIT=5        # max jobs per run
 AUTO_APPLY_PLAYWRIGHT=false  # true = fill forms; false = open browser
-AUTO_APPLY_CONFIRM=false     # true = submit (DANGER); false = fill & review
+AUTO_APPLY_CONFIRM=false     # standalone CLI only; true submits without verification (unsafe); ignored by HTTP API
 
 # Your Profile (for auto-fill)
 APPLICANT_NAME=Your Name
@@ -373,7 +375,7 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `GET /api/cv/profile` | Cached parsed-CV profile → `CvProfileOut` (501 when no fresh `cache/cv_profile_*.json`; per-request LLM parsing disabled) |
 | `PUT /api/cv/profile` | Persist Resume Studio edits (contact + skills) into the profile cache → `CvProfileOut` (501 when uncached; never triggers LLM parsing) |
 | `GET /api/cv/variants` | CV variants `[{name, tags}]` via `CV_DIR`/`cvs/` discovery (missing dir → `[]`) |
-| `POST /api/apply/{fp}` | Phase 2a fill-only: `{mode:"review"}` → `{status: filled_ready, tier, package_path}`; other modes → 400, dream tier → 422, unknown → 404. No submit path exists (`api/safety.py`). |
+| `POST /api/apply/{fp}` | Phase 2a fill-and-review: `{mode:"review"}` → per-ATS fill status, package path, and screenshot path for Greenhouse/Lever; unsupported ATSs return `package_only`. Other modes → 400, dream tier → 422, unknown → 404. The browser never submits; no HTTP submit path exists (`api/safety.py`). |
 
 Notes:
 

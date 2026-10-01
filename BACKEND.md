@@ -1,11 +1,12 @@
 # BACKEND.md — FastAPI Reference (`api/`)
 
 Reads over the Sheets pipeline **plus** Phase 2 action endpoints (scrape runs,
-tailored materials, CV profile edits) — see `PM.md` for what is still backlog
-(apply submit, skills aggregate).
+tailored materials, CV profile edits, and ATS fill-and-review for supported boards).
+Submit routes remain absent; see the gated 2b spec and current execution status
+in `PM.md`.
 
 Run: `venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000`
-Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (154 green, 9 files)
+Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified: 222 passed, 1 expected xfail)
 
 ---
 
@@ -34,7 +35,8 @@ api/
     cv.py           GET /api/cv/profile (cached parse, 501 when uncached),
                     PUT /api/cv/profile (Studio edits → on-disk cache, 501 when uncached),
                     GET /api/cv/variants (CVLibrary discovery w/ cvs/ fallback; missing dir → [])
-    apply.py        POST /api/apply/{fp} fill-only (service: api/apply.py, gate: api/safety.py)
+    apply.py        POST /api/apply/{fp} creates a local review package only
+            (service: api/apply.py, gate: api/safety.py; no ATS browser or submit)
 ```
 
 To debug: comment out one `include_router` line in `app.py` to isolate a group.
@@ -111,14 +113,30 @@ never 500 on bad input.
 basenames + `_extract_domain_tags`, else `["general"]`). Missing dir →
 `[]`, never 500.
 
-### `POST /api/apply/{fp}` ← `{mode:"review"}` → `{status, tier, package_path}` (Phase 2a fill-only)
+### `POST /api/apply/{fp}` ← `{mode:"review"}` → `{status, tier, package_path, screenshot_path, apply_url, browser_opened}` (Phase 2a fill-and-review)
 `api/apply.fill_review()` resolves the fingerprint via `cache.get_job`
 (404 unknown), classifies tier via `agents.auto_applier.classify_tier`
 (lazy import), dream tier → 422, else builds a local apply package via
-`generate_apply_package` (no browser, no sheet write, no submit click).
+`generate_apply_package`. For Greenhouse and Lever, it then launches a visible
+Playwright browser (headless only in a container) and calls the existing
+fill-only form helper. A worker thread owns the browser and keeps the page open
+for manual review; closing the application tab or a 30-minute timeout closes
+the browser. It captures a pre-submit screenshot. Other ATS platforms return
+`package_only` without launching a browser. No sheet write or submit click occurs.
 Any `mode` other than `"review"` → 400. `AUTO_APPLY_CONFIRM` is never
 read — env cannot re-enable submit over HTTP (`api/safety.py`
 `SUBMIT_ENABLED=False`). Never writes `status:"submitted"`.
+
+The cockpit calls this endpoint sequentially for up to three highest-scoring
+eligible jobs per trigger, then displays per-job status, local screenshot/package
+paths, and a posting link for package-only ATSs. The separate CLI
+`agents/auto_applier.py` path remains distinct; its `AUTO_APPLY_CONFIRM=true`
+submit path is not post-submit verified and must not be described as safe.
+
+The modules `api/apply_claims.py`, `api/apply_intents.py`,
+`api/apply_validation.py`, and `api/apply_verification.py` currently provide
+isolated 2b primitives exercised by unit tests only. They are not mounted in a
+router and do not make submit reachable over HTTP.
 
 ## 3. Cache (`cache.py`)
 
@@ -148,7 +166,8 @@ read — env cannot re-enable submit over HTTP (`api/safety.py`
 
 ## 5. Testing
 
-154 tests across 9 files (`venv\Scripts\python.exe -m pytest tests/ -q`):
+The suite was last fully verified at 222 passed, 1 expected xfail
+(`venv\Scripts\python.exe -m pytest tests/ -q`):
 `test_api_phase1.py` (18: faked `cache._read_tab_values` +
 `_load_enrichment_map` — no credentials, no network; covers list/tab-400,
 search+source+limit, enrichment join + `""→null`, get-one/404, stats snapshot,
@@ -160,7 +179,13 @@ bind-guard refuse/allow), `test_api_cv.py`
 (profile GET/PUT + variants), `test_api_materials.py` (resume/cover-letter),
 `test_api_freshness.py` (12-row Sheet mirror, refresh drops stale),
 `test_api_jobs_contract.py` (ground-truth window + stale-row handling),
-`test_auto_applier.py`, `test_country_filter.py`.
+`test_auto_applier.py`, `test_country_filter.py`, and
+`test_apply_submit_primitives.py` (fill fakes, isolated claim/intent/validation/
+verification primitives; exact Lever confirmation text is an expected xfail
+pending the isolated live observation). `test_api_apply.py` stubs the ATS fill
+runner; tests do not launch actual ATS pages. This is not the complete route-
+level 2b contract suite: there are no submit/intent routes yet, so auth/status-
+route coverage remains outstanding.
 Mirror the Phase 1 fake pattern for new endpoints (fake `cache.*`, assert
 status codes, never hit live Sheets).
 

@@ -164,6 +164,7 @@ class TrackerUpdate(BaseModel):
 
     status: str = Field(description="applied|interviewing|offer|rejected|withdrawn|ghosted")
     notes: Optional[str] = None
+    reconcile_submit_failure: bool = False
 
     @field_validator("notes", mode="before", check_fields=False)
     @classmethod
@@ -278,6 +279,28 @@ class ApplyRequest(BaseModel):
     """
 
     mode: str = "review"
+
+
+class ApplyIntentRequest(BaseModel):
+    mode: str = "review"
+
+
+class ApplySubmitRequest(BaseModel):
+    confirm: Any = None
+    job_fingerprint: Any = None
+    intent_token: Any = None
+    typed_title: Any = None
+
+
+class ApplyIntentOut(BaseModel):
+    intent_token: str
+    expires_at: str
+
+
+class ApplySubmitOut(BaseModel):
+    status: str
+    job_fingerprint: str
+    verification: str
 
 
 class ApplyOut(BaseModel):

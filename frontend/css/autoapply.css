@@ -173,6 +173,62 @@
   margin-top: 2px;
 }
 
+.review-results-modal .modal-body {
+  display: grid;
+  gap: 14px;
+}
+
+.review-results-note,
+.review-results-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.review-results-list {
+  display: grid;
+  gap: 8px;
+}
+
+.review-result-item {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-elevated);
+}
+
+.review-result-item h4,
+.review-result-item p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-result-item h4 {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.review-result-status,
+.review-result-path {
+  margin-top: 5px !important;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.review-result-status.is-error {
+  color: var(--accent-rose);
+}
+
+.review-result-link {
+  display: inline-block;
+  margin-top: 7px;
+  color: var(--primary-blue);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @media (max-width: 1200px) {
   .safety-controls-grid {
     grid-template-columns: 1fr;

@@ -19,6 +19,7 @@ import re
 import time
 import random
 import sqlite3
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
@@ -219,9 +220,57 @@ def _get_playwright():
 # FORM FILLERS (Greenhouse + Lever)
 # =============================================================================
 
+def _greenhouse_confirmation_data(page) -> Dict[str, Optional[str]]:
+    """Read Greenhouse confirmation settings from public embedded JSON."""
+    def find_values(value):
+        if isinstance(value, dict):
+            normalized = {str(key).replace("_", "").casefold(): item for key, item in value.items()}
+            path = normalized.get("confirmationpath")
+            message = normalized.get("confirmationmessage")
+            if isinstance(path, str) and path.strip() and isinstance(message, str) and message.strip():
+                return path.strip(), message.strip()
+            for child in value.values():
+                found = find_values(child)
+                if found:
+                    return found
+        elif isinstance(value, list):
+            for child in value:
+                found = find_values(child)
+                if found:
+                    return found
+        elif isinstance(value, str) and value[:1] in "[{":
+            try:
+                return find_values(json.loads(value))
+            except (json.JSONDecodeError, TypeError):
+                return None
+        return None
+
+    try:
+        scripts = page.locator(
+            'script[type="application/json"], script#__NEXT_DATA__, script[data-page]'
+        ).all_text_contents()
+    except Exception:
+        scripts = []
+
+    for script in scripts:
+        try:
+            found = find_values(json.loads(script))
+        except (json.JSONDecodeError, TypeError):
+            found = find_values(script)
+        if found:
+            return {"confirmation_path": found[0], "confirmation_message": found[1]}
+
+    return {"confirmation_path": None, "confirmation_message": None}
+
 def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str], 
                           cover_letter: str, user_profile: Dict) -> Dict:
-    result = {"status": "unknown", "screenshot_path": None, "error": None}
+    result = {
+        "status": "unknown",
+        "screenshot_path": None,
+        "error": None,
+        "confirmation_path": None,
+        "confirmation_message": None,
+    }
     
     try:
         print(f"  🌐 Navigating to: {job_url}")
@@ -230,54 +279,260 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
         # parser third parties) and guarantees a 30s goto timeout.
         page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
         page.wait_for_selector("#application-form, .application-form, form", timeout=10000)
+        result.update(_greenhouse_confirmation_data(page))
         
         screenshot_dir = Path("screenshots")
         screenshot_dir.mkdir(exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         
+        # Name split: Greenhouse example/current boards expose separate
+        # #first_name / #last_name inputs (not a single full-name field).
+        # Never put the full name into first_name only.
+        full_name = (user_profile.get("name", APPLICANT_NAME) or APPLICANT_NAME).strip()
+        name_parts = full_name.split()
+        first_name = name_parts[0] if name_parts else full_name
+        last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+
         fields = {
-            "name": ("input[name='name'], input#first_name, input[name='first_name']", user_profile.get("name", APPLICANT_NAME)),
-            "email": ("input[type='email'], input[name='email']", user_profile.get("email", APPLICANT_EMAIL)),
-            "phone": ("input[type='tel'], input[name='phone']", user_profile.get("phone", APPLICANT_PHONE)),
+            "first_name": ("input#first_name, input[name='first_name']", first_name),
+            "last_name": ("input#last_name, input[name='last_name']", last_name),
+            "full_name": ("input[name='name']", full_name),
+            "email": ("input[type='email'], input[name='email'], input#email, input[id*='email']", user_profile.get("email", APPLICANT_EMAIL)),
+            "phone": ("input[type='tel'], input[name='phone'], input#phone, input[id*='phone']", user_profile.get("phone", APPLICANT_PHONE)),
             "linkedin": ("input[name*='linkedin'], input[id*='linkedin']", user_profile.get("linkedin", APPLICANT_LINKEDIN)),
             "portfolio": ("input[name*='website'], input[name*='portfolio']", user_profile.get("portfolio", APPLICANT_PORTFOLIO)),
         }
-        
+
+        def _gh_type(field_locator, value: str) -> bool:
+            """Human-like keystrokes. Plain fill() clears sibling fields on
+            live Greenhouse React forms (verified on example 83446: filling
+            last_name wiped first_name), while press_sequentially preserves
+            them. Falls back to fill() for harnesses without keyboard APIs."""
+            try:
+                field_locator.press_sequentially(value)
+                return True
+            except AttributeError:
+                field_locator.fill(value)
+                return True
+            except Exception:
+                return False
+
+        def _gh_read(field_locator) -> str | None:
+            try:
+                return field_locator.evaluate("e => e.value || ''")
+            except Exception:
+                return None
+
+        filled_fields = []
         for field_name, (selector, value) in fields.items():
+            if field_name == "full_name" and page.locator("input#first_name, input[name='first_name']").first.count() > 0:
+                continue  # split fields exist — skip the legacy single-box fallback
+            if field_name == "last_name" and not value:
+                continue  # single-token name — nothing to put in last name
             try:
                 field = page.locator(selector).first
                 if field.count() > 0 and value:
-                    field.fill(value)
-                    print(f"    ✅ Filled {field_name}")
+                    if _gh_type(field, value):
+                        filled_fields.append((field_name, selector, value))
+                        print(f"    ✅ Filled {field_name}")
             except Exception as e:
                 print(f"    ⚠️ {field_name} field: {e}")
-        
+
+        # Verify-then-repair: re-read every typed field and re-type any the
+        # page dropped (React re-render), up to 3 passes. Best-effort on
+        # harnesses without evaluate (verification reported as unavailable).
+        result["field_verification"] = "unavailable"
+        def _gh_same(field_name: str, seen: str, expected: str) -> bool:
+            if seen == expected:
+                return True
+            # Phone widgets (intl-tel-input) reformat as you type
+            # ("+919622907883" -> "+91 96229 07883"); compare digits.
+            if field_name == "phone":
+                import re as _re
+
+                return bool(_re.sub(r"\D", "", expected)) and _re.sub(r"\D", "", seen) == _re.sub(
+                    r"\D", "", expected
+                )
+            return False
+
+        try:
+            repaired = False
+            for _ in range(3):
+                missing = []
+                for field_name, selector, value in filled_fields:
+                    seen = _gh_read(page.locator(selector).first)
+                    if seen is None:
+                        raise RuntimeError("field readback unavailable")
+                    if not _gh_same(field_name, seen, value):
+                        missing.append((field_name, selector, value))
+                if not missing:
+                    result["field_verification"] = "repaired" if repaired else "verified"
+                    break
+                repaired = True
+                for field_name, selector, value in missing:
+                    field = page.locator(selector).first
+                    try:
+                        field.press("ControlOrMeta+a")
+                        field.press("Backspace")
+                    except Exception:
+                        pass
+                    _gh_type(field, value)
+                    print(f"    🔁 Re-typed {field_name}")
+            else:
+                result["field_verification"] = "mismatch"
+        except RuntimeError:
+            result["field_verification"] = "unavailable"
+        except Exception as e:
+            result["field_verification"] = f"error: {e}"
+
+        result["resume_attached"] = False
+        result["resume_verify"] = "skipped"
         if resume_path and os.path.exists(resume_path):
             try:
-                file_input = page.locator("input[type='file'][name*='resume'], input[type='file'][name*='cv']").first
+                # Live boards (e.g. Greenhouse example 83446) expose the file
+                # inputs as id="resume" with NO name attribute, so match by
+                # id first and keep the name*= variants as fallback.
+                file_input = page.locator(
+                    "input[type='file']#resume, input#resume, "
+                    "input[type='file'][id*='resume'], input[type='file'][id*='cv'], "
+                    "input[type='file'][name*='resume'], input[type='file'][name*='cv']"
+                ).first
                 if file_input.count() > 0:
                     file_input.set_input_files(resume_path)
-                    print(f"    ✅ Resume uploaded")
+                    try:
+                        page.wait_for_timeout(800)
+                    except Exception:
+                        pass
+                    # Verify-then-report: set_input_files() not throwing does
+                    # NOT mean the form accepted the file (hidden/inactive
+                    # input, missing Attach activation). Read back files.length
+                    # plus a best-effort DOM filename check before claiming True.
+                    try:
+                        files_len = file_input.evaluate("e => e.files ? e.files.length : 0")
+                    except Exception:
+                        files_len = None
+                    try:
+                        file_names = file_input.evaluate(
+                            "e => Array.from(e.files || []).map(f => f.name)"
+                        )
+                    except Exception:
+                        file_names = []
+                    if isinstance(files_len, int) and files_len > 0:
+                        result["resume_attached"] = True
+                        result["resume_verify"] = "files_present"
+                        try:
+                            dom = page.content()
+                            result["resume_dom_confirmed"] = any(
+                                n and n in dom for n in (file_names or [])
+                            )
+                        except Exception:
+                            result["resume_dom_confirmed"] = False
+                        print(f"    ✅ Resume uploaded ({files_len} file(s))")
+                    else:
+                        result["resume_attached"] = False
+                        result["resume_verify"] = (
+                            "empty_after_set" if isinstance(files_len, int) else "unavailable"
+                        )
+                        print(f"    ⚠️ Resume set accepted but files.length={files_len!r} — treating as NOT attached")
+                else:
+                    result["resume_attached"] = False
+                    result["resume_verify"] = "no_input_found"
             except Exception as e:
+                result["resume_attached"] = False
+                result["resume_verify"] = f"error: {e}"
                 print(f"    ⚠️ Resume upload: {e}")
-        
+
+        result["cover_letter_attached"] = False
+        result["cover_letter_pasted"] = False
+        result["cover_letter_verify"] = "skipped"
         if cover_letter:
             try:
                 cl_field = page.locator("textarea[name*='cover'], textarea[name*='letter'], textarea[name*='message']").first
                 if cl_field.count() > 0:
                     cl_field.fill(cover_letter)
-                    print(f"    ✅ Cover letter pasted")
+                    seen_cl = None
+                    try:
+                        seen_cl = cl_field.evaluate("e => e.value || ''")
+                    except Exception:
+                        pass
+                    if seen_cl is None:
+                        result["cover_letter_pasted"] = False
+                        result["cover_letter_verify"] = "unavailable"
+                        print(f"    ⚠️ Cover letter pasted but readback unavailable")
+                    elif cover_letter[:120] in (seen_cl or ""):
+                        result["cover_letter_pasted"] = True
+                        result["cover_letter_verify"] = "verified"
+                        print(f"    ✅ Cover letter pasted")
+                    else:
+                        result["cover_letter_pasted"] = False
+                        result["cover_letter_verify"] = "mismatch"
+                        print(f"    ⚠️ Cover letter paste mismatch — treating as NOT pasted")
+                else:
+                    # File-attach boards (example 83446: id="cover_letter",
+                    # no textarea). Upload the generated text as a file so the
+                    # review screenshot shows an attached document.
+                    cl_file = page.locator(
+                        "input[type='file']#cover_letter, input#cover_letter, "
+                        "input[type='file'][id*='cover'], input[type='file'][name*='cover']"
+                    ).first
+                    if cl_file.count() > 0:
+                        import tempfile
+
+                        with tempfile.NamedTemporaryFile(
+                            mode="w", suffix="_cover_letter.txt",
+                            prefix="greenhouse_", delete=False,
+                            encoding="utf-8",
+                        ) as handle:
+                            handle.write(cover_letter)
+                            cl_tmp = handle.name
+                        try:
+                            cl_file.set_input_files(cl_tmp)
+                            try:
+                                page.wait_for_timeout(800)
+                            except Exception:
+                                pass
+                            try:
+                                cl_len = cl_file.evaluate("e => e.files ? e.files.length : 0")
+                            except Exception:
+                                cl_len = None
+                            if isinstance(cl_len, int) and cl_len > 0:
+                                result["cover_letter_attached"] = True
+                                result["cover_letter_verify"] = "files_present"
+                                print(f"    ✅ Cover letter attached as file")
+                            else:
+                                result["cover_letter_attached"] = False
+                                result["cover_letter_verify"] = (
+                                    "empty_after_set" if isinstance(cl_len, int) else "unavailable"
+                                )
+                                print(f"    ⚠️ Cover set accepted but files.length={cl_len!r} — NOT attached")
+                        finally:
+                            try:
+                                os.unlink(cl_tmp)
+                            except Exception:
+                                pass
             except Exception as e:
                 print(f"    ⚠️ Cover letter field: {e}")
-        
+
         # Screenshot before submit
         screenshot_path = screenshot_dir / f"greenhouse_{ts}_before_submit.png"
         page.screenshot(path=str(screenshot_path), full_page=True)
         result["screenshot_path"] = str(screenshot_path)
         print(f"    📸 Screenshot: {screenshot_path}")
-        
-        # Check for custom questions (radio buttons, dropdowns, textareas we didn't fill)
-        custom_elements = page.locator(".application-question, .custom-question, [class*='question']").count()
+
+        # Custom-question guard: match ACTUAL question controls, never the
+        # structural `.application--questions` (double-dash) wrapper divs.
+        # The old bare `[class*='question']` matched those wrappers and
+        # tripped on every Greenhouse posting (false positive → never
+        # filled_ready). Genuine custom questions are select / radio /
+        # checkbox / textarea controls.
+        custom_elements = page.locator(
+            ".application-question input, .application-question select, .application-question textarea, "
+            ".custom-question input, .custom-question select, .custom-question textarea, "
+            ".application--questions select, "
+            ".application--questions input[type='radio'], .application--questions input[type='checkbox'], "
+            ".application--questions textarea, "
+            "[data-qa*='question'] input, [data-qa*='question'] select, [data-qa*='question'] textarea"
+        ).count()
         if custom_elements > 0:
             print(f"    ⚠️ Detected {custom_elements} custom questions — needs human review")
             result["status"] = "custom_questions"
@@ -312,26 +567,21 @@ def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
     
     try:
         print(f"  🌐 Navigating to: {job_url}")
-        # F2 (2b pre-fix): domcontentloaded + explicit selector wait (see
-        # _fill_greenhouse_form for why networkidle is wrong on ATS pages).
+        # Third-party scripts can keep network activity open indefinitely.
         page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
-        # F1 (2b pre-fix): the application form lives on the /apply sub-page,
-        # not the posting page (0 <form> tags on postings). Follow the
-        # show-page-apply anchor when the URL isn't already an /apply page.
-        try:
-            bare = (job_url or "").rstrip("/")
-            if not bare.lower().endswith("/apply"):
-                anchor = page.locator("a.show-page-apply").first
-                if anchor.count() > 0:
-                    href = anchor.get_attribute("href") or ""
-                    if href:
-                        from urllib.parse import urljoin
+        bare = (job_url or "").rstrip("/")
+        if not bare.lower().endswith("/apply"):
+            anchor = page.locator("a.show-page-apply, a.postings-btn[href]").first
+            if anchor.count() == 0:
+                raise RuntimeError("Lever posting has no apply-page link")
+            href = anchor.get_attribute("href") or ""
+            if not href or not href.rstrip("/").lower().endswith("/apply"):
+                raise RuntimeError("Lever apply-page link has no valid /apply href")
+            from urllib.parse import urljoin
 
-                        apply_url = urljoin(job_url, href)
-                        print(f"  🔗 Following apply page: {apply_url}")
-                        page.goto(apply_url, wait_until="domcontentloaded", timeout=30000)
-        except Exception as e:
-            print(f"    ⚠️ Apply-page resolution: {e} (continuing on posting URL)")
+            apply_url = urljoin(job_url, href)
+            print(f"  🔗 Following apply page: {apply_url}")
+            page.goto(apply_url, wait_until="domcontentloaded", timeout=30000)
         page.wait_for_selector(".application-form, form", timeout=15000)
         
         screenshot_dir = Path("screenshots")
@@ -365,20 +615,46 @@ def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
             except Exception as e:
                 print(f"    ⚠️ {field_name}: {e}")
         
+        result["resume_attached"] = False
+        result["resume_verify"] = "skipped"
         if resume_path and os.path.exists(resume_path):
             try:
                 file_input = page.locator("input[type='file']").first
                 if file_input.count() > 0:
                     file_input.set_input_files(resume_path)
-                    print(f"    ✅ Resume uploaded")
+                    try:
+                        page.wait_for_timeout(800)
+                    except Exception:
+                        pass
+                    try:
+                        files_len = file_input.evaluate("e => e.files ? e.files.length : 0")
+                    except Exception:
+                        files_len = None
+                    if isinstance(files_len, int) and files_len > 0:
+                        result["resume_attached"] = True
+                        result["resume_verify"] = "files_present"
+                        print(f"    ✅ Resume uploaded")
+                    else:
+                        result["resume_attached"] = False
+                        result["resume_verify"] = (
+                            "empty_after_set" if isinstance(files_len, int) else "unavailable"
+                        )
+                        print(f"    ⚠️ Resume set accepted but files.length={files_len!r} — NOT attached")
+                else:
+                    result["resume_verify"] = "no_input_found"
             except Exception as e:
+                result["resume_verify"] = f"error: {e}"
                 print(f"    ⚠️ Resume upload: {e}")
         
+        result["cover_letter_pasted"] = False
+        result["cover_letter_verify"] = "skipped"
         if cover_letter:
             try:
                 cl_field = page.locator("textarea[name*='cover'], textarea[placeholder*='cover']").first
                 if cl_field.count() > 0:
                     cl_field.fill(cover_letter)
+                    result["cover_letter_pasted"] = True
+                    result["cover_letter_verify"] = "pasted_unverified"
                     print(f"    ✅ Cover letter pasted")
             except Exception as e:
                 print(f"    ⚠️ Cover letter: {e}")

@@ -32,8 +32,8 @@ Two rhythms: **write path** (scheduler/CLI → Sheets, minutes) and **read path*
 | Curation | `agents/curator.py`, `tools/cv_*.py`, `tools/deduplicator.py` | dedup (MD5 `job_fingerprint`), keyword + optional FAISS scoring, rank | `seen_jobs.json`, `cv_embeddings.pkl` |
 | Persistence | Google Sheets via `tools/sheet_writer.py` | 5 tabs: ALL JOBS, TOP MATCHES, GOOD MATCHES, APPLIED, STATS | the Sheet |
 | Read API | `api/` | TTL cache over Sheets + `curated_jobs.json` enrichment left-join; action routers (scrape runs, tailored materials, CV profile edits) | in-process cache (90s) |
-| Dashboard | `frontend/` | bento metrics, job desk, drawer, resume studio, auto-apply cockpit, kanban | browser + `localStorage` (token/base URL) |
-| Automation | `scheduler.py`, `track.py`, `main.py`, `Run.py` | cron, tracker CLI, pipeline entry points | `data/`, `logs/` |
+| Dashboard | `frontend/` | bento metrics, job desk, drawer, resume studio, fill-only review-package cockpit, kanban | browser + `localStorage` (token/base URL) |
+| Automation | `scheduler.py`, `track.py`, `main.py`, `Run.py` | cron, tracker CLI, pipeline entry points; standalone CLI also has ATS Playwright fill and a legacy unverified submit flag | `data/`, `logs/` |
 
 ## 3. Data contracts
 
@@ -57,8 +57,14 @@ Two rhythms: **write path** (scheduler/CLI → Sheets, minutes) and **read path*
    `http://127.0.0.1:8000/`; `file://` (`null` origin) is blocked by CORS by design.
 5. **Localhost-first auth** — no token locally; non-local bind requires `API_TOKEN`
    enforced on every `/api/*` call including reads.
-6. **Auto-apply safety gate** — `AUTO_APPLY_CONFIRM=false` fills & screenshots;
-   submit needs explicit opt-in (see `agents/auto_applier.py`, cockpit in UI).
+6. **Dashboard apply gate** — `POST /api/apply/{fp}` creates a local review
+   package and, for Greenhouse/Lever only, fills supported fields in a visible
+   Playwright browser window and captures a pre-submit screenshot. The browser
+   stays open for human review; this route never clicks submit. Unsupported
+   ATSs receive a package only. The cockpit processes up to three eligible jobs
+   sequentially; its submit toggle remains disabled and no submit route exists.
+   Separately, the standalone CLI's legacy `AUTO_APPLY_CONFIRM=true` path
+   submits without verification and is unsafe. See `README.md` and `PM.md`.
 
 ## 5. Failure modes
 

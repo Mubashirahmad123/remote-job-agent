@@ -1,10 +1,13 @@
 # TESTER.md — Testing Guide
 
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Suite is pytest,
-currently **136 passed** across 8 files: `test_api_phase1.py`,
+last verified **222 passed, 1 expected xfail** across the current test files.
+The expected xfail is the exact Lever confirmation-copy assertion, blocked on
+the isolated sandbox observation. Coverage includes `test_api_phase1.py`,
 `test_api_phase2.py`, `test_api_cv.py`, `test_api_materials.py`,
 `test_api_freshness.py`, `test_api_jobs_contract.py`, `test_auto_applier.py`,
-`test_country_filter.py`.
+`test_country_filter.py`, `test_api_apply.py`, and
+`test_apply_submit_primitives.py`.
 
 ---
 
@@ -45,9 +48,14 @@ venv\Scripts\python.exe -m uvicorn api.app:app --host 127.0.0.1 --port 8000
   (see `test_api_phase1.py`: list + bad-tab-400, patch-ok + patch-400/404).
 - API tests use `fastapi.testclient.TestClient(create_app())` with monkeypatched
   cache fakes; assert status codes + key fields, never live data.
-- Phase 2 safety probes (mandatory when apply endpoints land):
+- Current apply safety probes:
   `POST /api/apply` with `mode != "review"` → 400; submit unreachable with
-  `AUTO_APPLY_CONFIRM=true` in env; PDFs verified 1-page via pdfplumber.
+  `AUTO_APPLY_CONFIRM=true` in env. Primitive tests include threaded duplicate
+  claim and daily-cap races. They are not HTTP submit-route tests: no intent or
+  submit route exists yet. Add unconditional auth, status-code, and no-browser-
+  before-gate route tests before considering 2b complete. The apply API tests
+  stub the browser boundary; they do not launch actual ATS pages. PDFs verified
+  1-page via pdfplumber.
 - Report timings for anything >60s or touching network; cite `file:line`
   with actual vs expected.
 

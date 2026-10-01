@@ -18,7 +18,8 @@ JobAgent.autoApply = {
     this.terminalLog = document.getElementById('terminalLog');
     this.screenshotModal = document.getElementById('screenshotModal');
     this.btnCloseModal = document.getElementById('btnCloseModal');
-    this.modalScreenshotImg = document.getElementById('modalScreenshotImg');
+    this.reviewQueueResults = document.getElementById('reviewQueueResults');
+    this.latestQueueResults = [];
 
     this.bindEvents();
   },
@@ -62,7 +63,7 @@ JobAgent.autoApply = {
       });
     }
 
-    // Run Auto-Apply Queue Simulation
+    // Prepare fill-only review packages.
     if (this.btnRunAutoApplyQueue) {
       this.btnRunAutoApplyQueue.addEventListener('click', () => {
         this.triggerQueue();
@@ -90,24 +91,60 @@ JobAgent.autoApply = {
   async triggerQueue() {
     const threshold = JobAgent.store.state.autoApply.threshold;
     const jobs = (JobAgent.store.state.jobs || []).filter(
-      (j) => (j.match_score || 0) >= threshold
-    );
+      (job) => (job.match_score || 0) >= threshold && (job.id || job.job_fingerprint)
+    ).sort((left, right) => (right.match_score || 0) - (left.match_score || 0)).slice(0, 3);
     if (!jobs.length) {
       this.appendTerminalLine('[QUEUE] No candidate jobs scoring >= ' + threshold + '% — nothing to fill.', 'term-amber');
       JobAgent.toast.show('Auto-apply queue: no candidates at current threshold.');
       return;
     }
-    const job = jobs[0];
-    this.appendTerminalLine('[QUEUE] Fill-only review for: ' + job.job_title + ' @ ' + job.company, 'term-indigo');
-    this.appendTerminalLine('[FILL] POST /api/apply/' + job.id + ' {mode: review} — submit unreachable by design', 'term-cyan');
+    this.latestQueueResults = [];
+    if (this.btnRunAutoApplyQueue) this.btnRunAutoApplyQueue.disabled = true;
+    this.appendTerminalLine('[QUEUE] Preparing review packages for ' + jobs.length + ' job(s) scoring >= ' + threshold + '%.', 'term-indigo');
+
     try {
-      const res = await JobAgent.api.applyReview(job.id || job.job_fingerprint);
-      this.appendTerminalLine('[READY] tier=' + (res.tier || '?') + ' status=' + (res.status || 'filled_ready'), 'term-green');
-      this.appendTerminalLine('[PACKAGE] ' + (res.package_path || '(no path)'), 'term-amber');
-      JobAgent.toast.show('Fill ready for review: ' + (res.job_title || job.job_title) + '. Package saved — open the job site to submit manually.');
-    } catch (e) {
-      this.appendTerminalLine('[ERROR] ' + (e && e.message ? e.message : e), 'term-rose');
-      JobAgent.toast.show('Fill failed: ' + (e && e.message ? e.message : e));
+      for (const [index, job] of jobs.entries()) {
+        const fingerprint = job.id || job.job_fingerprint;
+        this.appendTerminalLine('[PACKAGE ' + (index + 1) + '/' + jobs.length + '] ' + (job.job_title || 'Untitled') + ' @ ' + (job.company || 'Unknown company'), 'term-cyan');
+        try {
+          const response = await JobAgent.api.applyReview(fingerprint);
+          const result = {
+            jobTitle: response.job_title || job.job_title || 'Untitled job',
+            company: response.company || job.company || 'Unknown company',
+            status: response.status || 'filled_ready',
+            tier: response.tier || 'unknown',
+            packagePath: response.package_path || '',
+            applyUrl: response.apply_url || job.apply_url || '',
+            screenshotPath: response.screenshot_path || '',
+            browserOpened: response.browser_opened === true,
+            error: response.fill_error || '',
+          };
+          this.latestQueueResults.push(result);
+          const lineClass = result.error || result.status === 'error' ? 'term-rose' : (result.status === 'filled_ready' ? 'term-green' : 'term-amber');
+          this.appendTerminalLine('[' + result.status.toUpperCase() + '] (' + result.tier + ') — ' + result.jobTitle + (result.error ? ': ' + result.error : ''), lineClass);
+          if (result.packagePath) this.appendTerminalLine('[PACKAGE] ' + result.packagePath, 'term-amber');
+        } catch (error) {
+          const message = error && error.message ? error.message : String(error);
+          this.latestQueueResults.push({
+            jobTitle: job.job_title || 'Untitled job',
+            company: job.company || 'Unknown company',
+            status: 'failed',
+            tier: '',
+            packagePath: '',
+            error: message,
+          });
+          this.appendTerminalLine('[ERROR] ' + (job.job_title || 'Job') + ': ' + message, 'term-rose');
+        }
+      }
+
+      const packageCount = this.latestQueueResults.filter((result) => result.packagePath).length;
+      const filledCount = this.latestQueueResults.filter((result) => result.status === 'filled_ready').length;
+      const failedCount = this.latestQueueResults.filter((result) => result.error || result.status === 'error' || result.status === 'playwright_not_installed').length;
+      const reviewWindowCount = this.latestQueueResults.filter((result) => result.browserOpened).length;
+      this.renderQueueResults();
+      JobAgent.toast.show('Review queue finished: ' + packageCount + ' package(s), ' + filledCount + ' form(s) filled, ' + reviewWindowCount + ' review window(s) open, ' + failedCount + ' fill failure(s). Nothing was submitted.');
+    } finally {
+      if (this.btnRunAutoApplyQueue) this.btnRunAutoApplyQueue.disabled = false;
     }
   },
 
@@ -116,17 +153,70 @@ JobAgent.autoApply = {
     const time = new Date().toTimeString().split(' ')[0];
     const div = document.createElement('div');
     div.className = 'term-line timestamp';
-    div.innerHTML = `[${time}] <span class="${cssClass}">${text}</span>`;
+    div.append(`[${time}] `);
+    const message = document.createElement('span');
+    message.className = cssClass;
+    message.textContent = text;
+    div.appendChild(message);
     this.terminalLog.appendChild(div);
     this.terminalLog.scrollTop = this.terminalLog.scrollHeight;
   },
 
+  renderQueueResults() {
+    if (!this.reviewQueueResults) return;
+    this.reviewQueueResults.replaceChildren();
+
+    if (!this.latestQueueResults.length) {
+      const empty = document.createElement('p');
+      empty.className = 'review-results-empty';
+      empty.textContent = 'No review packages have been prepared in this session.';
+      this.reviewQueueResults.appendChild(empty);
+      return;
+    }
+
+    for (const result of this.latestQueueResults) {
+      const item = document.createElement('article');
+      item.className = 'review-result-item';
+      const heading = document.createElement('h4');
+      heading.textContent = result.jobTitle + ' @ ' + result.company;
+      const status = document.createElement('p');
+      const failed = Boolean(result.error) || result.status === 'error' || result.status === 'playwright_not_installed';
+      status.className = failed ? 'review-result-status is-error' : 'review-result-status';
+      status.textContent = result.error
+        ? result.status + ': ' + result.error
+        : result.browserOpened
+          ? 'Form filled in open browser · Review and submit manually if ready'
+          : result.status + ' · ' + result.tier;
+      item.append(heading, status);
+      if (result.applyUrl && !result.browserOpened) {
+        const applyLink = document.createElement('a');
+        applyLink.className = 'review-result-link';
+        applyLink.href = result.applyUrl;
+        applyLink.target = '_blank';
+        applyLink.rel = 'noopener noreferrer';
+        applyLink.textContent = 'Open posting';
+        item.appendChild(applyLink);
+      }
+      if (result.packagePath) {
+        const path = document.createElement('p');
+        path.className = 'review-result-path';
+        path.textContent = 'Package saved on server: ' + result.packagePath;
+        item.appendChild(path);
+      }
+      if (result.screenshotPath) {
+        const screenshot = document.createElement('p');
+        screenshot.className = 'review-result-path';
+        screenshot.textContent = 'Pre-submit screenshot saved locally: ' + result.screenshotPath;
+        item.appendChild(screenshot);
+      }
+      this.reviewQueueResults.appendChild(item);
+    }
+  },
+
   openModal() {
     if (this.screenshotModal) {
+      this.renderQueueResults();
       this.screenshotModal.classList.remove('hidden');
-      if (this.modalScreenshotImg) {
-        this.modalScreenshotImg.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='500' viewBox='0 0 800 500'><rect width='800' height='500' fill='%23111827'/><rect x='40' y='30' width='720' height='60' rx='8' fill='%231e293b'/><text x='60' y='68' fill='%2310b981' font-family='monospace' font-size='18' font-weight='bold'>Greenhouse Application — KoboToolbox (Review Mode)</text><rect x='40' y='110' width='340' height='45' rx='6' fill='%231e293b'/><text x='55' y='138' fill='%2394a3b8' font-family='sans-serif' font-size='14'>First Name: Mubashir</text><rect x='420' y='110' width='340' height='45' rx='6' fill='%231e293b'/><text x='435' y='138' fill='%2394a3b8' font-family='sans-serif' font-size='14'>Last Name: Ahmad</text><rect x='40' y='170' width='720' height='45' rx='6' fill='%231e293b'/><text x='55' y='198' fill='%2394a3b8' font-family='sans-serif' font-size='14'>Email: mubashir.dev@example.com</text><rect x='40' y='230' width='720' height='45' rx='6' fill='%231e293b'/><text x='55' y='258' fill='%2394a3b8' font-family='sans-serif' font-size='14'>Resume Attached: resume.pdf (1-page ATS Tailored)</text><rect x='40' y='290' width='720' height='120' rx='6' fill='%231e293b'/><text x='55' y='320' fill='%2394a3b8' font-family='sans-serif' font-size='13'>Cover Letter: I am writing to express my strong interest in the Frontend Web Application Developer role...</text><rect x='40' y='430' width='220' height='40' rx='6' fill='%2310b981'/><text x='85' y='455' fill='%23090d16' font-family='sans-serif' font-size='14' font-weight='bold'>Form Ready to Submit</text></svg>";
-      }
     }
   },
 

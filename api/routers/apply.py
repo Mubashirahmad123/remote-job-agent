@@ -9,10 +9,11 @@ Gate placement (submit unreachable, not merely unrequested):
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 from api import apply as apply_service
-from api.deps import require_token
-from api.schemas import ApplyRequest
+from api.deps import require_apply_token, require_token
+from api.schemas import ApplyIntentOut, ApplyIntentRequest, ApplyRequest, ApplySubmitOut, ApplySubmitRequest
 
 router = APIRouter(tags=["apply"])
 
@@ -31,3 +32,60 @@ def apply_review(job_fingerprint: str, body: ApplyRequest | None = None, _: None
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Apply fill failed: {e}")
+
+
+@router.post("/api/apply/{job_fingerprint}/intent", response_model=ApplyIntentOut)
+def apply_intent(
+    job_fingerprint: str,
+    body: ApplyIntentRequest | None = None,
+    _: None = Depends(require_apply_token),
+) -> dict:
+    raw_mode = body.mode if body is not None else "review"
+    if raw_mode.strip().lower() != "review":
+        raise HTTPException(status_code=400, detail="Intent requires mode='review'")
+    try:
+        return apply_service.create_greenhouse_intent(job_fingerprint)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    except apply_service.SubmitUnavailable as error:
+        raise HTTPException(status_code=422, detail=str(error))
+    except apply_service.SubmitRejected as error:
+        if error.status_code == 409:
+            return JSONResponse(
+                status_code=409,
+                content={"detail": error.detail, "retry_after": error.retry_after},
+            )
+        raise HTTPException(status_code=error.status_code, detail=error.detail)
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Apply intent failed: {error}")
+
+
+@router.post("/api/apply/{job_fingerprint}/submit", response_model=ApplySubmitOut)
+def apply_submit(
+    job_fingerprint: str,
+    body: ApplySubmitRequest | None = None,
+    _: None = Depends(require_apply_token),
+) -> dict:
+    try:
+        return apply_service.submit_greenhouse(
+            path_fingerprint=job_fingerprint,
+            confirm=body.confirm if body is not None else None,
+            body_fingerprint=body.job_fingerprint if body is not None else None,
+            intent_token=body.intent_token if body is not None else None,
+            typed_title=body.typed_title if body is not None else None,
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    except apply_service.SubmitUnavailable as error:
+        raise HTTPException(status_code=422, detail=str(error))
+    except apply_service.DreamTierForbidden as error:
+        raise HTTPException(status_code=422, detail=str(error))
+    except apply_service.SubmitRejected as error:
+        if error.status_code == 409:
+            return JSONResponse(
+                status_code=409,
+                content={"detail": error.detail, "retry_after": error.retry_after},
+            )
+        raise HTTPException(status_code=error.status_code, detail=error.detail)
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Greenhouse submit failed: {error}")
