@@ -217,8 +217,18 @@ def ensure_dashboard_tabs(spreadsheet):
 
 def score_as_int(job):
     """Return a numeric match score, or 0 when score is missing/invalid."""
+    raw = job.get("match_score")
+    if raw is None:
+        return 0
+    if isinstance(raw, bool):
+        return int(raw)
+    if isinstance(raw, (int, float)):
+        return int(raw)
+    text = str(raw).strip().rstrip("%").strip()
+    if not text:
+        return 0
     try:
-        return int(job.get("match_score") or 0)
+        return int(float(text))
     except (TypeError, ValueError):
         return 0
 

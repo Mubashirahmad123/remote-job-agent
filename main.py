@@ -595,12 +595,9 @@ def run_auto_apply_cli(playwright=False):
     print("🤖 AUTO-APPLY MODE")
     print("="*60)
     if (_os.getenv("AUTO_APPLY_CONFIRM", "false").lower() == "true"):
-        print("⚠️  WARNING: AUTO_APPLY_CONFIRM=true records 'submitted' after a")
-        print("   blind 3s wait with ZERO post-submit verification")
-        print("   (agents/auto_applier.py). Silent failure and real success are")
-        print("   indistinguishable in the record. Dashboard gating does NOT make")
-        print("   this flag safe. Prefer fill-only + manual submit until the 2b")
-        print("   verification protocol ships.")
+        print("⛔ NOTE: AUTO_APPLY_CONFIRM=true no longer causes any submit click.")
+        print("   The legacy CLI blind submit was permanently disabled")
+        print("   (agents/auto_applier.py). The flag is ignored; runs are fill-only.")
         print("="*60)
 
     jobs = _load_curated_jobs()

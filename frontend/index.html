@@ -83,7 +83,7 @@
         <div class="status-stat-bar">
           <div class="status-stat-fill" id="scrapeFill" style="width: 60%"></div>
         </div>
-        <div class="status-stat-label">Daily Apply Cap: <strong>3 / 5</strong></div>
+        <div class="status-stat-label" id="sidebarCapVal">Daily Apply Cap: <strong>0 / 5</strong></div>
       </div>
     </aside>
 
@@ -172,11 +172,11 @@
               <span class="badge-amber">SAFETY CAP</span>
             </div>
             <div class="metric-value-row">
-              <span class="metric-number text-amber" id="metricDailyCap">3 / 5</span>
-              <span class="metric-subtitle">Remaining: 2 slots</span>
+              <span class="metric-number text-amber" id="metricDailyCap">0 / 5</span>
+              <span class="metric-subtitle" id="metricDailyCapSub">Remaining: 5 slots</span>
             </div>
             <div class="metric-progress-track">
-              <div class="metric-progress-bar bg-amber" style="width: 60%"></div>
+              <div class="metric-progress-bar bg-amber" id="metricDailyCapBar" style="width: 0%"></div>
             </div>
             <div class="card-footnote">Prevents rate-limiting & protects candidate reputation</div>
           </div>
@@ -588,7 +588,7 @@
               <div class="safety-control-card">
                 <div class="control-label-group">
                   <strong>Daily Cap Preference</strong>
-                  <span class="control-desc">Display preference only; review-package preparation does not submit or consume daily slots</span>
+                  <span class="control-desc">Safety cap; each review-package run consumes one daily slot per job attempted</span>
                 </div>
                 <div class="control-slider-box">
                   <span class="slider-badge" id="dailyCapVal">5 / Day</span>
@@ -750,6 +750,7 @@
   <script src="js/data/mockData.js"></script>
   <script src="js/api.js"></script>
   <script src="js/store.js"></script>
+  <script src="js/escape.js"></script>
   <script src="js/components/toast.js"></script>
   <script src="js/components/navigation.js"></script>
   <script src="js/components/scrapeMonitor.js"></script>

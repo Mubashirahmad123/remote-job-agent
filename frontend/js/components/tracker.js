@@ -84,11 +84,12 @@ JobAgent.tracker = {
     });
 
     const { loading, errors } = JobAgent.store.state;
+    const esc = (JobAgent.escapeHtml || ((v) => String(v ?? '')));
     if (loading.tracker && this.kanbanColApplied) {
       this.kanbanColApplied.innerHTML = `<div style="color:var(--text-muted);font-size:12px;padding:12px;">Loading <code>/api/tracker</code>…</div>`;
     }
     if (errors.tracker && this.kanbanColApplied) {
-      this.kanbanColApplied.innerHTML += `<div style="font-size:11.5px;color:#f59e0b;padding:8px 12px;">API error: ${errors.tracker}</div>`;
+      this.kanbanColApplied.innerHTML += `<div style="font-size:11.5px;color:#f59e0b;padding:8px 12px;">API error: ${esc(errors.tracker)}</div>`;
     }
 
     const cards = this._cards();
@@ -102,14 +103,14 @@ JobAgent.tracker = {
       cardEl.className = 'kanban-card';
       cardEl.dataset.fp = fp;
       cardEl.innerHTML = `
-        <div class="k-company">${card.company || ''}</div>
-        <div class="k-title">${card.title || ''}</div>
+        <div class="k-company">${esc(card.company || '')}</div>
+        <div class="k-title">${esc(card.title || '')}</div>
         <div class="k-meta">
-          <span>${card.date || ''}</span>
-          <span class="k-score">${card.score || 0}%</span>
+          <span>${esc(card.date || '')}</span>
+          <span class="k-score">${esc(card.score || 0)}%</span>
         </div>
         <div style="font-size: 11px; color: var(--accent-cyan); margin-top: 6px;">
-          📅 ${card.follow_up || ''}
+          📅 ${esc(card.follow_up || '')}
         </div>
       `;
 

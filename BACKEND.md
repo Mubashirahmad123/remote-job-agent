@@ -134,9 +134,11 @@ paths, and a posting link for package-only ATSs. The separate CLI
 submit path is not post-submit verified and must not be described as safe.
 
 The modules `api/apply_claims.py`, `api/apply_intents.py`,
-`api/apply_validation.py`, and `api/apply_verification.py` currently provide
-isolated 2b primitives exercised by unit tests only. They are not mounted in a
-router and do not make submit reachable over HTTP.
+`api/apply_validation.py`, and `api/apply_verification.py` back the
+authenticated Greenhouse pair `POST /api/apply/{fp}/intent` +
+`POST /api/apply/{fp}/submit`, which are mounted but fail closed with 403
+while the kill-switch `api/safety.py SUBMIT_ENABLED=False` holds. Lever has
+no submit path by design.
 
 ## 3. Cache (`cache.py`)
 

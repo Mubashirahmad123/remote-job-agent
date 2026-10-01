@@ -67,7 +67,12 @@ def _fake_env(monkeypatch, good=True):
     monkeypatch.setattr(
         apply_service,
         "_fill_ats_form",
-        lambda job: {"status": "filled_ready", "screenshot_path": "screenshots/fake.png", "error": None},
+        lambda job, *args, **kwargs: {"status": "filled_ready", "screenshot_path": "screenshots/fake.png", "error": None},
+    )
+    monkeypatch.setattr(
+        apply_service,
+        "_prepare_submit_materials",
+        lambda job: {"resume_path": "/tmp/fake-resume.pdf", "cover_letter_text": "Fake cover letter text for review tests."},
     )
     import api.apply_state as apply_state
 
@@ -79,6 +84,7 @@ def _seed_greenhouse_submit(monkeypatch, tmp_path, job=GREENHOUSE_SUBMIT_JOB):
     import agents.auto_applier as aa
 
     monkeypatch.setattr(apply_state, "DB_PATH", tmp_path / "apply-submit.sqlite")
+    monkeypatch.setattr("api.safety.SUBMIT_ENABLED", True)
     monkeypatch.setattr(cache, "get_job", lambda fp: job if fp == job["job_fingerprint"] else None)
     monkeypatch.setattr(aa, "classify_tier", lambda _job: "good_fit")
     package = tmp_path / "packages" / job["job_fingerprint"]
@@ -198,7 +204,7 @@ class TestApplyFillOnly:
         monkeypatch.setattr(
             apply_service,
             "_fill_ats_form",
-            lambda job: {"status": "error", "screenshot_path": None, "error": "form timed out"},
+            lambda job, *args, **kwargs: {"status": "error", "screenshot_path": None, "error": "form timed out"},
         )
 
         response = client.post(f"/api/apply/{FP_GOOD}", json={"mode": "review"})
@@ -213,7 +219,7 @@ class TestApplyFillOnly:
         _fake_env(monkeypatch)
         unsupported_job = {**GOOD_JOB, "apply_url": "https://acme.example/jobs/1"}
         monkeypatch.setattr(cache, "get_job", lambda fp: unsupported_job)
-        monkeypatch.setattr(apply_service, "_fill_ats_form", lambda job: None)
+        monkeypatch.setattr(apply_service, "_fill_ats_form", lambda job, *args, **kwargs: None)
 
         response = client.post(f"/api/apply/{FP_GOOD}", json={"mode": "review"})
 
@@ -395,6 +401,10 @@ class TestGreenhouseIntentAndSubmit:
                 "error": None,
                 "confirmation_path": "/confirmation/received",
                 "confirmation_message": "Thanks for applying",
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
             }
 
         monkeypatch.setattr(aa, "_fill_greenhouse_form", _fake_filler)
@@ -931,7 +941,7 @@ class TestApplyScreenshotRoute:
     def test_package_only_has_no_screenshot_url(self, client, monkeypatch):
         _fake_env(monkeypatch)
         monkeypatch.setattr(
-            apply_service, "_fill_ats_form", lambda job: None,
+            apply_service, "_fill_ats_form", lambda job, *args, **kwargs: None,
         )
         r = client.post(f"/api/apply/{FP_GOOD}", json={"mode": "review"})
         assert r.status_code == 200, r.text
@@ -966,3 +976,128 @@ class TestApplyScreenshotRoute:
             headers={"Authorization": "Bearer secret"},
         )
         assert authed.status_code == 200
+
+
+class TestSubmitKillSwitch:
+    def test_intent_is_403_when_kill_switch_off(self, client, monkeypatch, tmp_path):
+        _seed_greenhouse_submit(monkeypatch, tmp_path)
+        monkeypatch.setattr("api.safety.SUBMIT_ENABLED", False)
+        monkeypatch.setenv("APPLY_API_TOKEN", "test-apply-secret")
+        r = client.post(
+            f"/api/apply/{FP_SUBMIT}/intent",
+            json={"mode": "review"},
+            headers=_apply_auth(),
+        )
+        assert r.status_code == 403
+
+    def test_submit_is_403_when_kill_switch_off(self, client, monkeypatch, tmp_path):
+        _seed_greenhouse_submit(monkeypatch, tmp_path)
+        monkeypatch.setattr("api.safety.SUBMIT_ENABLED", False)
+        monkeypatch.setenv("APPLY_API_TOKEN", "test-apply-secret")
+        r = client.post(
+            f"/api/apply/{FP_SUBMIT}/submit",
+            json=_submit_body("any-token"),
+            headers=_apply_auth(),
+        )
+        assert r.status_code == 403
+
+    def test_kill_switch_off_marks_no_claim(self, client, monkeypatch, tmp_path):
+        import api.apply_state as apply_state
+
+        _seed_greenhouse_submit(monkeypatch, tmp_path)
+        monkeypatch.setattr("api.safety.SUBMIT_ENABLED", False)
+        monkeypatch.setenv("APPLY_API_TOKEN", "test-apply-secret")
+        client.post(
+            f"/api/apply/{FP_SUBMIT}/submit",
+            json=_submit_body("any-token"),
+            headers=_apply_auth(),
+        )
+        assert apply_state.get_claim_status(FP_SUBMIT) is None
+
+
+class TestSubmitAttachmentGate:
+    def _run_refill(self, monkeypatch, fill_result):
+        import agents.auto_applier as aa
+
+        _fake = dict(
+            {
+                "status": "filled_ready",
+                "screenshot_path": None,
+                "error": None,
+                "confirmation_path": "/confirmation/received",
+                "confirmation_message": "Thanks for applying",
+            },
+            **fill_result,
+        )
+        monkeypatch.setattr(aa, "_fill_greenhouse_form", lambda *a, **k: _fake)
+
+        class _NoButton:
+            def count(self):
+                return 0
+
+        class _Page:
+            def locator(self, selector):
+                class _Wrap:
+                    first = _NoButton()
+
+                return _Wrap()
+
+        class _Browser:
+            def new_page(self, **kwargs):
+                return _Page()
+
+            def close(self):
+                pass
+
+        class _Chromium:
+            def launch(self, **kwargs):
+                return _Browser()
+
+        class _Pw:
+            chromium = _Chromium()
+
+        class _Ctx:
+            def __enter__(self):
+                return _Pw()
+
+            def __exit__(self, *_a):
+                return False
+
+        monkeypatch.setattr(aa, "_get_playwright", lambda: _Ctx)
+        return apply_service._run_greenhouse_submit(
+            {
+                "apply_url": "https://boards.greenhouse.io/demo/jobs/3",
+                "resume_path": "r.pdf",
+                "cover_letter_text": "cover text here",
+                "confirmation_path": "/confirmation/received",
+                "confirmation_message": "Thanks for applying",
+            },
+            GREENHOUSE_SUBMIT_JOB,
+        )
+
+    def test_refill_without_resume_proof_never_clicks(self, monkeypatch):
+        outcome = self._run_refill(monkeypatch, {})
+        assert outcome["clicked"] is False
+        assert "Resume attachment unverified" in (outcome["error"] or "")
+
+    def test_refill_without_cover_proof_never_clicks(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {"resume_attached": True, "resume_verify": "files_present"},
+        )
+        assert outcome["clicked"] is False
+        assert "Cover letter unverified" in (outcome["error"] or "")
+
+    def test_refill_with_both_proofs_passes_gate(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
+            },
+        )
+        # No submit button on the stub page, but the attachment gate passed:
+        assert outcome["error"] == "Greenhouse submit button was not found"
+        assert outcome["clicked"] is False

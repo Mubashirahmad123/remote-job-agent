@@ -58,12 +58,19 @@ def create_intent(
     connection.execute("BEGIN IMMEDIATE")
     try:
         existing = connection.execute(
-            "SELECT expires_at FROM apply_intents WHERE job_fingerprint = ?",
+            "SELECT expires_at, consumed FROM apply_intents WHERE job_fingerprint = ?",
             (job_fingerprint,),
         ).fetchone()
         if existing:
             existing_expiry = _as_utc(datetime.fromisoformat(existing[0]))
-            if existing_expiry > timestamp:
+            # A consumed intent is single-use and spent: allow replacement with
+            # a fresh token instead of forcing the operator to wait out the TTL.
+            if existing[1] and existing_expiry > timestamp:
+                connection.execute(
+                    "DELETE FROM apply_intents WHERE job_fingerprint = ?",
+                    (job_fingerprint,),
+                )
+            elif existing_expiry > timestamp:
                 retry_after = max(
                     1, math.ceil((existing_expiry - timestamp).total_seconds())
                 )

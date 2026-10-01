@@ -280,21 +280,21 @@ JobAgent.jobDesk = {
             <span class="score-cell-pill ${this.getScorePillClass(job.match_score)}">${job.match_score}%</span>
           </td>
           <td>
-            <strong style="color: #fff; display: block;">${job.job_title}</strong>
-            <span style="color: var(--text-muted); font-size: 11.5px;">${job.company}</span>
+            <strong style="color: #fff; display: block;">${this.escapeHtml(job.job_title)}</strong>
+            <span style="color: var(--text-muted); font-size: 11.5px;">${this.escapeHtml(job.company)}</span>
           </td>
-          <td style="color: var(--text-secondary); font-size: 12px;">${job.timezone || ''}</td>
+          <td style="color: var(--text-secondary); font-size: 12px;">${this.escapeHtml(job.timezone || '')}</td>
           <td>
             <div style="display: flex; gap: 4px; flex-wrap: wrap; max-width: 220px;">
-              ${stackOf(job).slice(0, 3).map(t => `<span class="tech-tag">${t}</span>`).join('')}
+              ${stackOf(job).slice(0, 3).map(t => `<span class="tech-tag">${this.escapeHtml(t)}</span>`).join('')}
               ${stackOf(job).length > 3 ? `<span class="tech-tag">+${stackOf(job).length - 3}</span>` : ''}
             </div>
           </td>
           <td style="font-family: var(--font-mono); font-size: 12px; color: var(--accent-cyan);">
-            ${job.salary || '—'}
+            ${this.escapeHtml(job.salary || '—')}
           </td>
-          <td style="color: var(--text-muted); font-size: 12px;">${job.source || ''}</td>
-          <td style="color: var(--text-muted); font-size: 12px;">${job.posted_text || ''}</td>
+          <td style="color: var(--text-muted); font-size: 12px;">${this.escapeHtml(job.source || '')}</td>
+          <td style="color: var(--text-muted); font-size: 12px;">${this.escapeHtml(job.posted_text || '')}</td>
           <td style="text-align: right;">
             <button class="action-btn secondary small btn-open-drawer" data-id="${String(job.id).replace(/"/g, '&quot;')}">Inspect</button>
           </td>
