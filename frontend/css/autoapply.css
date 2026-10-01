@@ -229,6 +229,25 @@
   font-weight: 700;
 }
 
+.screenshot-preview {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.screenshot-preview-img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: #0b0e14;
+}
+
+.screenshot-preview-fallback {
+  margin-top: 0 !important;
+}
+
 @media (max-width: 1200px) {
   .safety-controls-grid {
     grid-template-columns: 1fr;

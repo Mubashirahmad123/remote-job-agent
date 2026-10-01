@@ -918,3 +918,51 @@ def test_unsupported_ats_does_not_launch_playwright(monkeypatch):
     assert apply_service._fill_ats_form(
         {**GOOD_JOB, "apply_url": "https://example.wd5.myworkdayjobs.com/job"}
     ) is None
+
+
+class TestApplyScreenshotRoute:
+    def test_fill_review_returns_screenshot_url(self, client, monkeypatch):
+        _fake_env(monkeypatch)
+        r = client.post(f"/api/apply/{FP_GOOD}", json={"mode": "review"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["screenshot_url"] == f"/api/apply/{FP_GOOD}/screenshot"
+
+    def test_package_only_has_no_screenshot_url(self, client, monkeypatch):
+        _fake_env(monkeypatch)
+        monkeypatch.setattr(
+            apply_service, "_fill_ats_form", lambda job: None,
+        )
+        r = client.post(f"/api/apply/{FP_GOOD}", json={"mode": "review"})
+        assert r.status_code == 200, r.text
+        assert r.json()["screenshot_url"] is None
+
+    def test_screenshot_404_without_artifact(self, client):
+        r = client.get("/api/apply/missing-fp/screenshot")
+        assert r.status_code == 404
+
+    def test_screenshot_200_serves_png(self, client, monkeypatch, tmp_path):
+        _seed_greenhouse_submit(monkeypatch, tmp_path)
+        r = client.get(f"/api/apply/{FP_SUBMIT}/screenshot")
+        assert r.status_code == 200, r.text
+        assert r.headers["content-type"].startswith("image/")
+        assert r.content == b"png"
+
+    def test_screenshot_404_when_file_gone(self, client, monkeypatch, tmp_path):
+        import api.apply_state as apply_state
+
+        _seed_greenhouse_submit(monkeypatch, tmp_path)
+        artifact = apply_state.get_review_artifact(FP_SUBMIT)
+        Path(str(artifact["screenshot_path"])).unlink()
+        r = client.get(f"/api/apply/{FP_SUBMIT}/screenshot")
+        assert r.status_code == 404
+
+    def test_screenshot_requires_token_when_set(self, client, monkeypatch, tmp_path):
+        _seed_greenhouse_submit(monkeypatch, tmp_path)
+        monkeypatch.setenv("API_TOKEN", "secret")
+        assert client.get(f"/api/apply/{FP_SUBMIT}/screenshot").status_code == 401
+        authed = client.get(
+            f"/api/apply/{FP_SUBMIT}/screenshot",
+            headers={"Authorization": "Bearer secret"},
+        )
+        assert authed.status_code == 200

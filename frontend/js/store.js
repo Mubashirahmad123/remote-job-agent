@@ -23,7 +23,7 @@ JobAgent.store = {
       mode: 'review', // 'review' | 'submit'
       threshold: 75,
       dailyCap: 5,
-      appliedToday: 3
+      appliedToday: 0
     },
     // ---- live data (populated by loadAll) ----
     jobs: [],
@@ -70,7 +70,57 @@ JobAgent.store = {
 
   setAutoApply(key, value) {
     this.state.autoApply[key] = value;
+    try {
+      if (key === 'dailyCap') localStorage.setItem('rja_daily_cap', String(value));
+      if (key === 'threshold') localStorage.setItem('rja_threshold', String(value));
+    } catch (_) { /* storage unavailable */ }
     this.notify();
+  },
+
+  // ---------- daily cap (survives page refresh) ----------
+  // Usage key: { date: 'YYYY-MM-DD', count: N } in localStorage 'rja_daily_usage'.
+
+  _todayKey() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  },
+
+  restoreAutoApplyPrefs() {
+    try {
+      const cap = parseInt(localStorage.getItem('rja_daily_cap') || '', 10);
+      if (Number.isFinite(cap) && cap >= 1 && cap <= 50) this.state.autoApply.dailyCap = cap;
+      const thr = parseInt(localStorage.getItem('rja_threshold') || '', 10);
+      if (Number.isFinite(thr) && thr >= 0 && thr <= 100) this.state.autoApply.threshold = thr;
+    } catch (_) { /* ignore */ }
+    this.state.autoApply.appliedToday = this.getDailyUsage();
+    return this.state.autoApply;
+  },
+
+  getDailyUsage() {
+    try {
+      const raw = localStorage.getItem('rja_daily_usage');
+      if (!raw) return 0;
+      const parsed = JSON.parse(raw);
+      if (!parsed || parsed.date !== this._todayKey()) return 0;
+      return Math.max(0, parseInt(parsed.count, 10) || 0);
+    } catch (_) {
+      return 0;
+    }
+  },
+
+  remainingQuota() {
+    const cap = parseInt(this.state.autoApply.dailyCap, 10) || 0;
+    return Math.max(0, cap - this.getDailyUsage());
+  },
+
+  consumeDailyQuota(n) {
+    const used = this.getDailyUsage() + Math.max(0, parseInt(n, 10) || 0);
+    try {
+      localStorage.setItem('rja_daily_usage', JSON.stringify({ date: this._todayKey(), count: used }));
+    } catch (_) { /* ignore */ }
+    this.state.autoApply.appliedToday = used;
+    this.notify();
+    return used;
   },
 
   // ---------- backend -> UI normalization ----------

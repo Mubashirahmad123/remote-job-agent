@@ -187,6 +187,11 @@ def fill_review(job_fingerprint: str) -> Dict[str, Any]:
         "tier": tier,
         "package_path": str(package_path),
         "screenshot_path": fill_result.get("screenshot_path") if fill_result else None,
+        "screenshot_url": (
+            f"/api/apply/{(job.get('job_fingerprint') or job_fingerprint).strip()}/screenshot"
+            if fill_result and fill_result.get("screenshot_path")
+            else None
+        ),
         "fill_error": fill_result.get("error") if fill_result else None,
         "confirmation_metadata_available": bool(
             fill_result
@@ -205,6 +210,25 @@ def _get_cached_job(job_fingerprint: str) -> Dict[str, Any]:
     if job is None:
         raise LookupError(f"No job found for '{job_fingerprint}'")
     return job
+
+
+def get_review_screenshot_path(job_fingerprint: str) -> Path:
+    """Resolve the stored before-submit screenshot for a fingerprint.
+
+    Lookup is by artifact ID only (never a raw client-supplied path), so
+    there is no path-traversal surface: the DB holds the server-side path
+    written by fill_review(). Raises LookupError (no artifact / no fill
+    ran) or FileNotFoundError (artifact exists but file is gone).
+    """
+    from api.apply_state import get_review_artifact
+
+    artifact = get_review_artifact(job_fingerprint)
+    if not artifact or not artifact.get("screenshot_path"):
+        raise LookupError("No screenshot exists yet (package-only, no fill run)")
+    path = Path(str(artifact["screenshot_path"]))
+    if not path.is_file():
+        raise FileNotFoundError(f"Screenshot file is missing: {path}")
+    return path
 
 
 def _score_ratio(job: Dict[str, Any]) -> float:

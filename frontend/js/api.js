@@ -9,6 +9,7 @@
  *   runs    -> POST /api/scrape, GET /api/scrape[/{run_id}]
  *   materials -> POST /api/resume/{fp}, GET download, POST /api/cover-letter/{fp}, GET download
  *   cv        -> GET /api/cv/profile, GET /api/cv/variants (Phase 2, may 404/501)
+ *   apply     -> POST /api/apply/{fp} (review), GET /api/apply/{fp}/screenshot
  * Backend contract: api/schemas.py (JobOut, TrackerEntry, HealthOut).
  */
 
@@ -153,6 +154,43 @@ JobAgent.api = (() => {
     });
   }
 
+  function screenshotUrl(fingerprint) {
+    return baseUrl() + '/api/apply/' + encodeURIComponent(fingerprint) + '/screenshot';
+  }
+
+  async function fetchScreenshotBlob(fingerprint) {
+    const url = baseUrl() + '/api/apply/' + encodeURIComponent(fingerprint) + '/screenshot';
+    let res;
+    try {
+      const headers = { ...authHeaders() };
+      res = await fetch(url, { headers });
+    } catch (e) {
+      const err = new Error('Screenshot unreachable at ' + baseUrl() + ' — is uvicorn running?');
+      err.code = 'UNREACHABLE';
+      err.cause = e;
+      throw err;
+    }
+    if (res.status === 401) {
+      const err = new Error('Unauthorized — check API_TOKEN (localStorage rja_api_token).');
+      err.code = 'UNAUTHORIZED';
+      err.status = 401;
+      throw err;
+    }
+    if (res.status === 404) {
+      const err = new Error('No screenshot yet — package-only (no form fill ran for this job).');
+      err.code = 'NO_SCREENSHOT';
+      err.status = 404;
+      throw err;
+    }
+    if (!res.ok) {
+      const err = new Error('Screenshot API ' + res.status + ': ' + res.statusText);
+      err.code = 'HTTP_' + res.status;
+      err.status = res.status;
+      throw err;
+    }
+    return res.blob();
+  }
+
   // ---- CV studio (Phase 2 — backend may not have these yet) ----
   // Defensive: a 404/501 means "endpoint not available", NOT a failure.
   // Callers keep the static fallback panels and show a quiet note instead
@@ -203,6 +241,8 @@ JobAgent.api = (() => {
     createResume,
     createCoverLetter,
     applyReview,
+    screenshotUrl,
+    fetchScreenshotBlob,
     getCvProfile,
     updateCvProfile,
     getCvVariants,

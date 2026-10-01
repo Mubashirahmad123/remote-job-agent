@@ -9,7 +9,7 @@ Gate placement (submit unreachable, not merely unrequested):
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from api import apply as apply_service
 from api.deps import require_apply_token, require_token
@@ -89,3 +89,30 @@ def apply_submit(
         raise HTTPException(status_code=error.status_code, detail=error.detail)
     except Exception as error:
         raise HTTPException(status_code=502, detail=f"Greenhouse submit failed: {error}")
+
+
+_MEDIA_BY_SUFFIX = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+
+@router.get("/api/apply/{job_fingerprint}/screenshot")
+def apply_screenshot(job_fingerprint: str, _: None = Depends(require_token)):
+    """Serve the stored before-submit screenshot by artifact ID.
+
+    Same auth as POST /api/apply/{fp} (open local-dev, Bearer when
+    API_TOKEN is set). Lookup is by fingerprint only — never a raw
+    client path. 404 when no fill ran yet (package-only) or the file
+    is gone, so the frontend can show an honest empty state.
+    """
+    try:
+        path = apply_service.get_review_screenshot_path(job_fingerprint)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    media_type = _MEDIA_BY_SUFFIX.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(str(path), media_type=media_type, filename=path.name)
