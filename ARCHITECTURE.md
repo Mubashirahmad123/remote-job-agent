@@ -21,8 +21,10 @@ One-page map of how the Remote Job Agent fits together. Details live in
                                                         frontend/ dashboard (same-origin)
 ```
 
-Two rhythms: **write path** (scheduler/CLI → Sheets, minutes) and **read path**
-(API → UI, seconds, TTL-cached). The API never scrapes; the pipeline never serves HTTP.
+Two rhythms: **write path** (scheduler/CLI/dashboard-triggered scrape → Sheets,
+minutes) and **read path** (API → UI, seconds, TTL-cached). `POST /api/scrape`
+starts a background scrape run in a daemon thread inside the API process
+(single active run); the pipeline never serves HTTP itself.
 
 ## 2. Components
 
@@ -68,9 +70,12 @@ Two rhythms: **write path** (scheduler/CLI → Sheets, minutes) and **read path*
    disabled. Greenhouse `/intent` + `/submit` exist but fail closed with
    403 while `api/safety.py SUBMIT_ENABLED=False`, require
    `APPLY_API_TOKEN`, and refuse to click unless the refill verifies the
-   resume + cover letter actually attached and the typed-field readback is
-   `verified`/`repaired` (`mismatch`/`unavailable`/error never click). The legacy CLI blind submit is
-   permanently removed. See `README.md` and `PM.md`.
+   resume + cover letter actually attached, the typed-field readback is
+   `verified`/`repaired` (`mismatch`/`unavailable`/`missing_required`/error
+   never click), and the minimum profile (name + email) was typed and
+   verified. A Greenhouse fill with missing/unverified required fields is
+   stored and reported as `needs_review`, never `filled_ready`. The legacy
+   CLI blind submit is permanently removed. See `README.md` and `PM.md`.
 
 ## 5. Failure modes
 

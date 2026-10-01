@@ -1,5 +1,13 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-01 — Manual-application modal scroll fix)
+
+- The Pipeline Tracker `+ Add Manual Application` modal clipped its
+  Cancel/Save footer on short screens (the inner `<form>` grew past the
+  box instead of letting the body scroll). The form is now a constrained
+  flex column: the field body scrolls, the footer stays pinned, with
+  tighter spacing under 700px height.
+
 ## Unreleased (2026-10-01 — Review honesty: needs_review status)
 
 - `fill_review` (`api/apply.py`) maps Greenhouse `filled_ready` with

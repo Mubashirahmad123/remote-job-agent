@@ -52,9 +52,13 @@ venv\Scripts\python.exe -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 - Current apply safety probes:
   `POST /api/apply` with `mode != "review"` → 400; kill-switch probes assert
   `/intent` + `/submit` → 403 while `api/safety.py SUBMIT_ENABLED=False`
-  (flip via monkeypatch for the live-path tests). Attachment-gate probes prove
-  the refill refuses to click without `resume_attached` + cover proof.
-  Primitive tests include threaded duplicate
+   (flip via monkeypatch for the live-path tests). Attachment-gate probes prove
+   the refill refuses to click without `resume_attached` + cover proof;
+   field-readback probes (`mismatch`/`unavailable`/`missing_required` never
+   click) and minimum-profile probes (no-profile/no-email/no-name never click,
+   `full_name`+email passes) guard the submit gate, and fill-review probes prove
+   `missing_required` maps to `needs_review` (which blocks intent with 409).
+   Primitive tests include threaded duplicate
   claim and daily-cap races, consumed-intent replacement, and
   failed_refunded-claim retry. Auth is unconditional on both submit routes;
   no-browser-before-gate route tests guard the triple gate. The apply API tests
