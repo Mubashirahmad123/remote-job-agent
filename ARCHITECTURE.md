@@ -33,7 +33,7 @@ Two rhythms: **write path** (scheduler/CLI → Sheets, minutes) and **read path*
 | Persistence | Google Sheets via `tools/sheet_writer.py` | 5 tabs: ALL JOBS, TOP MATCHES, GOOD MATCHES, APPLIED, STATS | the Sheet |
 | Read API | `api/` | TTL cache over Sheets + `curated_jobs.json` enrichment left-join; action routers (scrape runs, tailored materials, CV profile edits) | in-process cache (90s) |
 | Dashboard | `frontend/` | bento metrics, job desk, drawer, resume studio, fill-only review-package cockpit, kanban | browser + `localStorage` (token/base URL) |
-| Automation | `scheduler.py`, `track.py`, `main.py`, `Run.py` | cron, tracker CLI, pipeline entry points; standalone CLI also has ATS Playwright fill and a legacy unverified submit flag | `data/`, `logs/` |
+| Automation | `scheduler.py`, `track.py`, `main.py`, `Run.py` | cron, tracker CLI, pipeline entry points; standalone CLI also has ATS Playwright fill (fill-only; blind submit permanently removed) | `data/`, `logs/` |
 
 ## 3. Data contracts
 
@@ -58,13 +58,18 @@ Two rhythms: **write path** (scheduler/CLI → Sheets, minutes) and **read path*
 5. **Localhost-first auth** — no token locally; non-local bind requires `API_TOKEN`
    enforced on every `/api/*` call including reads.
 6. **Dashboard apply gate** — `POST /api/apply/{fp}` creates a local review
-   package and, for Greenhouse/Lever only, fills supported fields in a visible
-   Playwright browser window and captures a pre-submit screenshot. The browser
-   stays open for human review; this route never clicks submit. Unsupported
-   ATSs receive a package only. The cockpit processes up to three eligible jobs
-   sequentially; its submit toggle remains disabled and no submit route exists.
-   Separately, the standalone CLI's legacy `AUTO_APPLY_CONFIRM=true` path
-   submits without verification and is unsafe. See `README.md` and `PM.md`.
+   package and, for Greenhouse/Lever only, fills the final tailored resume +
+   cover letter in a visible Playwright browser window and captures a
+   pre-submit screenshot served in-browser by
+   `GET /api/apply/{fp}/screenshot`. The browser stays open for human
+   review; this route never clicks submit. Unsupported ATSs receive a
+   package only. The cockpit processes up to three eligible jobs
+   sequentially under an enforced daily cap; its submit toggle remains
+   disabled. Greenhouse `/intent` + `/submit` exist but fail closed with
+   403 while `api/safety.py SUBMIT_ENABLED=False`, require
+   `APPLY_API_TOKEN`, and refuse to click unless the refill verifies the
+   resume + cover letter actually attached. The legacy CLI blind submit is
+   permanently removed. See `README.md` and `PM.md`.
 
 ## 5. Failure modes
 

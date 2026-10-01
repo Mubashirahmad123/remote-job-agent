@@ -1,5 +1,24 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-01 — Live-submit blockers + docs sync)
+
+- Kill switch enforced: `POST /api/apply/{fp}/intent` + `/submit` fail closed
+  with 403 while `api/safety.py SUBMIT_ENABLED=False` (router + service level).
+- Review fill carries the final tailored resume + cover letter (same files a
+  submit would send); response reports `materials_note: final` or an honest
+  `fallback-empty` reason. Submit refill refuses to click unless the resume +
+  cover letter verify as attached (`files.length` readback).
+- Legacy CLI blind submit permanently removed (`AUTO_APPLY_CONFIRM` ignored
+  everywhere); score parsing coerces `"85.0"`/`""`/`None`/`"87%"` instead of
+  crashing; consumed intents are replaceable and `failed_refunded` claims can
+  retry; package HTML escaped with `rel="noopener noreferrer"`.
+- Cockpit: daily cap enforced (persisted per-day count), in-browser screenshot
+  preview (`GET /api/apply/{fp}/screenshot`), attachment-copy mismatch fixed,
+  sidebar/dashboard cap numbers live, blob-URL leak fixed.
+- Frontend XSS sweep: `JobAgent.escapeHtml` + `safeHttpUrl` (`js/escape.js`);
+  drawer/toast/grid-table/tracker/cards/dashboard sources escaped; only
+  `http(s)` posting URLs assigned. Full suite: 273 passed, 1 skipped.
+
 ## Unreleased (2026-09-29 — Auto-Apply cockpit fill-and-review)
 
 - Connected the fill-only API to the existing Greenhouse/Lever form fillers.

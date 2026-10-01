@@ -18,7 +18,7 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS — with colored score bands, hyperlinks, frozen headers |
 | **AI cover letters with role detection** | ✅ | Detects backend/frontend/fullstack/mobile role from job title and tailors tone, skills, and experience accordingly |
 | **LLM fallback chain** | ✅ | Gemini → Groq → Mistral → GLM → Ollama Cloud — pipeline never crashes from API quota errors |
-| **Auto-apply workflow** | 🟡 Fill/review only over dashboard API | The cockpit prepares up to three jobs per run; Greenhouse/Lever open visibly with supported fields filled and paused for manual review. Other ATSs receive a package only. No dashboard submit route exists. CLI `AUTO_APPLY_CONFIRM=true` remains unsafe and unverified; see warning below. |
+| **Auto-apply workflow** | 🟡 Fill/review over dashboard API; submit kill-switched | The cockpit prepares up to three jobs per run (daily-cap enforced); Greenhouse/Lever open visibly with the final tailored resume + cover letter filled and paused for manual review, plus an in-browser screenshot preview. Other ATSs receive a package only. Greenhouse `/intent` + `/submit` routes exist but fail closed with 403 while `api/safety.py SUBMIT_ENABLED=False`. The legacy CLI blind submit is permanently disabled. |
 | **Tailored resume generation** | ✅ | Generates ATS-optimized resume PDF matched to each job's tech stack `python main.py resume` |
 | **Country/location filter** | ✅ | 452-country detection — blocks jobs from non-whitelisted countries, allows 198 whitelisted terms |
 | **Cross-platform Unicode PDFs** | ✅ | Auto-downloads DejaVu fonts — works on Windows/macOS/Linux; covers accents, Arabic, Cyrillic |
@@ -98,7 +98,7 @@ You can also set `RUN_MODE` in `.env`:
 
 ### Auto-Apply
 
-The auto-apply tooling has separate CLI and dashboard flows. The dashboard cockpit calls the fill-only review API and processes up to three eligible jobs sequentially. For Greenhouse and Lever it opens a visible Playwright review window, fills supported fields, captures a pre-submit screenshot, and leaves the form open for you to review and submit manually. It never clicks submit. Unsupported ATSs get a local apply package and a link to the posting. The Review Results panel shows per-job outcomes and local package/screenshot paths; the daily-cap slider is a preference only and is not enforced by this review flow.
+The auto-apply tooling has separate CLI and dashboard flows. The dashboard cockpit calls the fill-only review API and processes up to three eligible jobs sequentially, subject to the enforced daily cap (persisted per-day count, blocks with a clear message at the cap). For Greenhouse and Lever it opens a visible Playwright review window, fills the final tailored resume + cover letter (the same files a later submit would send), captures a pre-submit screenshot, and leaves the form open for you to review and submit manually. It never clicks submit. Unsupported ATSs get a local apply package and a link to the posting. The Review Results panel shows per-job outcomes with an in-browser screenshot preview served by `GET /api/apply/{fp}/screenshot` (honest empty state when package-only).
 
 The standalone CLI generates a tailored resume + cover letter, then can use one of two modes:
 
@@ -111,18 +111,14 @@ python main.py apply
 ```bash
 # Standalone CLI: fill forms + take screenshots (review before submitting)
 AUTO_APPLY_PLAYWRIGHT=true python main.py apply
-
-# UNSAFE: unverified CLI auto-submit; do not use for real applications
-AUTO_APPLY_PLAYWRIGHT=true AUTO_APPLY_CONFIRM=true python main.py apply
 ```
 
-> ⚠️ **UNVERIFIED SUBMIT — CLI ONLY, KNOWN BUG.** `AUTO_APPLY_CONFIRM=true`
-> clicks submit then records `status: "submitted"` after a blind 3-second wait
-> with **zero post-submit verification** (`agents/auto_applier.py`). A silently
-> failed click, an error page, and a real success all write the identical row.
-> Gating the dashboard (Phase 2a fill-only) does **not** make this flag safe —
-> it only stops the dashboard from reaching it. Do not run this flag until the
-> 2b verification protocol ships. When in doubt, fill-only + submit manually.
+> ⛔ **CLI AUTO-SUBMIT PERMANENTLY DISABLED.** The legacy `AUTO_APPLY_CONFIRM=true`
+> blind click (`agents/auto_applier.py`) has been removed: it submitted without
+> post-submit verification and bypassed the verified intent/claim/verify pipeline.
+> The flag is now ignored everywhere — CLI runs are fill-only. Real submits go
+> through the HTTP Greenhouse pair (`/intent` + `/submit`), which fails closed
+> with 403 while `api/safety.py SUBMIT_ENABLED=False`.
 
 The standalone CLI Playwright mode:
 - Detects the ATS platform (Greenhouse, Lever, Workday, Workable, Ashby, Breezy)
@@ -130,7 +126,7 @@ The standalone CLI Playwright mode:
 - Uploads generated resume PDF
 - Pastes tailored cover letter
 - Takes a screenshot before submission
-- Optionally submits the form (with `AUTO_APPLY_CONFIRM=true`)
+- Never submits (CLI auto-submit permanently disabled; submit only via the verified HTTP flow)
 
 An **apply package** is always created in `apply_packages/` with:
 - `resume.pdf` — tailored resume
@@ -149,7 +145,7 @@ remote-job-agent/
 │   ├── scrapper.py           # 45+ job board scrapers (API, HTML, RSS)
 │   ├── curator.py            # Dedup, CV matching, quality ranking, sheet save
 │   ├── gemini_tools.py       # Cover letters with LLM fallback (Gemini→Groq→Mistral→GLM→Ollama); ATS 1-page cover-letter PDF
-│   └── auto_applier.py       # Standalone CLI: resume + cover letter + optional Greenhouse/Lever Playwright fill; legacy AUTO_APPLY_CONFIRM submit is unverified and unsafe
+ │   └── auto_applier.py       # Standalone CLI: resume + cover letter + Greenhouse/Lever Playwright fill (fill-only; legacy blind submit permanently removed)
 ├── tools/
 │   ├── __init__.py
 │   ├── cv_library.py          # Multi-CV library: CV_DIR discovery, per-job pick_best(), single-CV fallback
@@ -173,7 +169,12 @@ remote-job-agent/
 │   ├── mappers.py            # Sheet-row → schema converters
 │   ├── materials.py          # Resume/cover-letter generation registry (fp-mapped files)
 │   ├── runs.py               # Background scrape-run registry (single active run)
-│   └── routers/              # One file per group: health, jobs, stats, tracker, system, runs, materials, cv
+ │   ├── safety.py               # SUBMIT_ENABLED kill-switch (intent/submit fail closed 403 while False)
+ │   ├── apply_claims.py         # Claim-first idempotency + daily-cap primitives
+ │   ├── apply_intents.py        # One-live-intent-per-fingerprint primitives
+ │   ├── apply_validation.py     # Confirmation-echo + score/title gate validators
+ │   ├── apply_verification.py   # Greenhouse/Lever confirmation URL+message checks
+ │   └── routers/              # One file per group: health, jobs, stats, tracker, system, runs, materials, cv, apply (review + kill-switched intent/submit + screenshot)
 ├── frontend/                 # Command Center dashboard (no build step, vanilla JS)
 │   ├── index.html            # Shell + all views (deck, jobs, resume, auto-apply, tracker)
 │   ├── css/                  # Per-component stylesheets (see DESIGN.md tokens)
@@ -182,7 +183,7 @@ remote-job-agent/
 │       ├── store.js          # Reactive state + backend→UI normalization + mock fallback
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
 ├── tests/
-│   └── test_api_*.py etc.   # 136 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
+│   └── test_api_*.py etc.   # 273 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
 ├── apply_packages/           # Auto-generated apply packages (resume + cover letter + form data)
 ├── cover_letters/            # Generated PDF cover letters
 ├── resumes/                  # Generated tailored PDF resumes
@@ -254,7 +255,7 @@ AUTO_APPLY_ENABLED=false  # auto-apply after pipeline
 AUTO_APPLY_THRESHOLD=70   # minimum match score
 AUTO_APPLY_LIMIT=5        # max jobs per run
 AUTO_APPLY_PLAYWRIGHT=false  # true = fill forms; false = open browser
-AUTO_APPLY_CONFIRM=false     # standalone CLI only; true submits without verification (unsafe); ignored by HTTP API
+AUTO_APPLY_CONFIRM=false     # legacy CLI flag, ignored everywhere (blind submit permanently disabled)
 
 # Your Profile (for auto-fill)
 APPLICANT_NAME=Your Name

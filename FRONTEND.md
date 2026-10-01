@@ -39,7 +39,9 @@ frontend/
   `HTTP_nnn`. All throw — callers show banners/toasts, never silent-fail.
 - One fn per backend router: `getHealth` / `getJobs/getJob` / `getStats` /
   `getTracker/patchTracker` / `refreshJobs` / `startScrape/getScrape/listScrapes` /
-  `createResume/createCoverLetter` / `applyReview` / `getCvProfile/updateCvProfile/getCvVariants`
+  `createResume/createCoverLetter` / `applyReview` (+ `screenshotUrl` /
+  `fetchScreenshotBlob` for `GET /api/apply/{fp}/screenshot`) /
+  `getCvProfile/updateCvProfile/getCvVariants`
   — mirror `api/routers/` when adding endpoints. The three `getCv*` fns
   swallow 404/501 into `{_unavailable: true}` (endpoint not ready / no cache);
   all other errors still throw.
@@ -90,4 +92,6 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
 - Skills cloud is still a static demo until `GET /api/skills` lands — don't mistake it
   for live data. Auto-Apply opens visible review windows for supported ATS forms,
   leaves them open for manual submission, and never clicks submit. The daily-cap
-  slider is only a preference; it is not enforced by this fill-only API flow.
+  slider is enforced (per-day persisted count blocks the queue at the cap).
+  Untrusted content (job fields, toasts, tracker cards, source names) is escaped
+  via `JobAgent.escapeHtml`; only `http(s)` posting URLs are ever assigned.

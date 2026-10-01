@@ -39,8 +39,9 @@ agents below by delegating work to them and gating progress.
 4. Keep a running task list with the todowrite tool and report status after every
    phase: done, open, blocked (with owner).
 5. Standing safety invariants (enforce on every phase, no exceptions):
-   - No submit endpoint, no submit code path reachable from API context.
-     `AUTO_APPLY_CONFIRM` is ignored by API code even when true in env.
+   - No live submit: `/intent` + `/submit` fail closed 403 while
+     `api/safety.py SUBMIT_ENABLED=False`; CLI blind submit is removed, so
+     `AUTO_APPLY_CONFIRM` is ignored everywhere.
    - No secret (`.env` values, `keys.json`, sheet IDs) in logs, outputs, or files.
    - Tests never hit live Sheets, LLM APIs, or real browsers.
    - Long pipeline runs only via background run-registry, never synchronously

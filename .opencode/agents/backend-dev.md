@@ -31,14 +31,15 @@ changes, API route tests in `tests/`. You do NOT touch `frontend/` (that is
    `GET /api/stats`, `GET /api/tracker`, `PATCH /api/tracker/{fp}`,
    `POST /api/jobs/refresh`, `POST /api/runs/*`, `GET /api/runs/{id}`,
    `POST /api/materials`, `GET /api/files/{kind}/{name}`, `POST /api/apply`.
-6. `api/safety.py` — `SUBMIT_ENABLED = False` constant; `POST /api/apply`
-   rejects any `mode != "review"` with 400 and calls `auto_apply` with
-   `mark_sheet=False, open_browser=False, use_playwright=True`, ignoring
-   `AUTO_APPLY_CONFIRM` entirely.
+6. `api/safety.py` — `SUBMIT_ENABLED = False` kill-switch; `POST /api/apply`
+   rejects any `mode != "review"` with 400; `/intent` + `/submit` fail closed
+   with 403 while the switch holds (plus `APPLY_API_TOKEN` auth); the legacy
+   CLI blind submit is removed so `AUTO_APPLY_CONFIRM` is ignored everywhere.
 
 ## Non-negotiable rules
 
-- No submit code path in API context. No endpoint reads `.env`/`keys.json`.
+- No live submit: kill-switch 403 on `/intent` + `/submit` while disabled;
+  attachment gate must verify resume + cover before any click. No endpoint reads `.env`/`keys.json`.
 - Long operations (scrape/curate/materials) ONLY via the run registry —
   never synchronously in a request handler.
 - Bind `127.0.0.1` by default; non-local bind requires `API_TOKEN` env check.

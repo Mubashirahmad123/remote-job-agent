@@ -31,7 +31,8 @@ orchestrator.
    - API smoke: every new endpoint against the real app (reads only, plus
      background-run lifecycle on throwaway inputs).
    - Safety probes: `POST /api/apply` with `mode != "review"` must 400;
-     submit path unreachable with `AUTO_APPLY_CONFIRM=true` in env.
+     `/intent` + `/submit` must 403 while `api/safety.py SUBMIT_ENABLED=False`;
+     attachment-gate probes must refuse click without verified attachments.
    - Output checks where applicable (PDFs exist and are 1 page via pdfplumber).
 4. Own the Definition-of-Done checklist per phase and report it itemized:
    suite result (counts), new tests added, slow/flaky/env-dependent notes with
