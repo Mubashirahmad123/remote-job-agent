@@ -116,6 +116,11 @@ docker compose run --rm runner python -m pytest tests/
   - `data_source: empty` = no Sheets, no snapshot (UI shows mock fallback)
 - `POST /api/jobs/refresh` clears the TTL cache after a scheduled scrape lands.
 - Logs: `logs/scraper.log` (scheduler); `docker compose logs -f api` (container).
+- Sidebar `Hot` badge is live (`dashboard.js:_applyMetrics` ← `/api/stats`
+  `tabs`). Open question (decide later): should "Hot" mean **A)** TOP MATCHES
+  only (score ≥ 85, strict, matches the Command Deck card) or **B)** TOP +
+  GOOD MATCHES (score ≥ 70, everything curated)? Currently A; reads 0 while
+  no job scores 85+ even when Total Jobs is 24.
 
 ---
 
@@ -137,8 +142,7 @@ docker compose run --rm runner python -m pytest tests/
 
 
 
-fix order in curate jobs ie new to cone on top and tose in wich that are appled to be removed from this list 
-
-
 
 we need another thing where user first upload its cv on that basis he can scrap jobs and when in cv and resume studio that cAN TAKE INFO FROM THAT CV ALSO LIKE OTHER SECTIONS which are not added in cv like peijects certificatuions we will mke that one also as foe now we have to that cv is laready in repo ij that bais jobs are scrapped but we need one that first user can up;oad its on cv 
+
+

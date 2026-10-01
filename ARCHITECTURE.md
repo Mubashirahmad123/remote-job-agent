@@ -68,7 +68,8 @@ Two rhythms: **write path** (scheduler/CLI → Sheets, minutes) and **read path*
    disabled. Greenhouse `/intent` + `/submit` exist but fail closed with
    403 while `api/safety.py SUBMIT_ENABLED=False`, require
    `APPLY_API_TOKEN`, and refuse to click unless the refill verifies the
-   resume + cover letter actually attached. The legacy CLI blind submit is
+   resume + cover letter actually attached and the typed-field readback is
+   `verified`/`repaired` (`mismatch`/`unavailable`/error never click). The legacy CLI blind submit is
    permanently removed. See `README.md` and `PM.md`.
 
 ## 5. Failure modes

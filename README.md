@@ -183,7 +183,7 @@ remote-job-agent/
 │       ├── store.js          # Reactive state + backend→UI normalization + mock fallback
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
 ├── tests/
-│   └── test_api_*.py etc.   # 275 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
+│   └── test_api_*.py etc.   # 279 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
 ├── apply_packages/           # Auto-generated apply packages (resume + cover letter + form data)
 ├── cover_letters/            # Generated PDF cover letters
 ├── resumes/                  # Generated tailored PDF resumes
