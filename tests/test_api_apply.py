@@ -1118,14 +1118,14 @@ class TestSubmitAttachmentGate:
         )
 
     def test_refill_without_resume_proof_never_clicks(self, monkeypatch):
-        outcome = self._run_refill(monkeypatch, {})
+        outcome = self._run_refill(monkeypatch, {"field_verification": "verified"})
         assert outcome["clicked"] is False
         assert "Resume attachment unverified" in (outcome["error"] or "")
 
     def test_refill_without_cover_proof_never_clicks(self, monkeypatch):
         outcome = self._run_refill(
             monkeypatch,
-            {"resume_attached": True, "resume_verify": "files_present"},
+            {"resume_attached": True, "resume_verify": "files_present", "field_verification": "verified"},
         )
         assert outcome["clicked"] is False
         assert "Cover letter unverified" in (outcome["error"] or "")
@@ -1138,8 +1138,67 @@ class TestSubmitAttachmentGate:
                 "resume_verify": "files_present",
                 "cover_letter_pasted": True,
                 "cover_letter_verify": "verified",
+                "field_verification": "verified",
             },
         )
         # No submit button on the stub page, but the attachment gate passed:
+        assert outcome["error"] == "Greenhouse submit button was not found"
+        assert outcome["clicked"] is False
+
+    def test_refill_field_mismatch_never_clicks(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
+                "field_verification": "mismatch",
+            },
+        )
+        assert outcome["clicked"] is False
+        assert "Field readback unverified" in (outcome["error"] or "")
+
+    def test_refill_field_unavailable_never_clicks(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
+                "field_verification": "unavailable",
+            },
+        )
+        assert outcome["clicked"] is False
+        assert "Field readback unverified" in (outcome["error"] or "")
+
+    def test_refill_field_verified_proceeds_past_gate(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
+                "field_verification": "verified",
+            },
+        )
+        # No submit button on the stub page, but the field gate passed:
+        assert outcome["error"] == "Greenhouse submit button was not found"
+        assert outcome["clicked"] is False
+
+    def test_refill_field_repaired_proceeds_past_gate(self, monkeypatch):
+        outcome = self._run_refill(
+            monkeypatch,
+            {
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
+                "field_verification": "repaired",
+            },
+        )
+        # No submit button on the stub page, but the field gate passed:
         assert outcome["error"] == "Greenhouse submit button was not found"
         assert outcome["clicked"] is False

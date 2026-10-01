@@ -395,6 +395,17 @@ def _run_greenhouse_submit(artifact: Dict[str, Any], job: Dict[str, Any]) -> Dic
             if fill_result.get("status") != "filled_ready":
                 result["error"] = fill_result.get("error") or fill_result.get("status")
                 return result
+            # Field-readback gate: the refill must prove every typed field
+            # still holds its value ("verified" first-pass or "repaired"
+            # after re-type). "mismatch" (page drift survived 3 repair
+            # passes), "unavailable" (no readback possible), or any other
+            # state fails closed before any submit click.
+            if fill_result.get("field_verification") not in {"verified", "repaired"}:
+                result["error"] = (
+                    "Field readback unverified in submit refill "
+                    f"(field_verification={fill_result.get('field_verification')!r})"
+                )
+                return result
             # Attachment gate: the refill must prove the files actually landed
             # (files.length readback), not merely that set_input_files() did not
             # throw. Anything unverified fails closed before any submit click.

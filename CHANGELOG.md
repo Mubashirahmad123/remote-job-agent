@@ -1,5 +1,33 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-01 — Submit field-readback hard gate)
+
+- `_run_greenhouse_submit` (`api/apply.py`) now treats the filler's
+  `field_verification` as a hard no-click gate: only `"verified"` (first-pass
+  readback match) or `"repaired"` (re-typed, final readback match) proceed.
+  `"mismatch"` (drift survived 3 repair passes), `"unavailable"` (no readback
+  possible), or any other state fails closed before any submit click — even
+  when attachments verify cleanly.
+- Tests: `mismatch`/`unavailable` → no click; `verified`/`repaired` → proceed
+  past the gate; existing attachment-gate tests now pass an explicit passing
+  field state so each test still targets its own gate.
+- `SUBMIT_ENABLED` stays `False` — live submit still locked.
+- Full suite: 279 passed, 1 skipped (+4 field-gate tests).
+
+## Unreleased (2026-10-01 — Sidebar Hot badge live)
+
+- The sidebar `topMatchCountBadge` was hardcoded to `11 Hot` in `index.html`
+  and never updated by any script, while Command Deck showed the live
+  `TOP MATCHES` tab count (e.g. 24). `dashboard.js:_applyMetrics` now sets
+  the badge from the same live `/api/stats` tabs on every render.
+
+## Unreleased (2026-10-01 — Curated Jobs newest-first)
+
+- `frontend/js/components/jobDesk.js:getFilteredJobs` sorts newest-first by
+  `posted_date_iso` (desc, undated rows last). Sheet order is oldest-first
+  (appends land at the bottom), so without this new jobs sat at the end of
+  the Curated Jobs tab. Apply queue still ranks by score (unchanged).
+
 ## Unreleased (2026-10-01 — Review-queue screenshot 404 spam)
 
 - `frontend/js/components/autoApply.js` fabricated a screenshot URL from the

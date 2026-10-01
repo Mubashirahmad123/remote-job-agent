@@ -158,6 +158,15 @@ JobAgent.jobDesk = {
       }
 
       return true;
+    }).sort((a, b) => {
+      // Newest first: ISO dates (posted_date_iso, scraped_at fallback)
+      // compare lexicographically; undated rows sink to the bottom.
+      const da = a.posted_date_iso || '';
+      const db = b.posted_date_iso || '';
+      if (da === db) return 0;
+      if (!da) return 1;
+      if (!db) return -1;
+      return da < db ? 1 : -1;
     });
   },
 

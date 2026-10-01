@@ -22,6 +22,12 @@ JobAgent.dashboard = {
     set('metricTotalJobs', stats.total_jobs ?? '—');
     const tabs = stats.tabs || {};
     set('metricTopMatches', tabs['TOP MATCHES'] ?? '—');
+    // Sidebar "Hot" badge shows the same live TOP MATCHES count — it was
+    // hardcoded in index.html and never updated, drifting from this metric.
+    if (tabs['TOP MATCHES'] != null) {
+      const hot = document.getElementById('topMatchCountBadge');
+      if (hot) hot.textContent = tabs['TOP MATCHES'] + ' Hot';
+    }
     const applied = (stats.stats_rows || []).length;
     void applied;
   },
