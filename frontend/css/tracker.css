@@ -144,9 +144,34 @@
   color: var(--accent-emerald);
 }
 
+.manual-application-overlay {
+  padding: 12px;
+}
+
 .manual-application-modal {
   width: min(94vw, 760px);
   max-width: 760px;
+  max-height: 92vh;
+}
+
+/* The form is the direct flex child of .modal-box: constrain it so the
+   body scrolls and the footer (Cancel/Save) stays pinned and visible
+   instead of being pushed out of the box on short screens. */
+.manual-application-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.manual-application-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.manual-application-footer {
+  flex-shrink: 0;
 }
 
 .manual-application-modal .modal-header {
@@ -314,6 +339,16 @@
 @media (max-width: 1200px) {
   .kanban-board {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-height: 700px) {
+  .manual-application-body {
+    padding: 16px;
+  }
+
+  .manual-application-grid {
+    gap: 12px;
   }
 }
 
