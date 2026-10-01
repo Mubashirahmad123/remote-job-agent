@@ -1,5 +1,21 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-01 — Review honesty: needs_review status)
+
+- `fill_review` (`api/apply.py`) maps Greenhouse `filled_ready` with
+  unverified/missing required profile fields to `needs_review` (stored in
+  `apply_review_artifacts.fill_status` + new `field_verification` /
+  `profile_fields_verified` columns). Response exposes both fields and a
+  `Required applicant fields missing/unverified` `fill_error`. Intent (409)
+  and submit (410) already reject non-`filled_ready`, so the artifact can no
+  longer overstate readiness. Lever keeps its raw filler status (no readback).
+- Dashboard (`autoApply.js`) renders `needs_review` amber as
+  `needs_review: required fields missing — review manually before any submit`,
+  never counts it as filled. Tracker maps `needs_review` into Under Review.
+  `SUBMIT_ENABLED` stays `False`.
+- Tests: missing_required → `needs_review` + error; verified → `filled_ready`;
+  `needs_review` artifact blocks intent 409. Full suite: 291 passed, 1 skipped.
+
 ## Unreleased (2026-10-01 — Pipeline Tracker review mapping)
 
 - Pipeline Tracker now preserves the auto-apply APPLIED-sheet header fork in

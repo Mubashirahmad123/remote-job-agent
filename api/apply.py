@@ -181,6 +181,26 @@ def fill_review(job_fingerprint: str) -> Dict[str, Any]:
     fill_result = _fill_ats_form(job, review_resume, review_cover)
     apply_url = job.get("apply_url", "")
     platform = detect_ats_platform(apply_url) if apply_url else "unknown"
+    field_verification = (fill_result or {}).get("field_verification")
+    profile_fields_verified = list((fill_result or {}).get("profile_fields_verified") or [])
+    # Honesty mapping (Greenhouse only): a filler "filled_ready" with
+    # unverified/missing required profile fields must not read as ready.
+    # Surface "needs_review" so the dashboard, stored artifact, and intent
+    # gate all agree submit is not yet safe. Lever has no readback fields
+    # and keeps its raw filler status.
+    effective_status = (fill_result or {}).get("status") if fill_result else "package_only"
+    needs_review_reason = None
+    if platform == "greenhouse" and fill_result and fill_result.get("status") == "filled_ready":
+        verified_set = set(profile_fields_verified)
+        name_ok = ("first_name" in verified_set) or ("full_name" in verified_set)
+        email_ok = "email" in verified_set
+        if field_verification not in {"verified", "repaired"} or not (name_ok and email_ok):
+            effective_status = "needs_review"
+            needs_review_reason = (
+                "Required applicant fields missing/unverified "
+                f"(field_verification={field_verification!r}, "
+                f"profile_fields_verified={sorted(verified_set)!r})"
+            )
     if platform in {"greenhouse", "lever"} and fill_result and fill_result.get("screenshot_path"):
         from api.apply_state import save_review_artifact
 
@@ -196,14 +216,17 @@ def fill_review(job_fingerprint: str) -> Dict[str, Any]:
             "confirmation_path": fill_result.get("confirmation_path"),
             "confirmation_message": fill_result.get("confirmation_message"),
             "match_ratio": match_ratio,
-            "fill_status": fill_result["status"],
+            "fill_status": effective_status,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "resume_path": review_resume,
             "cover_letter_text": review_cover,
+            "field_verification": field_verification,
+            "profile_fields_verified": profile_fields_verified,
         })
 
+    fill_error = (fill_result.get("error") if fill_result else None) or needs_review_reason
     return {
-        "status": fill_result["status"] if fill_result else "package_only",
+        "status": effective_status,
         "mode": "review",
         "job_fingerprint": (job.get("job_fingerprint") or job_fingerprint).strip(),
         "job_title": job.get("job_title", ""),
@@ -217,7 +240,9 @@ def fill_review(job_fingerprint: str) -> Dict[str, Any]:
             if fill_result and fill_result.get("screenshot_path")
             else None
         ),
-        "fill_error": fill_result.get("error") if fill_result else None,
+        "fill_error": fill_error,
+        "field_verification": field_verification,
+        "profile_fields_verified": profile_fields_verified,
         "materials_note": materials_note,
         "confirmation_metadata_available": bool(
             fill_result

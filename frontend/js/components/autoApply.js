@@ -164,9 +164,14 @@ JobAgent.autoApply = {
             screenshotUrl: response.screenshot_url || '',
             browserOpened: response.browser_opened === true,
             error: response.fill_error || '',
+            fieldVerification: response.field_verification || '',
+            profileFieldsVerified: Array.isArray(response.profile_fields_verified)
+              ? response.profile_fields_verified
+              : [],
           };
           this.latestQueueResults.push(result);
-          const lineClass = result.error || result.status === 'error' ? 'term-rose' : (result.status === 'filled_ready' ? 'term-green' : 'term-amber');
+          const needsReview = result.status === 'needs_review';
+          const lineClass = result.error || result.status === 'error' ? 'term-rose' : (result.status === 'filled_ready' && !needsReview ? 'term-green' : 'term-amber');
           this.appendTerminalLine('[' + result.status.toUpperCase() + '] (' + result.tier + ') — ' + result.jobTitle + (result.error ? ': ' + result.error : ''), lineClass);
           if (result.packagePath) this.appendTerminalLine('[PACKAGE] ' + result.packagePath, 'term-amber');
         } catch (error) {
@@ -241,12 +246,20 @@ JobAgent.autoApply = {
       heading.textContent = result.jobTitle + ' @ ' + result.company;
       const status = document.createElement('p');
       const failed = Boolean(result.error) || result.status === 'error' || result.status === 'playwright_not_installed';
-      status.className = failed ? 'review-result-status is-error' : 'review-result-status';
-      status.textContent = result.error
-        ? result.status + ': ' + result.error
-        : result.browserOpened
-          ? 'Form filled in open browser · Review and submit manually if ready'
-          : result.status + ' · ' + result.tier;
+      const needsReview = result.status === 'needs_review';
+      status.className = failed
+        ? 'review-result-status is-error'
+        : needsReview
+          ? 'review-result-status is-warning'
+          : 'review-result-status';
+      status.textContent = needsReview
+        ? 'needs_review: required fields missing — review manually before any submit'
+          + (result.fieldVerification ? ' (' + result.fieldVerification + ')' : '')
+        : result.error
+          ? result.status + ': ' + result.error
+          : result.browserOpened
+            ? 'Form filled in open browser · Review and submit manually if ready'
+            : result.status + ' · ' + result.tier;
       item.append(heading, status);
       if (result.applyUrl && !result.browserOpened) {
         const applyLink = document.createElement('a');
