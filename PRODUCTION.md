@@ -129,3 +129,16 @@ docker compose run --rm runner python -m pytest tests/
 | `401 Unauthorized` on `/api/*` | `API_TOKEN` is set → send `Authorization: Bearer <token>` (frontend: `localStorage rja_api_token`) |
 | `Refusing non-local bind without API_TOKEN` | Bind `127.0.0.1` or set `API_TOKEN` |
 | Stale data after scrape | `POST /api/jobs/refresh`, or wait out the TTL (≤120s) |
+| Arbeitnow jobs saved with blank company (older runs) | Fixed 2026-10-01: parser now reads the API's `company_name` field; re-scrape to backfill |
+| A few Arbeitnow postings link to the company homepage, not the job page | Upstream API limitation (`url` = company site for a minority of postings); kept as-is — verified a slug-built `/jobs/<slug>` URL 404s, so no safe rewrite exists |
+| Bot-protected/generic-selector boards (Naukri, CWJobs, TimesJobs, GoRemote, etc.) repeatedly `empty` | Structural, not a regression: no dedicated parser exists (generic HTML selectors vs bot walls), GoRemote/FounditIN URLs duplicate other boards, Adzuna needs keys, JustRemote/NoDesk fail DNS. No earlier targeted fix found in history; leave as expected-empty |
+
+
+
+
+
+fix order in curate jobs ie new to cone on top and tose in wich that are appled to be removed from this list 
+
+
+
+we need another thing where user first upload its cv on that basis he can scrap jobs and when in cv and resume studio that cAN TAKE INFO FROM THAT CV ALSO LIKE OTHER SECTIONS which are not added in cv like peijects certificatuions we will mke that one also as foe now we have to that cv is laready in repo ij that bais jobs are scrapped but we need one that first user can up;oad its on cv 

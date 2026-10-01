@@ -293,11 +293,20 @@ def _prepare_submit_materials(job: Dict[str, Any]) -> Dict[str, str]:
 
 
 def create_greenhouse_intent(job_fingerprint: str) -> Dict[str, str]:
-    """Issue a five-minute one-use intent after a real GH fill and screenshot."""
+    """Issue a five-minute one-use intent for the REVIEWED materials.
+
+    Immutability invariant: the intent NEVER regenerates materials and NEVER
+    rewrites the review artifact. The operator reviewed exactly these files,
+    and the submit refill reuses exactly these files — reviewed == submitted
+    by construction. A missing resume file or blank cover text fails closed
+    (502: do a fresh fill first). A duplicate request while an intent is live
+    is rejected (409) BEFORE any expensive work, so it can neither burn
+    generation cost nor mutate the artifact backing the still-valid token.
+    """
     from api import safety
-    from agents.auto_applier import classify_tier, detect_ats_platform, generate_apply_package
-    from api.apply_intents import ActiveIntentConflict, create_intent
-    from api.apply_state import connect, get_review_artifact, save_review_artifact
+    from agents.auto_applier import classify_tier, detect_ats_platform
+    from api.apply_intents import ActiveIntentConflict, create_intent, live_intent_retry_after
+    from api.apply_state import connect, get_review_artifact
 
     if not safety.SUBMIT_ENABLED:
         raise SubmitRejected(403, "Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
@@ -318,31 +327,23 @@ def create_greenhouse_intent(job_fingerprint: str) -> Dict[str, str]:
         raise SubmitRejected(409, "Complete a successful Greenhouse fill and screenshot first")
     if not artifact["confirmation_path"] or not artifact["confirmation_message"]:
         raise SubmitRejected(502, "Greenhouse confirmation metadata is unavailable on the public page")
-
-    try:
-        materials = _prepare_submit_materials(job)
-    except Exception as error:
-        raise SubmitRejected(502, f"Submit materials generation failed: {error}")
-    package_path = generate_apply_package(
-        job, materials["resume_path"], materials["cover_letter_text"]
-    )
-    if not package_path:
-        raise SubmitRejected(502, "Submit package rebuild returned no path")
-    artifact = {
-        **artifact,
-        "package_path": str(package_path),
-        "resume_path": materials["resume_path"],
-        "cover_letter_text": materials["cover_letter_text"],
-    }
-    save_review_artifact(artifact)
+    if (
+        not artifact.get("resume_path")
+        or not Path(str(artifact["resume_path"])).is_file()
+        or not (artifact.get("cover_letter_text") or "").strip()
+    ):
+        raise SubmitRejected(502, "Submit materials are missing or stale — complete a fresh fill/review first")
 
     now = datetime.now(timezone.utc)
-    expires_at = now + timedelta(minutes=5)
-    import secrets
-
-    token = secrets.token_urlsafe(32)
     connection = connect()
     try:
+        retry_after = live_intent_retry_after(connection, job_fingerprint, now)
+        if retry_after is not None:
+            raise SubmitRejected(409, "An unexpired intent already exists", retry_after)
+        expires_at = now + timedelta(minutes=5)
+        import secrets
+
+        token = secrets.token_urlsafe(32)
         try:
             result = create_intent(connection, job_fingerprint, token, expires_at, now)
         except ActiveIntentConflict as error:

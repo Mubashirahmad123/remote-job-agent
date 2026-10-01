@@ -2,11 +2,12 @@
 
 Reads over the Sheets pipeline **plus** Phase 2 action endpoints (scrape runs,
 tailored materials, CV profile edits, and ATS fill-and-review for supported boards).
-Submit routes remain absent; see the gated 2b spec and current execution status
-in `PM.md`.
+The Greenhouse `POST /api/apply/{fp}/intent` + `/submit` routes exist but fail
+closed with 403 while `api/safety.py SUBMIT_ENABLED=False`; Lever has no submit
+path by design. See the gated 2b spec and current execution status in `PM.md`.
 
 Run: `venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000`
-Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified: 222 passed, 1 expected xfail)
+Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified 2026-10-01: 275 passed, 1 skipped)
 
 ---
 
@@ -87,7 +88,10 @@ Windows, so it is opt-in only (`ENABLE_JOBSPY=true`, default `false` →
 the run still reaches summary/curate. Scope is tuned via `JOBSPY_SITES`
 (default `linkedin,indeed`) and `JOBSPY_TERMS` (default 1 term). Pollers must
 treat 404 (unknown run_id, e.g. after a server restart wipes the in-memory
-registry) as terminal — never poll forever.
+registry) as terminal — never poll forever. The dashboard keeps a single
+poll loop per page (`pollActive` guard in `frontend/js/app.js`), so a
+refresh-resume plus click/409 path never stacks concurrent
+`GET /api/scrape/{run_id}` loops.
 
 ### `POST /api/resume/{fp}` → `{status, filename}` (+ `GET …/download` PDF)
 ### `POST /api/cover-letter/{fp}` → `{status, filename, cover_letter}` (+ `GET …/download` text)

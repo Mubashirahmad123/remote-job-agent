@@ -160,7 +160,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (btnScrape && !btnScrape.dataset.wired) {
     btnScrape.dataset.wired = '1';
+    let pollActive = false; // single-loop guard: a refresh-resume + click (or 409 path) must not stack GET /api/scrape/{id} loops
     const poll = async (runId) => {
+      if (pollActive) return;
+      pollActive = true;
+      try {
       let last = null;
       let consecutiveFailures = 0;
       const resetToIdle = (message) => {
@@ -216,6 +220,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         else if (JobAgent.toast) JobAgent.toast.show('Scrape still running — check back later.');
       } catch (_) {
         if (last) renderRunState(last);
+      }
+      } finally {
+        pollActive = false;
       }
     };
     btnScrape.addEventListener('click', async () => {

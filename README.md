@@ -183,7 +183,7 @@ remote-job-agent/
 │       ├── store.js          # Reactive state + backend→UI normalization + mock fallback
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
 ├── tests/
-│   └── test_api_*.py etc.   # 273 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
+│   └── test_api_*.py etc.   # 275 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
 ├── apply_packages/           # Auto-generated apply packages (resume + cover letter + form data)
 ├── cover_letters/            # Generated PDF cover letters
 ├── resumes/                  # Generated tailored PDF resumes
@@ -388,6 +388,12 @@ Notes:
 - Binding is `127.0.0.1` by default; a non-local bind refuses to start unless
   `API_TOKEN` is set (then every `/api/*` needs `Authorization: Bearer <token>`).
 - `file://` origins are blocked by design — always open the dashboard via the URL above.
+- Scrape-status polling is one 5s loop per page (single-loop guard in
+  `frontend/js/app.js`); treat a run-registry 404 as terminal (server restart
+  wipes in-memory runs).
+- Arbeitnow company names come from the API's `company_name` field; a minority
+  of its postings link to the company homepage rather than the job page
+  (upstream limitation — see `PRODUCTION.md` §7).
 - See `PRODUCTION.md` for Docker deployment and `DESIGN.md` for the UI design system.
 
 ---

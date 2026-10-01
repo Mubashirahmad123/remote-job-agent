@@ -79,3 +79,4 @@ Two rhythms: **write path** (scheduler/CLI → Sheets, minutes) and **read path*
 | `curated_jobs.json` missing/corrupt | Enrichment fields `null`, never crash |
 | API unreachable from browser | Per-section mock fallback; UI stays usable, banners explain |
 | Slow first paint | Mock renders instantly; live data re-renders via `store.subscribe` |
+| Bot-protected / generic-selector boards repeatedly `empty` (Naukri, CWJobs, TimesJobs, GoRemote, …) | Structural, not a regression (no dedicated parser, bot wall, duplicate/dead URLs) — expected-empty; see `PRODUCTION.md` §7 |

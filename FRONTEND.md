@@ -26,7 +26,10 @@ frontend/
 `store.state`, never `MOCK_*` directly (grep before adding usages).
 | `autoApply.js` | fill-and-review queue, safety lock, per-run results and activity log | up to three highest-scoring eligible jobs sequentially → `POST /api/apply/{fp}` `{mode:review}` → visible Greenhouse/Lever fill window or package-only fallback; submit toggle disabled | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider` (enforced: localStorage daily count blocks queue at cap), `btnRunAutoApplyQueue`, `btnViewScreenshots` (labelled View Review Results), `terminalLog`, `reviewQueueResults` |
 | `scrapeMonitor.js` | scrape run monitor, board diagnostics, structured event stream, run history | `/api/scrape` polling | `scrapeMonitorStatus/Phase/Progress/Summary`, `scrapeMonitorBoards`, `scrapeMonitorEvents`, `scrapeMonitorHistory` |
-- Scrape Monitor is live through the existing five-second run polling. `GET /api/scrape/{run_id}` now includes additive `boards` and bounded `events` fields; scraper events stay separate from the Auto-Apply `terminalLog`.
+- Scrape Monitor is live through the existing five-second run polling, with a
+  single-loop guard (`pollActive` in `app.js`): a refresh-resume plus a Scrape
+  Now click (or the 409 already-running path) never stacks concurrent
+  `GET /api/scrape/{run_id}` loops. `GET /api/scrape/{run_id}` now includes additive `boards` and bounded `events` fields; scraper events stay separate from the Auto-Apply `terminalLog`.
 - Board statuses include `running` (mid-board, so the monitor never goes silent), `ok` / `empty` / `error` (timeout message on `error`), `skipped-js`, and `skipped-disabled` (JobSpy when `ENABLE_JOBSPY != true`). A crashed/isolated JobSpy surfaces as `error` and the run still completes.
 - `Scrape Now` has one authoritative handler in `app.js`; `navigation.js` only routes the sidebar status card to the Scrape Monitor.
 

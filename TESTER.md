@@ -1,9 +1,10 @@
 # TESTER.md — Testing Guide
 
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Suite is pytest,
-last verified **222 passed, 1 expected xfail** across the current test files.
-The expected xfail is the exact Lever confirmation-copy assertion, blocked on
-the isolated sandbox observation. Coverage includes `test_api_phase1.py`,
+last verified 2026-10-01: **275 passed, 1 skipped** across the current test files.
+The skip is the Lever exact confirmation-copy assertion, a deliberate documented
+limitation (Lever stays fill-only; no paid trial account) — not a blocker.
+Coverage includes `test_api_phase1.py`,
 `test_api_phase2.py`, `test_api_cv.py`, `test_api_materials.py`,
 `test_api_freshness.py`, `test_api_jobs_contract.py`, `test_auto_applier.py`,
 `test_country_filter.py`, `test_api_apply.py`, and

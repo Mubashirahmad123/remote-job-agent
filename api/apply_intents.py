@@ -96,6 +96,30 @@ def create_intent(
     }
 
 
+def live_intent_retry_after(
+    connection: sqlite3.Connection,
+    job_fingerprint: str,
+    now: datetime | None = None,
+) -> int | None:
+    """Return retry_after seconds when a live (unexpired, unconsumed) intent exists.
+
+    Read-only pre-check so callers can reject duplicates BEFORE expensive
+    work (material generation) or state mutation (artifact rewrites).
+    Returns None when a fresh intent may be issued (none, expired, consumed).
+    """
+    timestamp = _as_utc(now or datetime.now(timezone.utc))
+    row = connection.execute(
+        "SELECT expires_at, consumed FROM apply_intents WHERE job_fingerprint = ?",
+        (job_fingerprint,),
+    ).fetchone()
+    if row is None:
+        return None
+    expiry = _as_utc(datetime.fromisoformat(row[0]))
+    if row[1] or expiry <= timestamp:
+        return None
+    return max(1, math.ceil((expiry - timestamp).total_seconds()))
+
+
 def validate_intent(
     connection: sqlite3.Connection,
     job_fingerprint: str,
