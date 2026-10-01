@@ -730,6 +730,82 @@
       <div class="drawer-body" id="drawerBody"></div>
     </aside>
 
+    <!-- Professional manual tracker entry form -->
+    <div class="modal-overlay hidden manual-application-overlay" id="manualApplicationModal" aria-hidden="true">
+      <div class="modal-box manual-application-modal" role="dialog" aria-modal="true" aria-labelledby="manualApplicationModalTitle">
+        <div class="modal-header">
+          <div>
+            <h3 id="manualApplicationModalTitle">Add Manual Application</h3>
+            <p class="manual-application-subtitle">Create a polished APPLIED tracker row without leaving the dashboard.</p>
+          </div>
+          <button class="modal-close-btn" id="btnCloseManualApplicationModal" type="button" aria-label="Close manual application form">✕</button>
+        </div>
+        <form class="manual-application-form" id="manualApplicationForm" novalidate>
+          <div class="modal-body manual-application-body">
+            <div class="manual-application-grid">
+              <div class="manual-application-field manual-application-field-wide">
+                <label for="manualApplyUrl">Application URL <span aria-hidden="true">*</span></label>
+                <input type="text" id="manualApplyUrl" name="apply_url" autocomplete="url" placeholder="https://example.com/job" required aria-invalid="false">
+                <div class="manual-field-hint">Paste the job/application link. Domains like <code>example.com/job</code> are normalized to HTTPS.</div>
+                <div class="manual-field-error" data-error-for="apply_url" aria-live="polite"></div>
+              </div>
+
+              <div class="manual-application-field">
+                <label for="manualJobTitle">Job title <span aria-hidden="true">*</span></label>
+                <input type="text" id="manualJobTitle" name="job_title" autocomplete="organization-title" placeholder="Frontend Engineer" required aria-invalid="false">
+                <div class="manual-field-error" data-error-for="job_title" aria-live="polite"></div>
+              </div>
+
+              <div class="manual-application-field">
+                <label for="manualCompany">Company <span aria-hidden="true">*</span></label>
+                <input type="text" id="manualCompany" name="company" autocomplete="organization" placeholder="Acme Remote" required aria-invalid="false">
+                <div class="manual-field-error" data-error-for="company" aria-live="polite"></div>
+              </div>
+
+              <div class="manual-application-field">
+                <label for="manualSource">Source</label>
+                <input type="text" id="manualSource" name="source" value="manual" placeholder="manual" aria-invalid="false">
+                <div class="manual-field-error" data-error-for="source" aria-live="polite"></div>
+              </div>
+
+              <div class="manual-application-field">
+                <label for="manualSalary">Salary</label>
+                <input type="text" id="manualSalary" name="salary" autocomplete="off" placeholder="$90k–$120k or competitive" aria-invalid="false">
+                <div class="manual-field-error" data-error-for="salary" aria-live="polite"></div>
+              </div>
+
+              <div class="manual-application-field">
+                <label for="manualContact">Contact</label>
+                <input type="text" id="manualContact" name="contact" autocomplete="email" placeholder="Recruiter name or email" aria-invalid="false">
+                <div class="manual-field-error" data-error-for="contact" aria-live="polite"></div>
+              </div>
+
+              <div class="manual-application-field">
+                <label for="manualFollowUpDays">Follow-up days</label>
+                <input type="number" id="manualFollowUpDays" name="follow_up_days" value="7" min="0" max="365" step="1" inputmode="numeric" aria-invalid="false">
+                <div class="manual-field-error" data-error-for="follow_up_days" aria-live="polite"></div>
+              </div>
+
+              <div class="manual-application-field manual-application-field-wide">
+                <label for="manualNotes">Notes</label>
+                <textarea id="manualNotes" name="notes" rows="4" placeholder="Referral context, portfolio angle, follow-up reminder, or next action." aria-invalid="false"></textarea>
+                <div class="manual-field-error" data-error-for="notes" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+          <div class="manual-application-footer">
+            <div class="manual-application-status" id="manualApplicationStatus" role="status" aria-live="polite"></div>
+            <div class="manual-application-actions">
+              <button class="action-btn secondary" id="btnCancelManualApplication" type="button">Cancel</button>
+              <button class="action-btn primary" id="btnSaveManualApplication" type="submit">
+                <span id="manualApplicationSaveLabel">Save Application</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Latest fill-and-review queue results -->
     <div class="modal-overlay hidden" id="screenshotModal">
       <div class="modal-box modal-lg review-results-modal">
