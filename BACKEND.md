@@ -2,11 +2,12 @@
 
 Reads over the Sheets pipeline **plus** Phase 2 action endpoints (scrape runs,
 tailored materials, CV profile edits, and ATS fill-and-review for supported boards).
-Submit routes remain absent; see the gated 2b spec and current execution status
-in `PM.md`.
+The Greenhouse `POST /api/apply/{fp}/intent` + `/submit` routes exist but fail
+closed with 403 while `api/safety.py SUBMIT_ENABLED=False`; Lever has no submit
+path by design. See the gated 2b spec and current execution status in `PM.md`.
 
 Run: `venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000`
-Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified: 222 passed, 1 expected xfail)
+Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified 2026-10-01: 275 passed, 1 skipped)
 
 ---
 
@@ -87,7 +88,10 @@ Windows, so it is opt-in only (`ENABLE_JOBSPY=true`, default `false` →
 the run still reaches summary/curate. Scope is tuned via `JOBSPY_SITES`
 (default `linkedin,indeed`) and `JOBSPY_TERMS` (default 1 term). Pollers must
 treat 404 (unknown run_id, e.g. after a server restart wipes the in-memory
-registry) as terminal — never poll forever.
+registry) as terminal — never poll forever. The dashboard keeps a single
+poll loop per page (`pollActive` guard in `frontend/js/app.js`), so a
+refresh-resume plus click/409 path never stacks concurrent
+`GET /api/scrape/{run_id}` loops.
 
 ### `POST /api/resume/{fp}` → `{status, filename}` (+ `GET …/download` PDF)
 ### `POST /api/cover-letter/{fp}` → `{status, filename, cover_letter}` (+ `GET …/download` text)
@@ -123,15 +127,19 @@ fill-only form helper. A worker thread owns the browser and keeps the page open
 for manual review; closing the application tab or a 30-minute timeout closes
 the browser. It captures a pre-submit screenshot. Other ATS platforms return
 `package_only` without launching a browser. No sheet write or submit click occurs.
-Any `mode` other than `"review"` → 400. `AUTO_APPLY_CONFIRM` is never
-read — env cannot re-enable submit over HTTP (`api/safety.py`
-`SUBMIT_ENABLED=False`). Never writes `status:"submitted"`.
+Any `mode` other than `"review"` → 400. `AUTO_APPLY_CONFIRM` is ignored
+everywhere (legacy CLI blind submit permanently removed) — env cannot
+re-enable submit over HTTP (`api/safety.py` `SUBMIT_ENABLED=False` fails
+`/intent` + `/submit` closed with 403). Never writes `status:"submitted"`.
 
 The cockpit calls this endpoint sequentially for up to three highest-scoring
-eligible jobs per trigger, then displays per-job status, local screenshot/package
-paths, and a posting link for package-only ATSs. The separate CLI
-`agents/auto_applier.py` path remains distinct; its `AUTO_APPLY_CONFIRM=true`
-submit path is not post-submit verified and must not be described as safe.
+eligible jobs per trigger (enforced daily cap with per-day persisted count),
+then displays per-job status, in-browser screenshot preview
+(`GET /api/apply/{fp}/screenshot`), local package paths, and a posting link
+for package-only ATSs. The review fill carries the final tailored resume +
+cover letter (same files a later submit would send). The separate CLI
+`agents/auto_applier.py` path is fill-only; its legacy blind submit was
+permanently removed.
 
 The modules `api/apply_claims.py`, `api/apply_intents.py`,
 `api/apply_validation.py`, and `api/apply_verification.py` back the
@@ -168,27 +176,29 @@ no submit path by design.
 
 ## 5. Testing
 
-The suite was last fully verified at 222 passed, 1 expected xfail
+The suite was last fully verified at 273 passed, 1 skipped
 (`venv\Scripts\python.exe -m pytest tests/ -q`):
 `test_api_phase1.py` (18: faked `cache._read_tab_values` +
 `_load_enrichment_map` — no credentials, no network; covers list/tab-400,
 search+source+limit, enrichment join + `""→null`, get-one/404, stats snapshot,
 tracker list/filter/patch-400/patch-404/patch-ok, refresh + refresh-400, health
 secrets + heavy-import guards), `test_api_phase2.py`, `test_api_apply.py`
-(9: fill-only happy path, default-review, 404, non-review → 400 incl. submit
-with `AUTO_APPLY_CONFIRM=true` in env, dream → 422, no heavy imports,
-bind-guard refuse/allow), `test_api_cv.py`
+(fill-only happy path, default-review, 404, non-review → 400, dream → 422,
+no heavy imports, kill-switch 403 on intent/submit when disabled,
+attachment-gate refusals, bind-guard refuse/allow), `test_api_cv.py`
 (profile GET/PUT + variants), `test_api_materials.py` (resume/cover-letter),
 `test_api_freshness.py` (12-row Sheet mirror, refresh drops stale),
 `test_api_jobs_contract.py` (ground-truth window + stale-row handling),
 `test_auto_applier.py`, `test_country_filter.py`, and
-`test_apply_submit_primitives.py` (fill fakes, isolated claim/intent/validation/
-verification primitives; exact Lever confirmation text is an expected xfail
-pending the isolated live observation). `test_api_apply.py` stubs the ATS fill
-runner; tests do not launch actual ATS pages. This is not the complete route-
-level 2b contract suite: there are no submit/intent routes yet, so auth/status-
-route coverage remains outstanding.
-Mirror the Phase 1 fake pattern for new endpoints (fake `cache.*`, assert
+`test_apply_submit_primitives.py` (fill fakes incl. attachment verification,
+isolated claim/intent/validation/verification primitives incl. consumed-intent
+replacement and failed_refunded-claim retry, score-coercion params; exact Lever
+confirmation text is a deliberate skip pending a free live observation).
+`test_api_apply.py` stubs the ATS fill
+runner; tests do not launch actual ATS pages. Route-level 2b contract suite:
+intent/submit routes are mounted and covered (kill-switch 403, auth, triple
+gate, claim-first, attachment gate, status matrix). Mirror the Phase 1 fake
+pattern for new endpoints (fake `cache.*`, assert
 status codes, never hit live Sheets).
 
 ## 6. Adding an endpoint (convention)

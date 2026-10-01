@@ -479,10 +479,10 @@ def curate(raw_jobs: list, tracker=None) -> dict:
 
         if base_score < MIN_SCORE:
             low_match += 1
-            print(f"   ⚠️ LOW MATCH ({base_score:.0f}+{freshness:+d}): {job.get('job_title', '')[:50]}")
+            print(f"   ⚠️ LOW MATCH ({base_score:.0f}{freshness:+d}): {job.get('job_title', '')[:50]}")
             continue
 
-        print(f"   ✅ MATCH ({base_score:.0f}+{freshness:+d}): {job.get('job_title', '')[:50]}")
+        print(f"   ✅ MATCH ({base_score:.0f}{freshness:+d}): {job.get('job_title', '')[:50]}")
         scored_jobs.append(job)
     
     print(f"\n📊 Scoring results:")

@@ -1,9 +1,10 @@
 # TESTER.md — Testing Guide
 
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Suite is pytest,
-last verified **222 passed, 1 expected xfail** across the current test files.
-The expected xfail is the exact Lever confirmation-copy assertion, blocked on
-the isolated sandbox observation. Coverage includes `test_api_phase1.py`,
+last verified 2026-10-01: **275 passed, 1 skipped** across the current test files.
+The skip is the Lever exact confirmation-copy assertion, a deliberate documented
+limitation (Lever stays fill-only; no paid trial account) — not a blocker.
+Coverage includes `test_api_phase1.py`,
 `test_api_phase2.py`, `test_api_cv.py`, `test_api_materials.py`,
 `test_api_freshness.py`, `test_api_jobs_contract.py`, `test_auto_applier.py`,
 `test_country_filter.py`, `test_api_apply.py`, and
@@ -49,11 +50,14 @@ venv\Scripts\python.exe -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 - API tests use `fastapi.testclient.TestClient(create_app())` with monkeypatched
   cache fakes; assert status codes + key fields, never live data.
 - Current apply safety probes:
-  `POST /api/apply` with `mode != "review"` → 400; submit unreachable with
-  `AUTO_APPLY_CONFIRM=true` in env. Primitive tests include threaded duplicate
-  claim and daily-cap races. They are not HTTP submit-route tests: no intent or
-  submit route exists yet. Add unconditional auth, status-code, and no-browser-
-  before-gate route tests before considering 2b complete. The apply API tests
+  `POST /api/apply` with `mode != "review"` → 400; kill-switch probes assert
+  `/intent` + `/submit` → 403 while `api/safety.py SUBMIT_ENABLED=False`
+  (flip via monkeypatch for the live-path tests). Attachment-gate probes prove
+  the refill refuses to click without `resume_attached` + cover proof.
+  Primitive tests include threaded duplicate
+  claim and daily-cap races, consumed-intent replacement, and
+  failed_refunded-claim retry. Auth is unconditional on both submit routes;
+  no-browser-before-gate route tests guard the triple gate. The apply API tests
   stub the browser boundary; they do not launch actual ATS pages. PDFs verified
   1-page via pdfplumber.
 - Report timings for anything >60s or touching network; cite `file:line`

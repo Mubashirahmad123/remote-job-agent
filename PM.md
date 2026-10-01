@@ -1,6 +1,6 @@
 # PM.md — Project Tracker (Phases, Status, Next)
 
-Living plan for the remote-job-agent build. Status last reconciled 2026-09-29.
+Living plan for the remote-job-agent build. Status last reconciled 2026-10-01.
 
 ---
 
@@ -17,7 +17,7 @@ Living plan for the remote-job-agent build. Status last reconciled 2026-09-29.
 | 2 — Action API | scrape ✅ + status card; resume/cover-letter ✅ (Studio wired); CV profile GET+PUT ✅ + variants ✅; fill-and-review API ✅; cockpit queue connected | 🟡 in progress — submit remains gated; skills endpoint pending |
 | 3 — Polish | tracker `review` mapping, auto-apply telemetry wiring, E2E checks | ⬜ backlog |
 
-Full suite last verified: **243 passed, 1 skipped** (`venv\Scripts\python.exe -m pytest tests/ -q`). The skip is the Lever exact confirmation-copy assertion, now a deliberate documented limitation (Lever submit deferred — no paid trial account; see 2b split below), not a temporary blocker. Claim, intent, validation, and Greenhouse verification helpers are implemented; Greenhouse `/intent` + `/submit` routes exist and are tested. Lever has no submit path by design.
+Full suite last verified 2026-10-01: **275 passed, 1 skipped** (`venv\Scripts\python.exe -m pytest tests/ -q`). The skip is the Lever exact confirmation-copy assertion, now a deliberate documented limitation (Lever submit deferred — no paid trial account; see 2b split below), not a temporary blocker. Scrape-log fixes landed the same day (curator sign format, Arbeitnow `company_name` backfill, single-loop poll guard, `scraped_at` warning ordering); details in `CHANGELOG.md` and `PRODUCTION.md` §7. Claim, intent, validation, and Greenhouse verification helpers are implemented; Greenhouse `/intent` + `/submit` routes exist, are kill-switch gated (403 while `SUBMIT_ENABLED=False`), and are tested. Lever has no submit path by design.
 
 ## 2. Next: Phase 2 — Action API (spec)
 
@@ -81,15 +81,14 @@ order step 4 is added. 2b has no target date.
 |---|---|---|
 | 1. F1/F2 Lever fixes | ✅ Done | Posting-page resolution follows `a.show-page-apply` or the current `a.postings-btn[href]` anchor to a validated `/apply` URL; navigation uses `domcontentloaded` and waits for the form selector. Three real postings were fill-only tested with dummy details; all reached `/apply`, filled dummy fields, then exited for custom-question review. No submit click. Fill path unchanged by the 2b split. |
 | 2. Lever confirmation observation | ➖ Deliberately out of scope | No Lever trial account will be purchased. Lever stays fill-only indefinitely (fill produces a real screenshot; no submit path). Exact-copy test is now `skip` with reason "Lever submit deferred — no live confirmation-text observation available without a paid account; revisit if a free path is found later". |
-| 3. §7 tests | ✅ Done for Greenhouse | Primitives + Greenhouse route suite green: fill matrices, Greenhouse verification matrix, claim-first ordering incl. threaded exactly-one-winner concurrent test, stale-claim expiry, daily-cap, no-click-before-gate, AUTO_APPLY_CONFIRM-no-effect, triple-gate (a)/(b)/(c) incl. per-rejection audit-log tests, intent lifecycle, dream-422, unconditional auth on both new routes + manual-PATCH, full status-code matrix. Last full suite: 243 passed, 1 skipped (Lever documented limitation). |
-| 4. Submit endpoint code (Greenhouse only) | ✅ Done | `POST /api/apply/{fp}/intent` + `POST /api/apply/{fp}/submit` implemented in `api/routers/apply.py` → `api/apply.py:create_greenhouse_intent/submit_greenhouse` with Greenhouse URL+message verification (`verify_greenhouse_confirmation`). Intent generates the tailored resume (`tools/resume_generator`) + cover letter (`agents/gemini_tools`, picked-CV aware), rebuilds the package with real attachments, and persists paths in the review artifact; the submit refill reuses exactly those files, and submit fails closed (410) if the resume file is gone or cover text empty. Generation failure fails intent closed (502, no token). Non-Greenhouse platforms raise 422 "Submit is not available for this ATS". `SUBMIT_ENABLED` remains `False`; cockpit Auto-Submit control remains disabled pending separate unlock decision. Intent requires LLM keys + `APPLY_API_TOKEN`; no live runs yet (held per operator decision). |
+| 3. §7 tests | ✅ Done for Greenhouse | Primitives + Greenhouse route suite green: fill matrices, Greenhouse verification matrix, claim-first ordering incl. threaded exactly-one-winner concurrent test, stale-claim expiry, failed_refunded-claim retry, consumed-intent replacement, daily-cap, kill-switch 403s, attachment-gate refusals, score-coercion params, no-click-before-gate, triple-gate (a)/(b)/(c) incl. per-rejection audit-log tests, intent lifecycle, dream-422, unconditional auth on both new routes + manual-PATCH, full status-code matrix. Last full suite: 273 passed, 1 skipped (Lever documented limitation). |
+| 4. Submit endpoint code (Greenhouse only) | ✅ Done, hardened 2026-10-01 | `POST /api/apply/{fp}/intent` + `POST /api/apply/{fp}/submit` implemented in `api/routers/apply.py` → `api/apply.py:create_greenhouse_intent/submit_greenhouse` with Greenhouse URL+message verification (`verify_greenhouse_confirmation`). Intent REUSES the reviewed artifact's tailored resume + cover letter verbatim — it never regenerates materials and never rewrites the artifact, so reviewed == submitted by construction; missing/stale materials fail closed (502, no token). The submit refill reuses exactly those files, and submit fails closed (410) if the resume file is gone or cover text empty. A duplicate intent while one is live is rejected (409) before any expensive work via a read-only pre-check (`live_intent_retry_after`), so it can neither burn generation cost nor mutate the first token's artifact. Non-Greenhouse platforms raise 422 "Submit is not available for this ATS". `SUBMIT_ENABLED` remains `False`; cockpit Auto-Submit control remains disabled pending separate unlock decision. Intent requires the dedicated `APPLY_API_TOKEN` (`API_TOKEN` is never accepted); no live runs yet (held per operator decision). |
 
-The Step 3 helper modules do not make submission reachable. The dashboard
+The Step 3 helper modules back the kill-switched submit pair. The dashboard
 Auto-Apply Cockpit now uses visible Greenhouse/Lever review windows; each stays
-open until its application tab closes (maximum 30 minutes), and the API never
-clicks submit. Unsupported ATSs remain package-only. The standalone CLI
-`AUTO_APPLY_CONFIRM=true` path is separate, unverified, and must not be used for
-real applications.
+open until its application tab closes (maximum 30 minutes), and the review fill
+carries the final tailored materials. The legacy CLI blind submit is permanently
+removed, so there is no unverified submit path left anywhere.
 
 ## 3. Backlog
 
@@ -102,10 +101,8 @@ real applications.
 - Multi-worker cache: in-process TTL means `--workers 1`; shared cache (Redis/file)
   if workers ever needed.
 - Frontend E2E smoke (Playwright) against TestClient-seeded API.
-- Current uncommitted work includes the 2b primitives/test suite, Greenhouse
-   intent/submit routes, Lever filler fix, and cockpit/docs updates. Review
-   before merge; the UI toggle stays disabled and submit stays reachable only
-   via the authenticated Greenhouse pair (Lever has no submit path).
+- 2b submit stays kill-switched and the UI toggle stays disabled; submit is
+  reachable only via the authenticated Greenhouse pair (Lever has no submit path).
 
 ## 4. Definition of Done (every phase)
 
@@ -263,7 +260,8 @@ added. The suite must include:
    refund it; ambiguous outcomes do not.
 - Every fill-path test asserts `click count == 0`, without exception.
 - Set `AUTO_APPLY_CONFIRM=true` in the environment and prove that it changes
-   nothing over HTTP: submit remains unreachable until all four gates close.
+   nothing anywhere: the CLI ignores it (blind submit removed) and HTTP
+   submit stays kill-switched until the unlock decision.
 - Triple-condition tests cover strict boolean confirmation and exact
    fingerprint echo, token hash/fingerprint/consumed/expiry behavior, and typed
    title normalization, minimum-input-length, short-expected-title exact match,
@@ -309,7 +307,7 @@ The 2b feature will be shipped in this exact order, with no shortcuts:
 
 1. **F1/F2 Lever fixes** — done and verified with fill-only real-page checks; the current live apply anchor class is also supported. Unchanged by the split.
 2. **Lever observation** — deliberately out of scope (no trial purchase). Skip-flagged, not blocking.
-3. **§7 tests (Greenhouse)** — done and green (243 passed, 1 skipped). Includes route-level status/auth/manual-PATCH/no-browser assertions for the Greenhouse intent/submit pair.
+3. **§7 tests (Greenhouse)** — done and green (273 passed, 1 skipped). Includes route-level kill-switch/auth/attachment-gate/manual-PATCH/no-browser assertions for the Greenhouse intent/submit pair.
 4. **Endpoint code (Greenhouse only)** — done: the two specified routes exist with full triple-gate + claim-first + verification. Keep the UI toggle disabled until the Greenhouse submit build is tested and reviewed — that unlock is a separate decision.
 
 After all four close, the UI toggle becomes enabled and the submit opcode is reachable.

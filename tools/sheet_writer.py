@@ -289,9 +289,12 @@ def append_rows(rows):
         print("❌ No rows received to process!")
         return
     
-    # Validate first job structure
+    # Validate first job structure (after auto-fill defaults, so the
+    # prepare_job_for_sheet columns scraped_at/status/job_fingerprint
+    # don't warn spuriously on every run)
     if rows:
-        sample_job = rows[0]
+        sample_job = dict(rows[0])
+        prepare_job_for_sheet(sample_job, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         print(f"📋 Sample job keys: {list(sample_job.keys())}")
         missing_cols = [col for col in COLUMNS if col not in sample_job]
         if missing_cols:

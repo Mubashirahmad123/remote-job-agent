@@ -965,9 +965,13 @@ def parse_json_arbeitnow(board, data, debug=False):
                 any(word in title.lower() for word in ['developer', 'engineer', 'programmer'])):
             continue
 
+        # API field is `company_name` (not `company`) — reading `company`
+        # left every Arbeitnow job blank. `url` is the job page for most
+        # postings but the company homepage for a minority (upstream
+        # limitation — kept as-is, documented in PRODUCTION.md §7).
         results.append({
             "job_title": title,
-            "company": j.get("company", ""),
+            "company": j.get("company_name", "") or j.get("company", ""),
             "salary": j.get("salary", ""),
             "tech_stack": ", ".join(re.findall(TECH_FILTER, combined_text)[:5]),
             "timezone": j.get("location", "Worldwide"),

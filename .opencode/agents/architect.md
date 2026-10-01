@@ -36,9 +36,10 @@ wiring. Your outputs are designs and verdicts, not code.
    `POST /api/jobs/refresh` + auto-bust on run completion. Justify the TTL
    against Sheets quota risk and the ~8s measured read cost.
 4. **Safety gates.** `POST /api/apply` is fill-only: any `mode` other than
-   `review` is rejected; `AUTO_APPLY_CONFIRM` is ignored in API context;
-   no submit code path exists. Confirm the gate placement makes submit
-   unreachable, not merely unrequested.
+   `review` is rejected; `/intent` + `/submit` fail closed 403 while
+   `api/safety.py SUBMIT_ENABLED=False` and refuse to click without verified
+   resume + cover attachments; the CLI blind submit is removed. Confirm the
+   gate placement makes live submit unreachable, not merely unrequested.
 5. **Background-run design.** Long operations (scrape/curate/materials) run in
    worker threads behind a run-registry with status/log polling. Flag any
    shared global state they touch (`curator._MATCHER_CACHE`,

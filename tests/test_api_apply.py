@@ -269,6 +269,18 @@ class TestGreenhouseIntentAndSubmit:
 
         assert response.status_code == 200
 
+    def test_global_api_token_alone_is_401_on_apply_routes(self, client, monkeypatch, tmp_path):
+        _seed_greenhouse_submit(monkeypatch, tmp_path)
+        monkeypatch.setenv("API_TOKEN", "global-secret")
+        monkeypatch.delenv("APPLY_API_TOKEN", raising=False)
+        headers = {"Authorization": "Bearer global-secret"}
+
+        intent = client.post(f"/api/apply/{FP_SUBMIT}/intent", json={"mode": "review"}, headers=headers)
+        submit = client.post(f"/api/apply/{FP_SUBMIT}/submit", json=_submit_body("any-token"), headers=headers)
+
+        assert intent.status_code == 401
+        assert submit.status_code == 401
+
     def test_intent_requires_existing_package_and_screenshot(self, client, monkeypatch, tmp_path):
         _seed_greenhouse_submit(monkeypatch, tmp_path)
         import api.apply_state as apply_state
@@ -340,41 +352,53 @@ class TestGreenhouseIntentAndSubmit:
 
         assert response.status_code == 502
 
-    def test_intent_generates_materials_and_rebuilds_package(self, client, monkeypatch, tmp_path):
+    def test_intent_reuses_reviewed_materials_without_regeneration(self, client, monkeypatch, tmp_path):
         _seed_greenhouse_submit(monkeypatch, tmp_path)
         monkeypatch.setenv("APPLY_API_TOKEN", "test-apply-secret")
+        # Generation and packaging must never run at intent time: the token
+        # covers exactly the reviewed artifact, nothing regenerated.
+        monkeypatch.setattr(
+            apply_service, "_prepare_submit_materials",
+            lambda _job: (_ for _ in ()).throw(AssertionError("intent must not regenerate materials")),
+        )
+        import agents.auto_applier as aa
+
+        monkeypatch.setattr(
+            aa, "generate_apply_package",
+            lambda *a, **k: (_ for _ in ()).throw(AssertionError("intent must not rebuild the package")),
+        )
+        import api.apply_state as apply_state
+
+        before = dict(apply_state.get_review_artifact(FP_SUBMIT))
 
         response = _issue_intent(client)
 
         assert response.status_code == 200, response.text
-        import api.apply_state as apply_state
+        after = dict(apply_state.get_review_artifact(FP_SUBMIT))
+        assert after == before
+        assert not (tmp_path / "packages" / f"{FP_SUBMIT}-submit").exists()
 
-        connection = apply_state.connect()
-        try:
-            artifact = dict(connection.execute(
-                "SELECT * FROM apply_review_artifacts WHERE job_fingerprint = ?", (FP_SUBMIT,)
-            ).fetchone())
-        finally:
-            connection.close()
-        assert artifact["resume_path"] and Path(artifact["resume_path"]).is_file()
-        assert artifact["cover_letter_text"] == "Seeded cover letter for submit tests."
-        assert artifact["package_path"].endswith(f"{FP_SUBMIT}-submit")
-        assert Path(artifact["package_path"], "resume.pdf").is_file()
-        assert Path(artifact["package_path"], "cover_letter.txt").read_text() == artifact["cover_letter_text"]
-
-    def test_intent_material_generation_failure_is_502_without_token(self, client, monkeypatch, tmp_path):
+    def test_intent_missing_materials_fails_closed_without_token(self, client, monkeypatch, tmp_path):
         _seed_greenhouse_submit(monkeypatch, tmp_path)
         monkeypatch.setenv("APPLY_API_TOKEN", "test-apply-secret")
-        monkeypatch.setattr(
-            apply_service, "_prepare_submit_materials",
-            lambda _job: (_ for _ in ()).throw(RuntimeError("LLM unavailable")),
-        )
+        import api.apply_state as apply_state
+
+        # Reviewed artifact with stale materials (resume gone, cover blank):
+        # intent must fail closed without issuing a token.
+        Path(str(apply_state.get_review_artifact(FP_SUBMIT)["resume_path"])).unlink()
+        connection = apply_state.connect()
+        try:
+            connection.execute(
+                "UPDATE apply_review_artifacts SET cover_letter_text = '' WHERE job_fingerprint = ?",
+                (FP_SUBMIT,),
+            )
+            connection.commit()
+        finally:
+            connection.close()
 
         response = _issue_intent(client)
 
         assert response.status_code == 502
-        import api.apply_state as apply_state
-
         connection = apply_state.connect()
         try:
             intent = connection.execute(
@@ -383,6 +407,24 @@ class TestGreenhouseIntentAndSubmit:
         finally:
             connection.close()
         assert intent is None
+
+    def test_rejected_duplicate_intent_leaves_artifact_untouched(self, client, monkeypatch, tmp_path):
+        _seed_greenhouse_submit(monkeypatch, tmp_path)
+        monkeypatch.setenv("APPLY_API_TOKEN", "test-apply-secret")
+        monkeypatch.setattr(
+            apply_service, "_prepare_submit_materials",
+            lambda _job: (_ for _ in ()).throw(AssertionError("rejected intent must not generate")),
+        )
+        import api.apply_state as apply_state
+
+        first = _issue_intent(client)
+        assert first.status_code == 200
+        before = dict(apply_state.get_review_artifact(FP_SUBMIT))
+
+        second = _issue_intent(client)
+
+        assert second.status_code == 409
+        assert dict(apply_state.get_review_artifact(FP_SUBMIT)) == before
 
     def test_submit_refill_reuses_intent_materials(self, client, monkeypatch, tmp_path):
         import agents.auto_applier as aa

@@ -157,8 +157,11 @@ JobAgent.autoApply = {
             packagePath: response.package_path || '',
             applyUrl: response.apply_url || job.apply_url || '',
             screenshotPath: response.screenshot_path || '',
-            screenshotUrl: response.screenshot_url
-              || (JobAgent.api.screenshotUrl ? JobAgent.api.screenshotUrl(fingerprint) : ''),
+            // Backend is the source of truth: a null screenshot_url means
+            // package-only (no fill ran), so never fabricate a URL from the
+            // fingerprint here — that caused GET 404 pairs (img + fetch
+            // fallback) on every render for package-only results.
+            screenshotUrl: response.screenshot_url || '',
             browserOpened: response.browser_opened === true,
             error: response.fill_error || '',
           };
@@ -248,7 +251,7 @@ JobAgent.autoApply = {
       if (result.applyUrl && !result.browserOpened) {
         const applyLink = document.createElement('a');
         applyLink.className = 'review-result-link';
-        applyLink.href = result.applyUrl;
+        applyLink.href = JobAgent.safeHttpUrl(result.applyUrl);
         applyLink.target = '_blank';
         applyLink.rel = 'noopener noreferrer';
         applyLink.textContent = 'Open posting';
