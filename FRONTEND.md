@@ -59,7 +59,7 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
 - **Normalization:** backend `JobOut` (string `tech_stack`, fingerprint key) →
   UI shape (`id` = fingerprint, `tech_stack[]`, derived `role/location_key/
   posted_text`, `matched_skills` from stack, `missing_skills: []`).
-  Backend tracker statuses → kanban columns (`interviewing→interview`;
+  Backend tracker statuses + auto-apply fill statuses → kanban columns (`filled_ready/package_only/custom_questions→review`, `interviewing→interview`;
   `withdrawn/ghosted→rejected`; `review` is UI-only).
 - **Loaders:** `loadAll()` = `loadJobs + loadTracker + loadStats` in parallel,
   each with per-section mock fallback so one dead endpoint never blanks the UI.
@@ -75,7 +75,7 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
 | `dashboard.js` | bento metrics, sources grid, skills cloud | `/api/stats` (`by_source`, `tabs`); skills still mock (no endpoint yet) | `metricTotalJobs/TopMatches/DailyCap/Interviews`, `sourcesGrid`, `topSkillsCloud` |
 | `jobDesk.js` | filters, grid/table views, count, newest-first ordering | `store.state.jobs` (client-side filter + `posted_date_iso` desc sort, undated last; backend handles `q/source/tab/limit`) | `jobFilterSearch`, `rolePillGroup`, `scoreRange`, `location/source/statusFilter`, `jobsGridContainer/TableBody`, `filteredJobCount` (`(source: N)` suffix) |
 | `jobDrawer.js` | slide-over detail | receives job object (defensive: string-or-array stack, missing skills/CV) | `jobDetailDrawer`, `drawerBody`, `btnDrawerApplyNow/Save` |
-| `tracker.js` | kanban + status cycling | `GET/PATCH /api/tracker`; click cycles `applied→interviewing→offer→rejected`, sync button refreshes APPLIED tab | `kanbanColApplied/Review/Interview/Offer/Rejected`, `count*`, `btnSyncTrackerSheets` |
+| `tracker.js` | kanban + status cycling + manual add | `GET/POST/PATCH /api/tracker`; fill-only/package statuses render in Review, click cycles any active card via backend-valid statuses `applied/review→interviewing→offer→rejected→applied`, sync button refreshes APPLIED tab | `kanbanColApplied/Review/Interview/Offer/Rejected`, `count*`, `btnSyncTrackerSheets`, `btnNewTrackedJob` |
 | `resumeStudio.js` | CV upload (local demo), tailor engine, profile edit + variants panels, Resume/Cover-Letter preview tabs + Open-PDF | `POST /api/resume` + `/api/cover-letter`, `GET` + `PUT /api/cv/profile`, `GET /api/cv/variants` (quiet fallback to dynamic demo preview when 404/501/unreachable) | `tailorJobSelect`, `btnGenerateTailored`, `cvVariantList`, `btnEditProfile`, `profSkills`, `generatedPreviewCard`, `tabPreviewResume`, `tabPreviewCover`, `btnOpenPdf` |
 | `autoApply.js` | fill-and-review queue, safety lock, activity and latest results | API fills supported Greenhouse/Lever forms in visible windows and captures screenshot paths; unsupported ATSs remain package-only; per-job failures do not stop later jobs | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider` (enforced), `btnRunAutoApplyQueue`, `btnViewScreenshots`, `terminalLog`, `reviewQueueResults` |
 | `toast.js` | notifications | `JobAgent.toast.show(msg)` | — |

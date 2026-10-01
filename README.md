@@ -22,7 +22,7 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | **Tailored resume generation** | ✅ | Generates ATS-optimized resume PDF matched to each job's tech stack `python main.py resume` |
 | **Country/location filter** | ✅ | 452-country detection — blocks jobs from non-whitelisted countries, allows 198 whitelisted terms |
 | **Cross-platform Unicode PDFs** | ✅ | Auto-downloads DejaVu fonts — works on Windows/macOS/Linux; covers accents, Arabic, Cyrillic |
-| Application tracker | ✅ | `track.py` CLI + `tools/application_tracker.py` — mark applied, update status, list, stats, follow-up reminders |
+| Application tracker | ✅ | `track.py` CLI + live Pipeline Tracker kanban — APPLIED sheet rows, fill-review/package statuses, status cycling, follow-up reminders |
 | Auto-cleanup old jobs | ✅ | Removes jobs older than 30 days from all sheets (including legacy `LIVE Remote Jobs Tracker`) |
 | Sheet formatting (Google Sheets) | ✅ | Auto-applies colored score bands, clickable hyperlinks, wrapped text, column widths via Google Sheets API |
 | Sheet formatting (xlsx export) | ✅ | `format_jobs_xlsx.py` — professional Excel formatting with same visual style |
@@ -183,7 +183,7 @@ remote-job-agent/
 │       ├── store.js          # Reactive state + backend→UI normalization + mock fallback
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
 ├── tests/
-│   └── test_api_*.py etc.   # 279 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
+│   └── test_api_*.py etc.   # 288 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
 ├── apply_packages/           # Auto-generated apply packages (resume + cover letter + form data)
 ├── cover_letters/            # Generated PDF cover letters
 ├── resumes/                  # Generated tailored PDF resumes
@@ -366,7 +366,8 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `GET /api/jobs?tab=&q=&source=&limit=&offset=` | Enriched jobs from `ALL JOBS` / `TOP MATCHES` / `GOOD MATCHES` |
 | `GET /api/jobs/{fingerprint}` | One job by MD5 fingerprint |
 | `GET /api/stats` | `{total_jobs, tabs, by_source, stats_rows, curated_jobs}` |
-| `GET /api/tracker?status=` | APPLIED-tab rows |
+| `GET /api/tracker?status=` | APPLIED-tab rows; supports both tracker CLI header and auto-apply APPLIED header fork (`job_fingerprint`, `applied_at`, fill-review statuses) |
+| `POST /api/tracker` | Add a manual application row to APPLIED (`apply_url`, optional title/company/notes/source/salary/contact/follow-up) |
 | `PATCH /api/tracker/{fp}` | `{status, notes}` — status whitelist: applied, interviewing, offer, rejected, withdrawn, ghosted |
 | `POST /api/jobs/refresh` | `{tab?}` — invalidate the sheet cache on demand |
 | `POST /api/scrape` | Start a background scrape run → `202 {run_id, status}` (409 if one is active) |

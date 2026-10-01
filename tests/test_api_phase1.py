@@ -26,6 +26,10 @@ TRACKER_HEADER = [
     "source", "salary", "contact", "last_updated",
 ]
 
+# Header fork written by agents.auto_applier._track_application via
+# tools.sheet_writer.APPLIED_COLUMNS (full job columns + applied_at + notes).
+APPLIED_FORK_HEADER = BASE_HEADER + ["applied_at", "notes"]
+
 STATS_HEADER = [
     "run_at", "total_processed", "new_jobs_added",
     "duplicates_skipped", "top_matches", "good_matches",
@@ -181,9 +185,62 @@ class TestTracker:
         assert rows[0]["status"] == "applied"
         assert rows[0]["follow_up_date"] == "2026-09-29"
 
+    def test_list_preserves_auto_apply_applied_header_fork(self, client, monkeypatch):
+        applied_row = [
+            "Backend Dev", "Acme", "$80k", "Python", "Remote",
+            "https://acme.com/j/1", "APIs", "2026-09-20", "Arbeitnow",
+            "76", "Matched: python", "2026-09-22 10:00", "filled_ready",
+            FP1, "2026-09-22 11:00", "Package ready for review",
+        ]
+        tabs = dict(FAKE_TABS)
+        tabs["APPLIED"] = [APPLIED_FORK_HEADER, applied_row]
+        monkeypatch.setattr(
+            cache, "_read_tab_values", lambda tab: [list(r) for r in tabs[tab]]
+        )
+        cache.refresh()
+
+        r = client.get("/api/tracker")
+
+        assert r.status_code == 200
+        row = r.json()[0]
+        assert row["status"] == "filled_ready"
+        assert row["job_fingerprint"] == FP1
+        assert row["applied_at"] == "2026-09-22 11:00"
+        assert row["scraped_at"] == "2026-09-22 10:00"
+        assert row["tech_stack"] == "Python"
+        assert row["match_reason"] == "Matched: python"
+
     def test_status_filter(self, client):
         assert len(client.get("/api/tracker", params={"status": "applied"}).json()) == 1
         assert client.get("/api/tracker", params={"status": "offer"}).json() == []
+
+    def test_create_manual_application(self, client, monkeypatch):
+        captured = {}
+
+        def fake_add(entry):
+            captured.update(entry)
+            return {
+                **entry,
+                "applied_date": "2026-09-22 12:00",
+                "follow_up_date": "2026-09-29",
+                "status": "applied",
+            }
+
+        monkeypatch.setattr(cache, "add_tracker_entry", fake_add)
+
+        r = client.post("/api/tracker", json={
+            "apply_url": "https://acme.com/j/manual",
+            "job_title": "Manual Role",
+            "company": "Acme",
+            "notes": "referral",
+        })
+
+        assert r.status_code == 201
+        body = r.json()
+        assert body["apply_url"] == "https://acme.com/j/manual"
+        assert body["job_title"] == "Manual Role"
+        assert body["status"] == "applied"
+        assert captured["notes"] == "referral"
 
     def test_patch_bad_status(self, client):
         r = client.patch(f"/api/tracker/{FP1}", json={"status": "hired"})

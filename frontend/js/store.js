@@ -186,18 +186,26 @@ JobAgent.store = {
   },
 
   normalizeTracker(row = {}, idx = 0) {
-    const status = (row.status || 'applied').toLowerCase();
+    const status = String(row.status || 'applied').trim().toLowerCase() || 'applied';
+    const appliedStamp = row.applied_date || row.applied_at || row.last_updated || row.scraped_at || '';
+    const fp = row.job_fingerprint || row.apply_url || ('tracker-' + idx);
     return {
-      id: row.apply_url || ('tracker-' + idx),
+      id: fp,
+      job_fingerprint: row.job_fingerprint || '',
       title: row.job_title || 'Untitled',
       company: row.company || 'Unknown',
       score: parseFloat(row.match_score) || 0,
-      date: row.applied_date ? ('Applied ' + String(row.applied_date).slice(0, 10)) : '',
+      date: appliedStamp ? ('Applied ' + String(appliedStamp).slice(0, 10)) : '',
       follow_up: row.follow_up_date || '',
-      status: ['applied', 'interviewing', 'offer', 'rejected', 'withdrawn', 'ghosted'].includes(status) ? status : 'applied',
+      status, // preserve fill/review statuses; tracker.js maps them to columns.
       apply_url: row.apply_url || '',
       notes: row.notes || '',
       source: row.source || '',
+      salary: row.salary || '',
+      tech_stack: row.tech_stack || '',
+      timezone: row.timezone || '',
+      summary: row.summary || '',
+      match_reason: row.match_reason || '',
       _raw: row,
     };
   },
@@ -247,7 +255,8 @@ JobAgent.store = {
       this.state.usingLive = this.state.usingLive || this.state.tracker.length > 0;
     } catch (e) {
       this.state.errors.tracker = e.message;
-      // Map legacy MOCK_KANBAN shape to normalized tracker shape.
+      // Map legacy MOCK_KANBAN shape to normalized tracker shape. Preserve
+      // `review` so the Kanban's Under Review column is exercised offline.
       this.state.tracker = (JobAgent.MOCK_KANBAN || []).map((c) => ({
         id: c.apply_url || String(c.id),
         title: c.title,
@@ -255,7 +264,7 @@ JobAgent.store = {
         score: c.score,
         date: c.date,
         follow_up: c.follow_up,
-        status: c.status === 'review' ? 'applied' : c.status, // kanban 'review' is UI-only
+        status: c.status || 'applied',
         apply_url: c.apply_url || '',
         notes: '',
         source: '',

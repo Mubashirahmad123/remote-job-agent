@@ -7,7 +7,7 @@ closed with 403 while `api/safety.py SUBMIT_ENABLED=False`; Lever has no submit
 path by design. See the gated 2b spec and current execution status in `PM.md`.
 
 Run: `venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000`
-Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified 2026-10-01: 286 passed, 1 skipped)
+Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified 2026-10-01: 288 passed, 1 skipped)
 
 ---
 
@@ -63,6 +63,13 @@ Presence-only — asserts in tests that no secret substrings leak.
 job tabs + raw STATS-tab rows. Never crashes (returns zeros on error).
 
 ### `GET /api/tracker?status=` → `TrackerEntry[]` (optional exact status filter)
+Supports both APPLIED header shapes: the compact tracker CLI header and the
+full auto-apply/sheet-writer fork (`job_fingerprint`, `applied_at`, `scraped_at`,
+job context). Fill-only statuses are preserved for the frontend Review column.
+
+### `POST /api/tracker` ← `{apply_url, job_title?, company?, notes?, ...}`
+Adds a manual application row to APPLIED via `tools.application_tracker.mark_applied`,
+refreshes the tracker cache, and returns the created `TrackerEntry`.
 
 ### `PATCH /api/tracker/{fp}` ← `{status, notes}`
 Status must be in `applied|interviewing|offer|rejected|withdrawn|ghosted` (400 otherwise).
@@ -176,12 +183,12 @@ no submit path by design.
 
 ## 5. Testing
 
-The suite was last fully verified 2026-10-01 at 286 passed, 1 skipped
+The suite was last fully verified 2026-10-01 at 288 passed, 1 skipped
 (`venv\Scripts\python.exe -m pytest tests/ -q`):
 `test_api_phase1.py` (18: faked `cache._read_tab_values` +
 `_load_enrichment_map` — no credentials, no network; covers list/tab-400,
 search+source+limit, enrichment join + `""→null`, get-one/404, stats snapshot,
-tracker list/filter/patch-400/patch-404/patch-ok, refresh + refresh-400, health
+tracker list/filter/APPLIED-header-fork preservation/create/patch-400/patch-404/patch-ok, refresh + refresh-400, health
 secrets + heavy-import guards), `test_api_phase2.py`, `test_api_apply.py`
 (fill-only happy path, default-review, 404, non-review → 400, dream → 422,
 no heavy imports, kill-switch 403 on intent/submit when disabled,

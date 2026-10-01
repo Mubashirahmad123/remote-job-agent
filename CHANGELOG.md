@@ -1,5 +1,20 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-01 — Pipeline Tracker review mapping)
+
+- Pipeline Tracker now preserves the auto-apply APPLIED-sheet header fork in
+  `TrackerEntry` (`job_fingerprint`, `applied_at`, `scraped_at`, job context),
+  so fill/review rows are not flattened by the API.
+- Frontend tracker maps fill-only statuses (`filled_ready`, `package_only`,
+  `custom_questions`, `email_draft`, `dream_manual`, etc.) into the Under
+  Review column instead of Applied, preserves mock `review` cards offline, and
+  cycles cards using backend-valid statuses only.
+- Tracker PATCH now skips mock/local placeholder IDs instead of attempting a
+  failing API call first; local cycling no longer gets stuck at `interview`.
+- `POST /api/tracker` plus the existing `+ Add Manual Application` button now
+  append manual APPLIED rows instead of leaving the button inert.
+- Full suite: 288 passed, 1 skipped.
+
 ## Unreleased (2026-10-01 — Submit minimum-profile gate)
 
 - `_fill_greenhouse_form` (`agents/auto_applier.py`) now emits
