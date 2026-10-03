@@ -26,8 +26,15 @@ def list_jobs(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if source:
-        wanted = source.strip().lower()
-        jobs = [j for j in jobs if (j.get("source") or "").strip().lower() == wanted]
+        # Rows are canonicalized on read; canonicalize the query too so an old
+        # bookmark/saved filter using an alias ("RemoteOKAPI") still matches.
+        from tools.sources import canonical_source
+
+        wanted = canonical_source(source).lower()
+        jobs = [
+            j for j in jobs
+            if canonical_source(j.get("source") or "").lower() == wanted
+        ]
     if q:
         needle = q.strip().lower()
         jobs = [

@@ -423,20 +423,10 @@ JobAgent.tracker = {
   },
 
   _cards() {
-    const live = JobAgent.store.state.tracker || [];
-    if (live.length) return live;
-    // Legacy mock shape -> normalized shape (store.loadTracker already maps,
-    // but keep direct fallback for first paint before loadAll finishes).
-    return (JobAgent.MOCK_KANBAN || []).map((c) => ({
-      id: c.apply_url || String(c.id),
-      title: c.title,
-      company: c.company,
-      score: c.score,
-      date: c.date,
-      follow_up: c.follow_up,
-      status: c.status || 'applied',
-      apply_url: c.apply_url || '',
-    }));
+    // Live tracker rows only. The former MOCK_KANBAN fallback referenced a
+    // global that was never defined (mockData.js was never shipped), so it
+    // always evaluated to [] — an empty board is what actually rendered.
+    return JobAgent.store.state.tracker || [];
   },
 
   render() {

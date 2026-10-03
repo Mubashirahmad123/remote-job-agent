@@ -44,7 +44,7 @@ def apply_intent(
     raw_mode = body.mode if body is not None else "review"
     if raw_mode.strip().lower() != "review":
         raise HTTPException(status_code=400, detail="Intent requires mode='review'")
-    if not safety.SUBMIT_ENABLED:
+    if not safety.submit_enabled():
         raise HTTPException(status_code=403, detail="Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
     try:
         return apply_service.create_greenhouse_intent(job_fingerprint)
@@ -69,16 +69,23 @@ def apply_submit(
     body: ApplySubmitRequest | None = None,
     _: None = Depends(require_apply_token),
 ) -> dict:
-    if not safety.SUBMIT_ENABLED:
+    if not safety.submit_enabled():
         raise HTTPException(status_code=403, detail="Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
     try:
-        return apply_service.submit_greenhouse(
+        outcome = apply_service.submit_greenhouse(
             path_fingerprint=job_fingerprint,
             confirm=body.confirm if body is not None else None,
             body_fingerprint=body.job_fingerprint if body is not None else None,
             intent_token=body.intent_token if body is not None else None,
             typed_title=body.typed_title if body is not None else None,
         )
+        if outcome.get("status") == "dry_run":
+            # Returned as a raw response so the full rehearsal report survives
+            # the ApplySubmitOut model, which only carries the three fields a
+            # real submit reports. 200 with status="dry_run" — never
+            # "submitted", so no caller can read a rehearsal as a submission.
+            return JSONResponse(status_code=200, content=outcome)
+        return outcome
     except LookupError:
         raise HTTPException(status_code=404, detail="Job not found")
     except apply_service.SubmitUnavailable as error:

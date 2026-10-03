@@ -1,0 +1,8 @@
+{
+  "name": "remote-job-agent-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Frontend E2E smoke: real index.html + real js/ driven by jsdom against a live API.",
+  "scripts": { "test": "node --test smoke.test.mjs" },
+  "devDependencies": { "jsdom": "^25.0.1" }
+}

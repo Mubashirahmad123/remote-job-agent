@@ -8,6 +8,33 @@ import sys
 import os
 from pathlib import Path
 
+
+
+class _FakeTracing:
+    """Stand-in for Playwright's context.tracing (submit-path instrumentation)."""
+
+    def start(self, **_kwargs):
+        pass
+
+    def stop(self, **_kwargs):
+        pass
+
+
+def _fake_context(page_factory):
+    """Minimal BrowserContext double: the submit path records video/HAR/trace
+    on a context, so the fakes must hand one back instead of a bare page."""
+
+    class _FakeContext:
+        tracing = _FakeTracing()
+
+        def new_page(self, **_kwargs):
+            return page_factory()
+
+        def close(self):
+            pass
+
+    return _FakeContext()
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
@@ -540,6 +567,9 @@ class TestGreenhouseIntentAndSubmit:
         class _FakeSubmitBrowser:
             def new_page(self, **kwargs):
                 return _FakeSubmitPage()
+
+            def new_context(self, **kwargs):
+                return _fake_context(_FakeSubmitPage)
 
             def close(self):
                 pass
@@ -1150,6 +1180,9 @@ class TestSubmitAttachmentGate:
         class _Browser:
             def new_page(self, **kwargs):
                 return _Page()
+
+            def new_context(self, **kwargs):
+                return _fake_context(_Page)
 
             def close(self):
                 pass

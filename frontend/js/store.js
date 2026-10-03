@@ -1,6 +1,8 @@
 /**
  * STORE.JS — Central Application Reactive State Manager
- * Now owns LIVE backend data (Phase 1 reads) with mock fallback.
+ * Owns LIVE backend data (Phase 1 reads). No mock fallback exists:
+ * frontend/js/data/mockData.js was never shipped, so every JobAgent.MOCK_*
+ * reference was undefined and silently resolved to []. Removed 2026-10-03.
  * Backend contract: api/schemas.py JobOut / TrackerEntry via js/api.js.
  */
 
@@ -29,11 +31,12 @@ JobAgent.store = {
     jobs: [],
     tracker: [],
     stats: null,
+    skills: null,
     health: null,
     usingLive: false,
     dataSource: 'mock', // sheets|snapshot|mock (from GET /api/health)
-    loading: { jobs: false, tracker: false, stats: false },
-    errors: { jobs: '', tracker: '', stats: '' },
+    loading: { jobs: false, tracker: false, stats: false, skills: false },
+    errors: { jobs: '', tracker: '', stats: '', skills: '' },
   },
 
   listeners: [],
@@ -236,9 +239,11 @@ JobAgent.store = {
       }
     } catch (e) {
       this.state.errors.jobs = e.message;
-      this.state.dataSource = 'mock';
-      this.state.jobs = (JobAgent.MOCK_JOBS || []).map((j) => ({ ...j }));
-      console.warn('[store] jobs fallback to mock:', e.message);
+      // No mock corpus exists — report the outage instead of pretending to
+      // have data. 'unavailable' is surfaced in the Job Desk count suffix.
+      this.state.dataSource = 'unavailable';
+      this.state.jobs = [];
+      console.warn('[store] jobs unavailable:', e.message);
     } finally {
       this.state.loading.jobs = false;
       this.notify();
@@ -255,22 +260,9 @@ JobAgent.store = {
       this.state.usingLive = this.state.usingLive || this.state.tracker.length > 0;
     } catch (e) {
       this.state.errors.tracker = e.message;
-      // Map legacy MOCK_KANBAN shape to normalized tracker shape. Preserve
-      // `review` so the Kanban's Under Review column is exercised offline.
-      this.state.tracker = (JobAgent.MOCK_KANBAN || []).map((c) => ({
-        id: c.apply_url || String(c.id),
-        title: c.title,
-        company: c.company,
-        score: c.score,
-        date: c.date,
-        follow_up: c.follow_up,
-        status: c.status || 'applied',
-        apply_url: c.apply_url || '',
-        notes: '',
-        source: '',
-        _raw: c,
-      }));
-      console.warn('[store] tracker fallback to mock:', e.message);
+      // No MOCK_KANBAN corpus exists; an empty board + error banner is honest.
+      this.state.tracker = [];
+      console.warn('[store] tracker unavailable:', e.message);
     } finally {
       this.state.loading.tracker = false;
       this.notify();
@@ -300,7 +292,26 @@ JobAgent.store = {
     }
   },
 
+  // Skill cloud: live aggregate over tech_stack (GET /api/skills). No mock
+  // fallback — an empty list renders an honest "no stack data" note rather
+  // than inventing demand figures the sheet never contained.
+  async loadSkills() {
+    this.state.loading.skills = true;
+    this.state.errors.skills = '';
+    this.notify();
+    try {
+      this.state.skills = await JobAgent.api.getSkills({ limit: 12 });
+    } catch (e) {
+      this.state.errors.skills = e.message;
+      this.state.skills = null;
+      console.warn('[store] skills unavailable:', e.message);
+    } finally {
+      this.state.loading.skills = false;
+      this.notify();
+    }
+  },
+
   async loadAll() {
-    await Promise.all([this.loadJobs(), this.loadTracker(), this.loadStats()]);
+    await Promise.all([this.loadJobs(), this.loadTracker(), this.loadStats(), this.loadSkills()]);
   },
 };

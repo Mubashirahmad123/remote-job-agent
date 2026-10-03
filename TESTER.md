@@ -1,7 +1,8 @@
 # TESTER.md — Testing Guide
 
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Suite is pytest,
-last verified 2026-10-01: **291 passed, 1 skipped** across the current test files.
+last verified 2026-10-03: **336 passed, 1 skipped** across the current test files,
+plus a **frontend E2E smoke suite: 19 passed** (`./tests/e2e/run.sh`).
 The skip is the Lever exact confirmation-copy assertion, a deliberate documented
 limitation (Lever stays fill-only; no paid trial account) — not a blocker.
 Coverage includes `test_api_phase1.py`,
@@ -20,10 +21,24 @@ venv\Scripts\python.exe -m pytest tests/ -q            # full suite
 venv\Scripts\python.exe -m pytest tests/test_api_phase1.py -q   # one file
 ```
 
-Frontend (no test runner — syntax gate):
+Frontend syntax gate:
 ```powershell
 node --check frontend\js\store.js; node --check frontend\js\api.js
 ```
+
+Frontend E2E smoke (real `index.html` + real `js/*` in jsdom, driven against a
+real uvicorn seeded with `SNAPSHOT_FILE`):
+```bash
+./tests/e2e/run.sh          # first run does `npm install` (jsdom) automatically
+```
+Three suites — asset integrity, happy path, API-unreachable. It catches the
+class of bug the pytest suite structurally cannot: a `<script>` that 404s, a
+guard on an undefined global, an error state that is unreachable, a widget that
+renders empty everywhere. Mutation-tested against five real regressions from
+this repo's history (table in FRONTEND.md); each one fails the suite.
+
+Known gap: no real browser (the Playwright browser CDN is unreachable from the
+build sandbox), so CSS/layout/visual and real input events are not covered.
 
 Live smoke (reads only, real app, no fakes):
 ```powershell

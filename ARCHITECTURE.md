@@ -77,12 +77,21 @@ starts a background scrape run in a daemon thread inside the API process
    stored and reported as `needs_review`, never `filled_ready`. The legacy
    CLI blind submit is permanently removed. See `README.md` and `PM.md`.
 
+## 4b. Planned — Phase 2.1 (design intent, not yet built)
+
+| Item | Design intent | Why it is shaped this way |
+|---|---|---|
+| **2.1a CV-upload-first** | Upload → existing CV parse chain → the parsed profile becomes the *active* matching profile for the session; Resume Studio diffs job `tech_stack` (through the same `cache.extract_skills` canonicalization used by `/api/skills`) against CV skills and surfaces the missing set | Reuses the parser and the skill canonicalizer rather than adding a second notion of "skill". The new capability is the **diff**, not the upload |
+| **2.1b Cache backend seam** | Put the TTL store in `api/cache.py` behind a small interface; keep in-process as the default; warn loudly at `--workers > 1` | The risk is not that multi-worker fails — it is that it *silently* succeeds while burning 4× Sheets quota and serving inconsistent reads. A seam keeps a future Redis swap contained; adding Redis now would be infrastructure for a scale problem this deployment does not have |
+
+Spec: `PM.md` §2.1. Operations/PII rules: `PRODUCTION.md` §8.
+
 ## 5. Failure modes
 
 | Failure | Behavior |
 |---|---|
-| Sheets down / `keys.json` missing | `data_source: snapshot` → local snapshot; else `empty` → UI mock fallback with error banner |
+| Sheets down / `keys.json` missing | `data_source: snapshot` → local snapshot; else `empty` → UI empty state with error banner (no mock layer exists) |
 | `curated_jobs.json` missing/corrupt | Enrichment fields `null`, never crash |
-| API unreachable from browser | Per-section mock fallback; UI stays usable, banners explain |
+| API unreachable from browser | Per-section error/empty state naming the failed endpoint; UI stays usable |
 | Slow first paint | Mock renders instantly; live data re-renders via `store.subscribe` |
-| Bot-protected / generic-selector boards repeatedly `empty` (Naukri, CWJobs, TimesJobs, GoRemote, …) | Structural, not a regression (no dedicated parser, bot wall, duplicate/dead URLs) — expected-empty; see `PRODUCTION.md` §7 |
+| Bot-protected / generic-selector boards repeatedly `empty` (Naukri, CWJobs, TimesJobs, GoRemote, …) | Structural, not a regression (no per-board parser, bot wall, duplicate/dead URLs) — expected-empty, but already partially addressed (`BOT_PROTECTED_BOARDS` retry/header rotation, `SSL_ISSUE_BOARDS`, generic parser for GoRemote); see `PRODUCTION.md` §7 |

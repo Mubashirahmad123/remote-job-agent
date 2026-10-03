@@ -1,7 +1,7 @@
 /**
  * APP.JS — Application Orchestrator & Bootstrapper
  * Initializes all modular components, then loads LIVE backend data.
- * Components render instantly from mock fallback, then re-render
+ * Components render an empty/loading state first, then re-render
  * automatically when store.loadAll() resolves (store.subscribe).
  */
 
@@ -30,13 +30,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize Application Kanban Tracker
   if (JobAgent.tracker) JobAgent.tracker.init();
 
-  console.log('⚡ Remote Job Agent Command Center initialized (mock first paint).');
+  console.log('⚡ Remote Job Agent Command Center initialized (awaiting live data).');
 
-  // Load live backend (Phase 1 reads). Falls back to mock per-section on error.
+  // Load live backend (Phase 1 reads). On error each section renders its own
+  // honest empty/error state — there is no mock corpus to fall back to.
   if (JobAgent.store && typeof JobAgent.store.loadAll === 'function') {
     try {
       await JobAgent.store.loadAll();
-      const mode = JobAgent.store.state.usingLive ? 'LIVE API' : 'mock fallback (API unreachable)';
+      const mode = JobAgent.store.state.usingLive ? 'LIVE API' : 'no data (API unreachable)';
       console.log('⚡ Data load complete — mode: ' + mode);
     } catch (e) {
       console.warn('[app] loadAll failed:', e && e.message);
@@ -255,7 +256,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           renderRunState(active);
           await poll(active.run_id);
         }
-      } catch (_) { /* API down — mock fallback already painted */ }
+      } catch (_) { /* API down — section already shows its error state */ }
     })();
   }
 });

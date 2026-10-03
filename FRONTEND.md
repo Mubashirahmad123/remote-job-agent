@@ -13,7 +13,6 @@ frontend/
   css/                  variables, base, layout, components, dashboard, jobs,
                         resume, autoapply, tracker (one file per concern)
   js/
-    data/mockData.js    OFFLINE FALLBACK ONLY (MOCK_JOBS/SOURCES/SKILLS/KANBAN)
     api.js              live client — must load before store.js
     store.js            reactive state + normalization + loaders
     components/*.js     navigation, dashboard, jobDesk, jobDrawer,
@@ -21,8 +20,72 @@ frontend/
     app.js              bootstrapper (loads LAST)
 ```
 
-`index.html` script order matters: `mockData → api → store → components → app`.
-`mockData.js` is fallback paint, not the data model — new code must read
+`index.html` script order matters: `api → store → components → app`.
+
+## Planned — Phase 2.1a (CV-upload-first)
+
+New UI surface, not yet built:
+
+- An upload control (PDF/DOCX) that posts to `POST /api/cv/upload` and swaps
+  the active matching profile for the session.
+- A persistent indicator of **which CV is active** (uploaded vs on-disk) with a
+  reset to default. This is the piece that must not be ambiguous — a user who
+  cannot tell which CV is live can apply with the wrong one.
+- Resume Studio gains a **gap panel**: job requirements the uploaded CV never
+  mentions ("this posting wants Kubernetes — add a project or skill line?").
+  Skills come from the same canonicalized source as the dashboard skill cloud,
+  so role nouns (`developer`, `backend`) can't show up as "missing skills".
+- Honest states apply as everywhere else: parse failure must say why; it must
+  never fall back to the on-disk CV silently while displaying the uploaded
+  filename.
+
+Spec: `PM.md` §2.1a. PII/storage rules: `PRODUCTION.md` §8a.
+
+## Frontend E2E smoke (`tests/e2e/`)
+
+`./tests/e2e/run.sh` — boots the real FastAPI app (seeded via `SNAPSHOT_FILE`
+with `tests/e2e/fixtures/jobs.snapshot.json`) and loads the real `index.html`
+plus the real `js/*` in jsdom over HTTP. 18 assertions across three suites:
+asset integrity, happy path, and API-unreachable.
+
+**Why jsdom, not Playwright:** `playwright install chromium` cannot reach the
+browser CDN from this environment, so a real-browser run isn't reproducible
+here. jsdom executes the same application code against the same API, which
+covers the failure mode this project keeps hitting (dead guards, undefined
+globals, states that never render). It does **not** cover CSS, layout,
+visual regressions, or real pointer/keyboard input — that gap is open, and a
+Playwright run is the way to close it wherever egress exists.
+
+**The fixture is not hand-written.** `tech_stack` values are real
+`agents.scrapper.top_techs()` output over verbatim copy from live Remotive /
+WeWorkRemotely postings, including one pre-fix legacy row
+(`"back-end, Engineer, Developer, developer, Back-end"`) because rows written
+by the old parser still exist in the Sheet.
+
+**Mutation-tested** — the suite was validated by reintroducing each real bug
+and confirming it fails:
+
+| Reintroduced bug | Result |
+|---|---|
+| `mockData.js` `<script>` restored (404) | 4 tests fail |
+| `else if (JobAgent.MOCK_SOURCES)` dead guard restored | 2 tests fail |
+| Role nouns allowed back into the skill cloud | 2 tests fail |
+| Skill cloud guarded on an undefined global (the original bug) | 3 tests fail |
+| Store swallows the `/api/skills` error message | 2 tests fail |
+
+The last two only fail because of fixes made *after* a first pass let them
+through: the role-noun case needed the legacy fixture row, and the swallowed
+error needed an assertion on the cause reaching the DOM rather than the word
+"unavailable".
+
+> **Removed 2026-10-03 — there is no mock layer.** `js/data/mockData.js` was
+> referenced by `index.html` and by every `JobAgent.MOCK_*` fallback branch, but
+> the file was never committed to this repo (no git history, 404 at runtime). So
+> every mock global was `undefined`: `|| []` sites degraded to empty arrays and
+> `else if (JobAgent.MOCK_SOURCES)` was permanently false — a failed `/api/stats`
+> left the "Loading live stats…" text on screen forever with the error banner
+> unreachable inside the dead branch. The script tag and all mock branches are
+> gone; each section now renders an explicit loading / error / empty state. New code must read
 `store.state`, never `MOCK_*` directly (grep before adding usages).
 | `autoApply.js` | fill-and-review queue, safety lock, per-run results and activity log | up to three highest-scoring eligible jobs sequentially → `POST /api/apply/{fp}` `{mode:review}` → visible Greenhouse/Lever fill window or package-only fallback; submit toggle disabled | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider` (enforced: localStorage daily count blocks queue at cap), `btnRunAutoApplyQueue`, `btnViewScreenshots` (labelled View Review Results), `terminalLog`, `reviewQueueResults` |
 | `scrapeMonitor.js` | scrape run monitor, board diagnostics, structured event stream, run history | `/api/scrape` polling | `scrapeMonitorStatus/Phase/Progress/Summary`, `scrapeMonitorBoards`, `scrapeMonitorEvents`, `scrapeMonitorHistory` |
@@ -53,7 +116,7 @@ frontend/
 
 State: `activeTab, viewMode, selectedJob, filters{search,role,minScore,location,
 source,status}, autoApply{mode,threshold,dailyCap,appliedToday}`,
-live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|mock)`,
+live: `jobs[], tracker[], stats, skills, health, usingLive, dataSource(sheets|snapshot|unavailable)`,
 `loading{…}, errors{…}`. `subscribe(fn)` → `notify()` re-renders components.
 
 - **Normalization:** backend `JobOut` (string `tech_stack`, fingerprint key) →
@@ -62,9 +125,10 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
   Backend tracker statuses + auto-apply fill statuses → kanban columns (`filled_ready/package_only/custom_questions→review`, `interviewing→interview`;
   `withdrawn/ghosted→rejected`; `review` is UI-only).
 - **Loaders:** `loadAll()` = `loadJobs + loadTracker + loadStats` in parallel,
-  each with per-section mock fallback so one dead endpoint never blanks the UI.
+  each with a per-section error/empty state so one dead endpoint never blanks
+  the UI silently (it says which endpoint failed).
   Snapshot (all scores 0) auto-drops `minScore` to 0 and syncs the slider.
-- **First paint:** components render from mock instantly, then re-render live
+- **First paint:** components render a loading state, then re-render live
   via subscription — keep it that way (never `await` before `init`).
 
 ## 4. Components
@@ -72,7 +136,7 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
 | File | Owns | Live source | Element IDs |
 |---|---|---|---|
 | `navigation.js` | tab switching, theme toggle | — | `navDashboard…`, `currentViewTitle` |
-| `dashboard.js` | bento metrics, sidebar count badges, sources grid, skills cloud | `/api/stats` (`by_source`, `tabs`) plus tracker counts for the pipeline card; skills still mock (no endpoint yet) | `metricTotalJobs/TopMatches/DailyCap/Interviews`, `activeJobsBadge`, `topMatchCountBadge`, `metricPipelineFootnote`, `sourcesGrid`, `topSkillsCloud` |
+| `dashboard.js` | bento metrics, sidebar count badges, sources grid, skills cloud | `/api/stats` (`by_source`, `tabs`) plus tracker counts for the pipeline card; skill cloud now live from `/api/skills` (`skills[].name/pct`, no mock fallback — empty renders an honest note) | `metricTotalJobs/TopMatches/DailyCap/Interviews`, `activeJobsBadge`, `topMatchCountBadge`, `metricPipelineFootnote`, `sourcesGrid`, `topSkillsCloud` |
 | `jobDesk.js` | filters, grid/table views, count, newest-first ordering | `store.state.jobs` (client-side filter + `posted_date_iso` desc sort with `scraped_at` fallback, undated last; backend handles `q/source/tab/limit`) | `jobFilterSearch`, `rolePillGroup`, `scoreRange`, `location/source/statusFilter`, `jobsGridContainer/TableBody`, `filteredJobCount` (`(source: N)` suffix) |
 | `jobDrawer.js` | slide-over detail | receives job object (defensive: string-or-array stack, missing skills/CV) | `jobDetailDrawer`, `drawerBody`, `btnDrawerApplyNow/Save` |
 | `tracker.js` | kanban + status cycling + professional manual-add modal | `GET/POST/PATCH /api/tracker`; fill-only/package statuses render in Review; active cards cycle via backend-valid statuses `applied/review→interviewing→offer→rejected`; terminal archive statuses (`rejected/withdrawn/ghosted`) stay archived on click; manual adds use an in-app validated modal | `kanbanColApplied/Review/Interview/Offer/Rejected`, `count*`, `btnSyncTrackerSheets`, `btnNewTrackedJob`, `manualApplicationModal` |

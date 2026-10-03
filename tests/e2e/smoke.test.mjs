@@ -1,0 +1,253 @@
+/**
+ * Frontend E2E smoke — real dashboard, real API, real data path.
+ *
+ * Every assertion here exists because something in this class of bug actually
+ * shipped and went unnoticed:
+ *   - a <script> that 404s (js/data/mockData.js was loaded for months)
+ *   - a guard on an undefined global that is permanently false (MOCK_SKILLS,
+ *     MOCK_SOURCES) and silently renders nothing
+ *   - an error state that is unreachable, so an outage looks like a spinner
+ *   - a widget rendering empty in every environment with no error anywhere
+ *
+ * Unit tests passed through all of it. These don't.
+ */
+
+import { test, before, after, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { startApi, stopApi, loadDashboard, waitFor, text, REPO } from './harness.mjs';
+
+let api;
+
+before(async () => { api = await startApi({ port: 8731 }); }, { timeout: 60000 });
+after(async () => { await stopApi(api); });
+
+describe('asset integrity', () => {
+  test('every <script src> in index.html returns 200', async () => {
+    const html = readFileSync(resolve(REPO, 'frontend', 'index.html'), 'utf8');
+    const srcs = [...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(srcs.length >= 10, `expected the full script list, got ${srcs.length}`);
+    const bad = [];
+    for (const src of srcs) {
+      const res = await fetch(`${api.base}/${src.replace(/^\//, '')}`);
+      if (!res.ok) bad.push(`${src} -> ${res.status}`);
+    }
+    assert.deepEqual(bad, [], `dead <script src> (this is how mockData.js hid): ${bad.join(', ')}`);
+  });
+
+  test('no script references a JobAgent global that is never assigned', async () => {
+    const files = [
+      'js/api.js', 'js/store.js', 'js/escape.js', 'js/app.js',
+      'js/components/toast.js', 'js/components/navigation.js',
+      'js/components/scrapeMonitor.js', 'js/components/dashboard.js',
+      'js/components/jobDesk.js', 'js/components/jobDrawer.js',
+      'js/components/resumeStudio.js', 'js/components/autoApply.js',
+      'js/components/tracker.js',
+    ];
+    let src = '';
+    for (const f of files) src += readFileSync(resolve(REPO, 'frontend', f), 'utf8') + '\n';
+    // Strip comments so prose about removed globals isn't counted as usage.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const assigned = new Set([...code.matchAll(/JobAgent\.(\w+)\s*=/g)].map((m) => m[1]));
+    const used = new Set([...code.matchAll(/JobAgent\.(\w+)/g)].map((m) => m[1]));
+    const external = new Set(['API_BASE']); // set by the host page/harness
+    const missing = [...used].filter((u) => !assigned.has(u) && !external.has(u));
+    assert.deepEqual(missing, [], `referenced but never defined: ${missing.join(', ')}`);
+  });
+});
+
+describe('happy path — live API', () => {
+  let ctx;
+  before(async () => {
+    ctx = await loadDashboard(api.base);
+    await waitFor(() => ctx.window.JobAgent?.store?.state?.stats, { label: 'stats loaded' });
+  }, { timeout: 60000 });
+
+  test('page boots with no uncaught same-origin script errors', () => {
+    assert.deepEqual(ctx.errors, [], `jsdom errors: ${ctx.errors.join(' | ')}`);
+  });
+
+  test('every same-origin asset the page requests resolves', () => {
+    // External CDN failures (fonts) are sandbox egress, not an app defect —
+    // asserted separately so they can never hide a real same-origin 404.
+    const sameOriginFailures = ctx.errors.filter((e) => /Could not load/.test(e));
+    assert.deepEqual(sameOriginFailures, []);
+  });
+
+  test('the UI actually calls the endpoints it claims to', () => {
+    const joined = ctx.requests.join('\n');
+    for (const ep of ['/api/jobs', '/api/stats', '/api/skills', '/api/tracker', '/api/health']) {
+      assert.ok(joined.includes(ep), `never requested ${ep}. Requested:\n${joined}`);
+    }
+  });
+
+  test('metrics render real counts, not placeholders', async () => {
+    const total = await waitFor(() => {
+      const v = text(ctx.window, 'metricTotalJobs');
+      return v && v !== '—' ? v : null;
+    }, { label: 'metricTotalJobs' });
+    assert.equal(total, '7', 'fixture has 7 jobs');
+    assert.equal(text(ctx.window, 'activeJobsBadge'), '7', 'sidebar badge must match');
+  });
+
+  test('skill cloud renders real pills from /api/skills', async () => {
+    const cloud = await waitFor(() => {
+      const el = ctx.window.document.getElementById('topSkillsCloud');
+      return el && el.querySelectorAll('.skill-pill').length ? el : null;
+    }, { label: 'skill pills' });
+
+    const pills = [...cloud.querySelectorAll('.skill-pill')].map((p) => p.textContent.trim());
+    assert.ok(pills.length >= 4, `expected several pills, got ${pills.length}`);
+    // Regression: this widget rendered an empty div in every environment.
+    assert.ok(cloud.innerHTML.trim().length > 0, 'skill cloud must never be silently empty');
+
+    const names = pills.map((p) => p.replace(/\d+%$/, '').trim());
+    assert.ok(names.includes('Python'), `Python missing from ${JSON.stringify(names)}`);
+    assert.ok(names.includes('React'), `React missing from ${JSON.stringify(names)}`);
+
+    // Role nouns from TECH_FILTER must never surface as skills. The fixture
+    // carries a legacy row ("back-end, Engineer, Developer, developer,
+    // Back-end") written by the old parser, so this assertion has something
+    // real to bite on — a clean fixture would let the regression through.
+    for (const junk of ['Developer', 'Engineer', 'Software', 'Web', 'Backend', 'Back-end', 'Full-Stack']) {
+      assert.ok(!names.includes(junk), `role noun "${junk}" leaked into the skill cloud`);
+    }
+    // Percentages must be real numbers, not NaN/undefined.
+    for (const p of pills) assert.match(p, /\d+%$/, `pill without a percentage: ${p}`);
+  });
+
+  test('skill percentages use the stack-bearing denominator', async () => {
+    // Fixture: 7 jobs; 4 contribute skills (2 non-technical + 1 legacy
+    // role-noun-only row contribute none); Python in all 4 -> 100%.
+    const res = await fetch(`${api.base}/api/skills?limit=50`);
+    const body = await res.json();
+    assert.equal(body.total_jobs, 7);
+    assert.equal(body.jobs_with_stack, 4);
+    const python = body.skills.find((s) => s.name === 'Python');
+    assert.equal(python.count, 4);
+    assert.equal(python.pct, 100);
+  });
+
+  test('sources grid renders live boards', async () => {
+    const grid = await waitFor(() => {
+      const el = ctx.window.document.getElementById('sourcesGrid');
+      return el && el.querySelectorAll('.source-item-card').length ? el : null;
+    }, { label: 'source cards' });
+    const names = [...grid.querySelectorAll('.source-meta-name')].map((n) => n.textContent.trim());
+    assert.ok(names.includes('Remotive'), `expected Remotive in ${JSON.stringify(names)}`);
+    assert.ok(!grid.textContent.includes('Loading live stats'), 'loading text must be replaced');
+  });
+
+  test('sources grid merges aliased board names', async () => {
+    // The fixture carries RemoteOKAPI and Remojobs-Backend — historical labels
+    // for RemoteOK and Remotive. Both must appear merged, never as separate
+    // cards competing for the same top-8 slots.
+    const grid = await waitFor(() => {
+      const el = ctx.window.document.getElementById('sourcesGrid');
+      return el && el.querySelectorAll('.source-item-card').length ? el : null;
+    }, { label: 'source cards' });
+    const names = [...grid.querySelectorAll('.source-meta-name')].map((n) => n.textContent.trim());
+    for (const alias of ['RemoteOKAPI', 'Remojobs-Backend', 'Remojobs-Frontend', 'FounditIN']) {
+      assert.ok(!names.includes(alias), `alias "${alias}" rendered as its own source card`);
+    }
+    assert.ok(names.includes('RemoteOK'), `expected merged RemoteOK in ${JSON.stringify(names)}`);
+    assert.ok(names.includes('Remotive'), `expected merged Remotive in ${JSON.stringify(names)}`);
+    assert.equal(new Set(names).size, names.length, 'duplicate source cards rendered');
+
+    // Counts must survive the merge, not be halved or double-counted.
+    const res = await fetch(`${api.base}/api/stats`);
+    const stats = await res.json();
+    assert.equal(
+      Object.values(stats.by_source).reduce((a, b) => a + b, 0),
+      stats.total_jobs,
+      'by_source must still sum to total_jobs after alias merging',
+    );
+  });
+
+  test('job cards render from /api/jobs', async () => {
+    const cards = await waitFor(() => {
+      const els = ctx.window.document.querySelectorAll('#jobsGridContainer .job-card');
+      return els.length ? els : null;
+    }, { label: 'job cards' });
+    const titles = [...cards].map((c) => c.querySelector('.job-role-title')?.textContent.trim());
+    assert.ok(titles.includes('Senior back-end Engineer'), `got ${JSON.stringify(titles)}`);
+  });
+
+  test('no "undefined" / "NaN" / "[object Object]" leaks into rendered text', () => {
+    const body = ctx.window.document.body.textContent;
+    for (const bad of ['undefined', 'NaN', '[object Object]']) {
+      assert.ok(!body.includes(bad), `rendered text contains "${bad}"`);
+    }
+  });
+});
+
+describe('failure path — API unreachable', () => {
+  let ctx;
+  before(async () => {
+    // Point the page at a port nothing listens on: the exact scenario where
+    // dead mock guards used to leave a permanent "Loading…" on screen.
+    ctx = await loadDashboard(api.base, { apiBase: 'http://127.0.0.1:9' });
+    await waitFor(() => ctx.window.JobAgent?.store?.state?.errors?.stats, { label: 'stats error recorded' });
+  }, { timeout: 60000 });
+
+  test('page still boots without uncaught same-origin errors', () => {
+    assert.deepEqual(ctx.errors, [], `jsdom errors: ${ctx.errors.join(' | ')}`);
+  });
+
+  test('sources grid shows an explicit failure, never a stuck spinner', async () => {
+    const grid = await waitFor(() => {
+      const el = ctx.window.document.getElementById('sourcesGrid');
+      return el && !el.textContent.includes('Loading live stats') ? el : null;
+    }, { label: 'sources grid to stop loading' });
+    assert.match(grid.textContent, /unavailable|No live sources/i,
+      `outage must be stated, got: ${grid.textContent.trim().slice(0, 160)}`);
+  });
+
+  test('the store records WHY each section failed', () => {
+    // Mutation-tested: swallowing the message (errors.skills = '') still
+    // renders a generic "unavailable", so asserting the rendered word alone
+    // cannot tell a reported failure from a hidden one.
+    const errs = ctx.window.JobAgent.store.state.errors;
+    for (const key of ['jobs', 'stats', 'skills']) {
+      assert.ok(errs[key] && errs[key].length > 0,
+        `errors.${key} is empty — the cause was swallowed, not reported`);
+    }
+  });
+
+  test('the failure reason reaches the DOM, not just the console', async () => {
+    const cloud = await waitFor(() => {
+      const el = ctx.window.document.getElementById('topSkillsCloud');
+      return el && /unreachable|API/i.test(el.textContent) ? el : null;
+    }, { label: 'skill cloud naming the cause' });
+    assert.match(cloud.textContent, /unreachable|API \d{3}|API error/i,
+      `expected the actual cause on screen, got: ${cloud.textContent.trim().slice(0, 160)}`);
+  });
+
+  test('skill cloud states why it is empty', async () => {
+    const cloud = await waitFor(() => {
+      const el = ctx.window.document.getElementById('topSkillsCloud');
+      return el && el.textContent.trim() && !el.textContent.includes('Aggregating') ? el : null;
+    }, { label: 'skill cloud terminal state' });
+    assert.match(cloud.textContent, /unavailable|No active listings|No tech_stack/i,
+      `expected an explanation, got: ${cloud.textContent.trim().slice(0, 160)}`);
+    assert.equal(cloud.querySelectorAll('.skill-pill').length, 0, 'must not invent pills');
+  });
+
+  test('job desk surfaces the API error instead of silently empty', async () => {
+    const container = await waitFor(() => {
+      const el = ctx.window.document.getElementById('jobsGridContainer');
+      return el && el.textContent.includes('API error') ? el : null;
+    }, { label: 'job desk error banner' });
+    assert.match(container.textContent, /API error/);
+    // And it must not claim a fallback corpus that does not exist.
+    assert.ok(!/cached mock data/i.test(container.textContent),
+      'must not claim mock data that was never shipped');
+  });
+
+  test('no fabricated numbers appear anywhere during an outage', () => {
+    const body = ctx.window.document.body.textContent;
+    assert.ok(!/\b(147|24|1,?247)\b/.test(body),
+      'legacy hardcoded demo figures must not reappear when live data is missing');
+  });
+});

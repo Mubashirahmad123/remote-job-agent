@@ -49,3 +49,7 @@ node_modules/
 # Build files
 dist/
 build/
+
+# Live-submit evidence (traces, video, HAR, post-click DOM) — never commit
+data/submit_runs/
+recon-*.json

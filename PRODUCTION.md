@@ -36,6 +36,14 @@ venv\Scripts\python.exe scheduler.py
 Keep `--workers 1`: the sheet cache is in-process per worker; multiple workers
 duplicate Sheet reads and can exceed quota.
 
+> **Why this is a hard rule today, not a style preference.** Each worker is a
+> separate process with its own copy of the 90s TTL cache. At `--workers 4`
+> you get four independent refresh timers: up to **4× the Google Sheets calls**
+> (a real quota risk), and two requests landing on different workers can return
+> **different data** — one worker refreshed, another is still serving an older
+> cache. A shared-cache seam is scheduled as Phase 2.1b (§8); until it lands,
+> `--workers 1` is the supported configuration.
+
 Dashboard Scrape Now needs no Docker: `POST /api/scrape` runs the scrape in a
 background thread inside this same API process (single active run; 409 while
 one is running), then `POST /api/jobs/refresh` picks up the fresh rows.
@@ -53,6 +61,8 @@ secrets stay read-only mounts, never baked into the image):
     build: .
     container_name: job-agent-api
     restart: unless-stopped
+    # --workers 1 is required, not cosmetic: the sheet cache is per-process.
+    # See §2 and the Phase 2.1b cache seam in §8b before changing this.
     command: ["python", "-m", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
     env_file:
       - .env
@@ -111,6 +121,9 @@ docker compose run --rm runner python -m pytest tests/
   (reverse proxy); the app itself serves plain HTTP.
 - Health endpoint leaks nothing: `sheets_configured` / `curated_jobs_loaded`
   are presence-only signals (covered by `tests/test_api_phase1.py`).
+- **Phase 2.1a (planned):** uploaded CVs are PII. Gitignored upload dir,
+  content-sniffed type validation, server-side size cap, token-gated endpoint,
+  never logged, never baked into an image. Full rules in §8a.
 
 ---
 
@@ -118,7 +131,7 @@ docker compose run --rm runner python -m pytest tests/
 
 - `GET /api/health` → `{"status":"ok","sheets_configured":true,"data_source":"sheets"}`
   - `data_source: snapshot` = Sheets unreachable, serving local scrape snapshot
-  - `data_source: empty` = no Sheets, no snapshot (UI shows mock fallback)
+  - `data_source: empty` = no Sheets, no snapshot (UI shows an explicit empty state)
 - `POST /api/jobs/refresh` clears the TTL cache after a scheduled scrape lands.
 - Logs: `logs/scraper.log` (scheduler); `docker compose logs -f api` (container).
 - Sidebar `Hot` badge is live (`dashboard.js:_applyMetrics` ← `/api/stats`
@@ -133,7 +146,7 @@ docker compose run --rm runner python -m pytest tests/
 
 | Symptom | Cause → Fix |
 |---|---|
-| UI shows `(snapshot: N)` / `(mock)` | Sheets unreachable → check `keys.json` present, sheet shared with `client_email`, `/api/health` |
+| UI shows `(snapshot: N)` / `(unavailable)` | Sheets unreachable → check `keys.json` present, sheet shared with `client_email`, `/api/health` |
 | `UnicodeEncodeError: 'charmap' ... '\u274c'` on Windows | Fixed in `tools/sheet_writer.py` (UTF-8 stdout reconfigure); pull latest |
 | CORS `null` origin blocked | By design — open `http://127.0.0.1:8000/`, never `file://...index.html` |
 | `401 Unauthorized` on `/api/*` | `API_TOKEN` is set → send `Authorization: Bearer <token>` (frontend: `localStorage rja_api_token`) |
@@ -141,6 +154,116 @@ docker compose run --rm runner python -m pytest tests/
 | Stale data after scrape | `POST /api/jobs/refresh`, or wait out the TTL (≤120s) |
 | Arbeitnow jobs saved with blank company (older runs) | Fixed 2026-10-01: parser now reads the API's `company_name` field; re-scrape to backfill |
 | A few Arbeitnow postings link to the company homepage, not the job page | Upstream API limitation (`url` = company site for a minority of postings); kept as-is — verified a slug-built `/jobs/<slug>` URL 404s, so no safe rewrite exists |
-| Bot-protected/generic-selector boards (Naukri, CWJobs, TimesJobs, GoRemote, etc.) repeatedly `empty` | Structural, not a regression: no dedicated parser exists (generic HTML selectors vs bot walls), GoRemote/FounditIN URLs duplicate other boards, Adzuna needs keys, JustRemote/NoDesk fail DNS. No earlier targeted fix found in history; leave as expected-empty |
+| Bot-protected/generic-selector boards (Naukri, CWJobs, TimesJobs, GoRemote, etc.) repeatedly `empty` | Structural, not a regression — **and not untried**: these boards have already had targeted work (see note below). Remaining causes: bot walls defeat generic HTML selectors (no per-board parser), GoRemote/FounditIN URLs duplicate other boards, Adzuna needs keys, JustRemote/NoDesk fail DNS. Treat as expected-empty; the next real fix is per-board parsers behind a browser render, not more retry tuning |
 
-> Note: CV-upload-first flow (upload CV -> scrape/match on it -> Resume Studio surfaces missing sections like projects/certifications) is tracked in PM.md section 3 Backlog, not here. Current behavior: CV must pre-exist in the repo (my_cv.pdf / CV_PATH).
+> **Prior work on the "expected-empty" boards (so this isn't read as virgin territory).**
+> These boards were triaged and partially addressed before being parked:
+> - `BOT_PROTECTED_BOARDS` (`agents/scrapper.py`) already contains `Naukri`,
+>   `CWJobs`, `WorkInStartups`, plus Dice/BuiltIn/Shine/NoFluffJobs/etc. Membership
+>   buys longer base delays (3–6s vs 1–3s), header-pool rotation on retry, and a
+>   5–10s backoff + retry specifically on 403 instead of an immediate give-up.
+> - `SSL_ISSUE_BOARDS` = {`TimesJobs`, `NaukriGulf`} — these fetch with
+>   verification pre-disabled (`NaukriGulf` also carries `verify_ssl: False` in its
+>   board config) after SSL handshake failures were observed.
+> - `GoRemote` is explicitly routed to `parse_html_generic` in the board dispatch,
+>   so it has a parser path; it yields nothing because its URL overlaps boards
+>   already scraped and the generic selectors don't match its markup.
+> - `JS_RENDERED_BOARDS` diverts browser-only boards to the PlaywrightStealth pass
+>   rather than dropping them.
+>
+> Conclusion stands (these are structurally hard and may never reliably yield), but
+> the cheap levers — retries, delays, header rotation, SSL fallback, generic parser,
+> browser fallback — have all been pulled already. Anything further means
+> per-board parsers against an authenticated/stealth browser session.
+
+---
+
+## 8. Live submit (supervised, one-time)
+
+The submit switch now has **three** states, resolved by
+`api.safety.submit_mode()`:
+
+| Mode | How | Behaviour |
+|---|---|---|
+| `disarmed` | default | `/intent` + `/submit` → 403. No browser launched. |
+| `dry_run` | `SUBMIT_ENABLED=true` **and** `SUBMIT_DRY_RUN=true` | Full real path — browser, fill, readback, every gate, submit-button lookup — then stops before `.click()`. No intent consumed, no claim, no daily-cap spend. Repeatable. |
+| `armed` | `SUBMIT_ENABLED=true` only | The click happens. |
+
+`api/safety.py` keeps `SUBMIT_ENABLED = False` in git; env arming is for a
+single process so a live run never requires a tracked code edit.
+`SUBMIT_DRY_RUN` alone cannot open the path.
+
+Evidence per run lands in `data/submit_runs/<timestamp>-<fp>/` (trace, video,
+HAR, pre/post-click DOM, `attempt.json`) and is gitignored. The post-click DOM
+is captured **before** verification is judged, so a failed verification can be
+diagnosed instead of guessed at.
+
+Full procedure, including the operator review gate and how to read each
+outcome: **`LIVE_SUBMIT.md`**.
+
+Recon any posting without touching the pipeline:
+`python -m tools.submit_recon <url> --json recon.json` (read-only; never
+clicks or fills).
+
+---
+
+## 9. Planned — Phase 2.1 (operational impact)
+
+Two items scheduled for the next 3–4 days (spec and acceptance criteria in
+`PM.md` §2.1). Both change how this thing is *operated*, so the ops-relevant
+parts are here rather than only in the product tracker.
+
+### 8a. CV-upload-first flow — handling uploaded CVs (PII)
+
+Today the CV is a file an operator places on disk (`CV_PATH` / `CV_DIR`).
+Phase 2.1a adds an upload path through the dashboard, which means the server
+starts **receiving personal data over HTTP**. Operational rules to apply when
+it lands:
+
+| Concern | Rule |
+|---|---|
+| Storage location | A dedicated upload dir (e.g. `uploads/cv/`), **gitignored** — same treatment as `my_cv.pdf` today |
+| Accepted types | PDF/DOCX only, validated by content sniffing, not just the filename extension |
+| Size cap | Enforced server-side (reject oversize before parsing, not after) |
+| Retention | Uploads are PII: define a retention/cleanup policy before enabling, and never log CV contents or parsed personal fields |
+| Auth | The upload endpoint must sit behind the same `API_TOKEN` gate as every other write route; never expose it on a non-local bind without a token (the existing bind guard already refuses this) |
+| Backups/images | Never bake an uploaded CV into a Docker image or a snapshot artifact |
+
+Operator-visible behaviour: the dashboard must always show **which CV is
+active** (uploaded vs on-disk) and offer a reset to the on-disk default.
+Ambiguity here would mean applying with the wrong CV — the one failure mode
+that actually matters in this flow.
+
+### 8b. Multi-worker cache — what will and will not be built
+
+**The problem:** the cache is per-process (see §2). `--workers 4` ⇒ four caches
+⇒ up to 4× Sheet reads and cross-worker inconsistency.
+
+**Deliberately NOT building Redis now.** Nothing in current usage (single
+operator, own dashboard) needs `--workers > 1`, and standing up a Redis
+instance is infrastructure for a scale problem this deployment does not have —
+the same reasoning that correctly deferred Celery and the Docker queue.
+
+What Phase 2.1b *does* deliver:
+
+1. A cache-backend seam in `api/cache.py` so a shared store (Redis, or a shared
+   file/SQLite) can be dropped in later without touching every accessor.
+   In-process remains the default.
+2. A **startup warning** when `--workers > 1` / `WEB_CONCURRENCY > 1` is
+   detected with the in-process backend, naming the consequence explicitly.
+   The current risk is not that multi-worker is impossible — it is that it
+   *silently* works while burning quota and serving inconsistent reads.
+
+Checklist before anyone ever raises worker count:
+
+- [ ] Shared cache backend configured and reachable
+- [ ] `/api/health` reports the active cache backend
+- [ ] Sheet read volume re-measured against quota under the new worker count
+- [ ] `POST /api/jobs/refresh` verified to invalidate across *all* workers
+
+---
+
+> Note: CV-upload-first flow is **scheduled as Phase 2.1a** — product spec and
+> acceptance criteria in `PM.md` §2.1, operational/PII rules in §8a above.
+> Current behavior until it ships: the CV must pre-exist in the repo
+> (`my_cv.pdf` / `CV_PATH`, or a folder via `CV_DIR`).

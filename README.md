@@ -180,7 +180,7 @@ remote-job-agent/
 │   ├── css/                  # Per-component stylesheets (see DESIGN.md tokens)
 │   └── js/
 │       ├── api.js            # Live FastAPI client (one fn per endpoint group)
-│       ├── store.js          # Reactive state + backend→UI normalization + mock fallback
+│       ├── store.js          # Reactive state + backend→UI normalization (no mock layer)
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
 ├── tests/
 │   └── test_api_*.py etc.   # 291 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
@@ -304,8 +304,16 @@ CV_EMBEDDINGS_PATH=cv_embeddings.pkl
 
 | Type | Sources |
 |---|---|
-| Free APIs | Remotive, RemoteOK, Arbeitnow, Himalayas, Jobicy, The Muse, Adzuna, WorkingNomads, AuthenticJobs (RSS) |
-| HTML (requests+BS4) | RemoteOK, Jobspresso, EU Remote Jobs, Arc, Lemon, FlexJobs, Remote.co, JustRemote, NoDesk, RemoteTech, GoRemote, Remote4me, DailyRemote, Remojobs (×3), RemoteFrontendJobs, FindBacon, LandingJobs, WeAreDevelopers, NoFluffJobs, JustJoinIt, CWJobs, WorkInStartups, BuiltIn, Dice, GulfTalent, Naukri, NaukriGulf, FounditIN, Shine, TimesJobs, TrueUp, RemoteRocketship, RemoteJobsCom, Remotees |
+| Free APIs | Remotive, RemoteOK, Arbeitnow, Himalayas, Jobicy, The Muse, Adzuna, WorkingNomads, DailyRemote, AuthenticJobs (RSS) |
+
+> **Source naming.** Some board keys are the same provider: `RemoteOKAPI` and
+> `RemoteOK` share one URL, `Remojobs-Frontend/Backend/Fullstack` are Remotive
+> API calls with a `?search=` param, and `FounditIN` is configured against
+> naukri.com. They are canonicalized to one name on write *and* on read
+> (`tools/sources.py`), so `by_source`, the sources grid, and the source filter
+> show one entry per provider. Duplicate URLs are fetched once per run and the
+> second board is logged as `skipped-duplicate`.
+| HTML (requests+BS4) | Jobspresso, EU Remote Jobs, Arc, Lemon, FlexJobs, Remote.co, JustRemote, NoDesk, RemoteTech, GoRemote, Remote4me, RemoteFrontendJobs, FindBacon, LandingJobs, WeAreDevelopers, NoFluffJobs, JustJoinIt, CWJobs, WorkInStartups, BuiltIn, Dice, GulfTalent, Naukri, NaukriGulf, FounditIN, Shine, TimesJobs, TrueUp, RemoteRocketship, RemoteJobsCom, Remotees |
 | Playwright stealth | WeWorkRemotely, Remote.co, Wellfound, NoDesk, YCombinator, Arc, GulfTalent, NoFluffJobs, Lemon, JustJoinIt |
 | JobSpy (opt-in, isolated) | LinkedIn, Indeed, ZipRecruiter — off unless `ENABLE_JOBSPY=true`; runs in a child process so a native `tls-client` crash only fails that board, never the run |
 | Crawl4AI | JustRemote |
@@ -366,6 +374,7 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `GET /api/jobs?tab=&q=&source=&limit=&offset=` | Enriched jobs from `ALL JOBS` / `TOP MATCHES` / `GOOD MATCHES` |
 | `GET /api/jobs/{fingerprint}` | One job by MD5 fingerprint |
 | `GET /api/stats` | `{total_jobs, tabs, by_source, stats_rows, curated_jobs}` |
+| `GET /api/skills?tab=&limit=` | `{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name,count,pct}]}` — canonicalized `tech_stack` demand (powers the dashboard skill cloud) |
 | `GET /api/tracker?status=` | APPLIED-tab rows; supports both tracker CLI header and auto-apply APPLIED header fork (`job_fingerprint`, `applied_at`, fill-review statuses) |
 | `POST /api/tracker` | Add a manual application row to APPLIED (`apply_url`, optional title/company/notes/source/salary/contact/follow-up) |
 | `PATCH /api/tracker/{fp}` | `{status, notes}` — status whitelist: applied, interviewing, offer, rejected, withdrawn, ghosted |
@@ -503,6 +512,33 @@ python -m tools.embedding_matcher
 ```
 
 ---
+
+## Live submit status
+
+`SUBMIT_ENABLED = False` in git. The switch is three-state —
+`disarmed` / `dry_run` / `armed` (`api.safety.submit_mode()`) — so the submit
+path can be rehearsed end-to-end against a real posting *without clicking*:
+real browser, real fill, real readback, every gate, submit-button lookup,
+then stop. No intent consumed, no claim taken.
+
+- `python -m tools.submit_recon <url>` — read-only posting scan (confirmation
+  metadata, required fields, captcha, submit control).
+- `python -m tools.seed_demo_job` — seeds Greenhouse's own demo posting
+  (Democorp "Full Stack Engineer", job 83446) for a no-real-employer rehearsal.
+- **[`LIVE_SUBMIT.md`](LIVE_SUBMIT.md)** — the supervised live-run procedure.
+
+No live submission has been performed. Known blocker on the demo board: the
+Greenhouse form is reCAPTCHA-protected.
+
+## Roadmap — Phase 2.1 (next 3–4 days)
+
+| Item | What it adds | Status |
+|---|---|---|
+| **CV-upload-first flow** | Upload a CV from the dashboard, match jobs against *that* profile for the session, and have Resume Studio report the gaps between a posting's requirements and your CV ("wants Kubernetes, your CV doesn't mention it"). Not a replacement for `CV_DIR` multi-CV selection — that already works. | Planned (largest remaining item) |
+| **Multi-worker cache seam** | The sheet cache is in-process, so `--workers 1` is required today. Phase 2.1 adds a backend seam + a loud warning at `--workers > 1`; a shared store (Redis) is intentionally deferred until someone actually needs multiple workers. | Planned (conditional) |
+
+Full spec in [`PM.md`](PM.md) §2.1; operational and PII rules in
+[`PRODUCTION.md`](PRODUCTION.md) §8.
 
 ## License
 
