@@ -35,6 +35,7 @@ starts a background scrape run in a daemon thread inside the API process
 | Persistence | Google Sheets via `tools/sheet_writer.py` | 5 tabs: ALL JOBS, TOP MATCHES, GOOD MATCHES, APPLIED, STATS | the Sheet |
 | Read API | `api/` | TTL cache over Sheets + `curated_jobs.json` enrichment left-join; action routers (scrape runs, tailored materials, CV profile edits) | in-process cache (90s) |
 | Dashboard | `frontend/` | bento metrics, job desk, drawer, resume studio, fill-only review-package cockpit, kanban | browser + `localStorage` (token/base URL) |
+| Edge (deploy) | `deploy/Caddyfile` + compose `caddy` service | reverse proxy 80/443 → `api:8000`; automatic Let's Encrypt + HTTP→HTTPS when `SITE_ADDRESS` is a hostname, plain `:80` on a bare IP | named volumes (certs) |
 | Automation | `scheduler.py`, `track.py`, `main.py`, `Run.py` | cron, tracker CLI, pipeline entry points; standalone CLI also has ATS Playwright fill (fill-only; blind submit permanently removed) | `data/`, `logs/` |
 
 ## 3. Data contracts
@@ -58,7 +59,9 @@ starts a background scrape run in a daemon thread inside the API process
 4. **Same-origin UI** — `api/app.py` mounts `frontend/` so the dashboard opens at
    `http://127.0.0.1:8000/`; `file://` (`null` origin) is blocked by CORS by design.
 5. **Localhost-first auth** — no token locally; non-local bind requires `API_TOKEN`
-   enforced on every `/api/*` call including reads.
+   enforced on every `/api/*` call including reads. Token-protected deploys
+   boot the dashboard once via `/?token=<API_TOKEN>` (`auth-bootstrap.js`
+   stores it in `localStorage`, then strips the URL).
 6. **Dashboard apply gate** — `POST /api/apply/{fp}` creates a local review
    package and, for Greenhouse/Lever only, fills the final tailored resume +
    cover letter in a visible Playwright browser window and captures a

@@ -44,43 +44,32 @@ one is running), then `POST /api/jobs/refresh` picks up the fresh rows.
 
 ## 3. Docker deployment
 
-`docker-compose.yml` ships `scheduler` (daemon) + `runner` (on-demand CLI).
-Add this `api` service for the dashboard (mirror the existing volume mounts —
-secrets stay read-only mounts, never baked into the image):
+`docker-compose.yml` ships the full stack: `scheduler` (Mon/Thu daemon),
+`runner` (on-demand CLI, `cli` profile), `api` (dashboard + endpoints), and
+`caddy` (reverse proxy on 80/443 with automatic Let's Encrypt). Secrets stay
+read-only mounts, never baked into the image. The `api` service keeps a
+`127.0.0.1:8000` host port as an SSH-tunnel escape hatch — public traffic
+reaches it only through Caddy.
 
-```yaml
-  api:
-    build: .
-    container_name: job-agent-api
-    restart: unless-stopped
-    command: ["python", "-m", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
-    env_file:
-      - .env
-    environment:
-      - PLAYWRIGHT_HEADLESS=true
-      - TZ=${TZ:-Asia/Kolkata}
-    ports:
-      - "127.0.0.1:8000:8000"   # bind 127.0.0.1; use "8000:8000" + API_TOKEN for LAN
-    volumes:
-      - ./.env:/app/.env:ro
-      - ./keys.json:/app/keys.json:ro
-      - ./my_cv.pdf:/app/my_cv.pdf:ro
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./seen_jobs.json:/app/seen_jobs.json
-      - ./scraped_jobs.json:/app/scraped_jobs.json
-      - ./curated_jobs.json:/app/curated_jobs.json
-      - ./apply_packages:/app/apply_packages
-      - ./resumes:/app/resumes
-      - ./cover_letters:/app/cover_letters
-      - ./screenshots:/app/screenshots
-```
+`API_TOKEN` is required: compose binds the API `0.0.0.0` inside the container
+and `api/app.py` refuses a non-local bind without it.
 
 ```bash
-docker compose up -d scheduler api
+docker compose up -d --build          # api + scheduler + caddy
 docker compose logs -f api
 docker compose run --rm runner python -m pytest tests/
 ```
+
+- `SITE_ADDRESS=:80` (default) — plain HTTP on the bare IP.
+- `SITE_ADDRESS=yourname.duckdns.org` — Caddy fetches a Let's Encrypt cert
+  automatically (needs 80/443 open) and redirects HTTP → HTTPS.
+- Open the dashboard once with the token in the URL —
+  `http://<host>/?token=<API_TOKEN>`; `frontend/js/auth-bootstrap.js` stores
+  it in `localStorage` and strips it from the address bar.
+
+**$0 walkthrough:** [`deploy/DEPLOY_ORACLE.md`](deploy/DEPLOY_ORACLE.md) —
+Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
+(Docker, ufw/iptables fixups, runtime files), with ops + troubleshooting.
 
 ---
 
@@ -96,10 +85,14 @@ docker compose run --rm runner python -m pytest tests/
 | `APPLY_API_TOKEN` | empty | Dedicated token for `POST /api/apply/{fp}/intent` + `/submit` (unconditional auth; `API_TOKEN` is never accepted there). Set before any submit unlock; unset fails closed with 401 |
 | `API_CORS_ORIGINS` | localhost:3000/5173/8000/8080 | Comma-separated override; `file://` (`null` origin) is never allowed — serve the UI from the API |
 | `API_CACHE_TTL` | `90` | Seconds, clamped to 60–120 |
+| `SITE_ADDRESS` | `:80` | Caddy site address (compose `caddy` service). A real hostname — free: DuckDNS — enables automatic Let's Encrypt HTTPS + HTTP→HTTPS redirect; bare IP stays plain HTTP |
 | `CV_PATH` | `my_cv.pdf` | Primary CV (matching fallback, profile-cache anchor) |
 | `CV_DIR` | empty | Optional CV-variants folder (`cvs/`); `GET /api/cv/variants` lists it, best CV picked per job |
 | `MIN_MATCH_SCORE` | `70` | Curator threshold for GOOD MATCHES tab |
 | `AUTO_APPLY_CONFIRM` | `false` | Legacy CLI flag, now ignored everywhere (blind submit permanently disabled). The HTTP API ignores it; Greenhouse `/intent` + `/submit` are gated by `SUBMIT_ENABLED=False` (403) plus `APPLY_API_TOKEN`. |
+| `AUTO_APPLY_THRESHOLD` | `75` | Minimum match score for the auto-apply queue |
+| `TIER_BATCH_MAX` | `75` | Auto-apply tier bound (`agents/auto_applier.py`): score ≤ this → batch tier, up to `TIER_DREAM_THRESHOLD` → mid tier |
+| `TIER_DREAM_THRESHOLD` | `90` | Score ≥ this → dream tier — manual review only (dashboard apply returns 422) |
 
 ---
 
@@ -107,8 +100,10 @@ docker compose run --rm runner python -m pytest tests/
 
 - Never commit `.env`, `keys.json`, `my_cv.pdf`, `scraped_jobs.json` (gitignored).
 - Never bake secrets into images (`.dockerignore` enforces this); mount read-only.
-- Expose the API beyond localhost only with `API_TOKEN` set + HTTPS in front
-  (reverse proxy); the app itself serves plain HTTP.
+- Expose the API beyond localhost only with `API_TOKEN` set and HTTPS in
+  front — the shipped `caddy` compose service is the default edge (automatic
+  Let's Encrypt when `SITE_ADDRESS` is a hostname); the app itself serves
+  plain HTTP.
 - Health endpoint leaks nothing: `sheets_configured` / `curated_jobs_loaded`
   are presence-only signals (covered by `tests/test_api_phase1.py`).
 
@@ -142,5 +137,7 @@ docker compose run --rm runner python -m pytest tests/
 | Arbeitnow jobs saved with blank company (older runs) | Fixed 2026-10-01: parser now reads the API's `company_name` field; re-scrape to backfill |
 | A few Arbeitnow postings link to the company homepage, not the job page | Upstream API limitation (`url` = company site for a minority of postings); kept as-is — verified a slug-built `/jobs/<slug>` URL 404s, so no safe rewrite exists |
 | Bot-protected/generic-selector boards (Naukri, CWJobs, TimesJobs, GoRemote, etc.) repeatedly `empty` | Structural, not a regression: no dedicated parser exists (generic HTML selectors vs bot walls), GoRemote/FounditIN URLs duplicate other boards, Adzuna needs keys, JustRemote/NoDesk fail DNS. No earlier targeted fix found in history; leave as expected-empty |
+| Caddy can't get a certificate | `SITE_ADDRESS` must be a real hostname resolving to the host and 80/443 open (VCN ingress + ufw) — see `deploy/DEPLOY_ORACLE.md` §8 |
+| Dashboard `401` on a token-protected deploy | Reopen `/?token=<API_TOKEN>` once — `auth-bootstrap.js` stores it in `localStorage` |
 
 > Note: CV-upload-first flow (upload CV -> scrape/match on it -> Resume Studio surfaces missing sections like projects/certifications) is tracked in PM.md section 3 Backlog, not here. Current behavior: CV must pre-exist in the repo (my_cv.pdf / CV_PATH).

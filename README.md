@@ -33,7 +33,7 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | JobSpy integration | ✅ | Scrapes LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter |
 | Scheduled automation | ✅ | Cron-based scheduler (Mon/Thu full scrape, daily quick checks) |
 | Universal run script | ✅ | `Run.py` works on Windows / Mac / Linux with `--setup` flag |
-| Docker support | ✅ | Production-grade Docker + docker-compose with Playwright, persistent volumes & secrets isolation |
+| Docker support | ✅ | Production-grade Docker + compose: `api`, `scheduler`, `caddy` (HTTPS reverse proxy) with Playwright, persistent volumes & secrets isolation — $0 Oracle Cloud deployment guide in `deploy/DEPLOY_ORACLE.md` |
 | FastAPI backend (reads + actions) | ✅ | `api/` — jobs, stats, tracker, refresh, scrape runs, tailored materials, CV profile endpoints over the Sheets cache (see below) |
 | Command Center dashboard | ✅ | `frontend/` — live UI served same-origin at `http://127.0.0.1:8000/` (no CORS issues) |
 
@@ -179,6 +179,7 @@ remote-job-agent/
 │   ├── index.html            # Shell + all views (deck, jobs, resume, auto-apply, tracker)
 │   ├── css/                  # Per-component stylesheets (see DESIGN.md tokens)
 │   └── js/
+│       ├── auth-bootstrap.js # One-time ?token=<API_TOKEN> capture → localStorage (token-protected deploys)
 │       ├── api.js            # Live FastAPI client (one fn per endpoint group)
 │       ├── store.js          # Reactive state + backend→UI normalization + mock fallback
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
@@ -194,6 +195,7 @@ remote-job-agent/
 ├── main.py                   # CrewAI pipeline entry point
 ├── Run.py                    # Universal start script (Win/Mac/Linux)
 ├── scheduler.py              # Cron-based scheduler (Mon/Thu)
+├── deploy/                   # Free deployment: DEPLOY_ORACLE.md (Oracle Always Free $0), setup-vm.sh, Caddyfile
 ├── .env                      # Configuration + API keys
 ├── .env.example              # Example env file with all variables
 ├── .gitignore
@@ -252,10 +254,14 @@ OLLAMA_MODEL=llama3.1  # local model; cloud model in use: gpt-oss:120b
 
 # Auto-Apply
 AUTO_APPLY_ENABLED=false  # auto-apply after pipeline
-AUTO_APPLY_THRESHOLD=70   # minimum match score
+AUTO_APPLY_THRESHOLD=75   # minimum match score
 AUTO_APPLY_LIMIT=5        # max jobs per run
 AUTO_APPLY_PLAYWRIGHT=false  # true = fill forms; false = open browser
 AUTO_APPLY_CONFIRM=false     # legacy CLI flag, ignored everywhere (blind submit permanently disabled)
+
+# Matching / tiers (agents/auto_applier.py)
+TIER_BATCH_MAX=75            # score <= this → batch tier
+TIER_DREAM_THRESHOLD=90      # score >= this → dream tier (manual review only; API apply 422)
 
 # Your Profile (for auto-fill)
 APPLICANT_NAME=Your Name
@@ -268,6 +274,18 @@ APPLICANT_GITHUB=https://github.com/yourprofile
 # Embedding Matcher (optional — install sentence-transformers + faiss-cpu)
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 CV_EMBEDDINGS_PATH=cv_embeddings.pkl
+
+# API + dashboard (compose binds 0.0.0.0 inside the container → API_TOKEN required)
+API_HOST=127.0.0.1  # non-local bind refuses to start without API_TOKEN
+API_PORT=8000
+API_TOKEN=  # when set, all /api/* need Authorization: Bearer <token>
+APPLY_API_TOKEN=  # dedicated token for apply intent/submit (API_TOKEN never accepted there)
+API_CORS_ORIGINS=  # optional; default localhost:3000/5173/8000/8080
+API_CACHE_TTL=90
+
+# Deployment (docker compose caddy service) — see deploy/DEPLOY_ORACLE.md
+SITE_ADDRESS=:80  # bare-IP HTTP; yourname.duckdns.org → automatic Let's Encrypt HTTPS
+TZ=Asia/Kolkata
 ```
 
 ---
@@ -389,6 +407,9 @@ Notes:
   so the dashboard drops the score gate to 0% automatically.
 - Binding is `127.0.0.1` by default; a non-local bind refuses to start unless
   `API_TOKEN` is set (then every `/api/*` needs `Authorization: Bearer <token>`).
+- Token-protected deploys: open the dashboard once as `/?token=<API_TOKEN>`;
+  `frontend/js/auth-bootstrap.js` stores it in `localStorage` and strips it
+  from the address bar.
 - `file://` origins are blocked by design — always open the dashboard via the URL above.
 - Scrape-status polling is one 5s loop per page (single-loop guard in
   `frontend/js/app.js`); treat a run-registry 404 as terminal (server restart
@@ -396,7 +417,8 @@ Notes:
 - Arbeitnow company names come from the API's `company_name` field; a minority
   of its postings link to the company homepage rather than the job page
   (upstream limitation — see `PRODUCTION.md` §7).
-- See `PRODUCTION.md` for Docker deployment and `DESIGN.md` for the UI design system.
+- See `PRODUCTION.md` for deployment, `deploy/DEPLOY_ORACLE.md` for the $0
+  Oracle Cloud + DuckDNS walkthrough, and `DESIGN.md` for the UI design system.
 
 ---
 
@@ -425,7 +447,8 @@ The application includes a production-grade container setup with pre-installed P
 ### Why Use Docker?
 - **Zero Browser Setup Issues:** Automatically installs all 30+ Debian shared libraries required by headless Chromium.
 - **Fast & Conflict-Free Builds:** Uses Astral `uv` for 10x faster package installation without resolver conflicts.
-- **24/7 Unattended Scheduling:** Deploy to any Linux cloud VM (e.g. Hetzner, DigitalOcean, AWS) without keeping your personal computer running.
+- **24/7 Unattended Scheduling:** Deploy to a cloud VM without keeping your personal computer running — Oracle Cloud Always Free is a genuine $0 option (4 ARM OCPU / 24 GB); see `deploy/DEPLOY_ORACLE.md`.
+- **Free HTTPS + Domain:** the shipped `caddy` service fronts the API on 80/443 with automatic Let's Encrypt; pair it with a free DuckDNS hostname via `SITE_ADDRESS`.
 - **Strict Security:** Secrets (`.env`, `keys.json`, `my_cv.pdf`) are never baked into image layers; they are excluded via `.dockerignore` and mounted as read-only at runtime.
 - **Data Persistence:** Scraped job caches, deduplication hashes (`seen_jobs.json`), the application tracker database (`data/job_agent.db`), logs, and generated resumes persist across container restarts via host volume bindings.
 
@@ -443,17 +466,26 @@ The application includes a production-grade container setup with pre-installed P
    '{}' | Out-File -Encoding utf8 seen_jobs.json; '[]' | Out-File -Encoding utf8 scraped_jobs.json; '[]' | Out-File -Encoding utf8 curated_jobs.json
    ```
 
-2. **Run the 24/7 background scheduler daemon:**
+2. **Run the stack:**
    ```bash
-   # Build image and start scheduler in background
+   # Full stack: api (dashboard + endpoints) + scheduler (Mon/Thu daemon) + caddy (80/443)
+   docker compose up -d --build
+
+   # Scheduler only (no dashboard)
    docker compose up -d scheduler
 
-   # View live logs
-   docker compose logs -f scheduler
-
-   # Stop scheduler
+   # View live logs / stop
+   docker compose logs -f api
    docker compose down
    ```
+
+   The compose `api` service binds `0.0.0.0` inside the container, so
+   **`API_TOKEN` must be set** in `.env` (the app refuses the non-local bind
+   without it). Open the dashboard once at `http://<host>/?token=<API_TOKEN>` —
+   `auth-bootstrap.js` stores the token in `localStorage` and strips it from
+   the URL. `SITE_ADDRESS=:80` (default) serves plain HTTP on a bare IP; set a
+   hostname (free: DuckDNS) for automatic HTTPS. A `127.0.0.1:8000` host port
+   remains as an SSH-tunnel escape hatch.
 
 3. **Run on-demand CLI tasks via Docker:**
    ```bash
