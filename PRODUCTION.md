@@ -36,6 +36,14 @@ venv\Scripts\python.exe scheduler.py
 Keep `--workers 1`: the sheet cache is in-process per worker; multiple workers
 duplicate Sheet reads and can exceed quota.
 
+> **Why this is a hard rule today, not a style preference.** Each worker is a
+> separate process with its own copy of the 90s TTL cache. At `--workers 4`
+> you get four independent refresh timers: up to **4× the Google Sheets calls**
+> (a real quota risk), and two requests landing on different workers can return
+> **different data** — one worker refreshed, another is still serving an older
+> cache. A shared-cache seam is scheduled as Phase 2.1b (§8); until it lands,
+> `--workers 1` is the supported configuration.
+
 Dashboard Scrape Now needs no Docker: `POST /api/scrape` runs the scrape in a
 background thread inside this same API process (single active run; 409 while
 one is running), then `POST /api/jobs/refresh` picks up the fresh rows.
@@ -53,6 +61,8 @@ secrets stay read-only mounts, never baked into the image):
     build: .
     container_name: job-agent-api
     restart: unless-stopped
+    # --workers 1 is required, not cosmetic: the sheet cache is per-process.
+    # See §2 and the Phase 2.1b cache seam in §8b before changing this.
     command: ["python", "-m", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
     env_file:
       - .env
@@ -111,6 +121,9 @@ docker compose run --rm runner python -m pytest tests/
   (reverse proxy); the app itself serves plain HTTP.
 - Health endpoint leaks nothing: `sheets_configured` / `curated_jobs_loaded`
   are presence-only signals (covered by `tests/test_api_phase1.py`).
+- **Phase 2.1a (planned):** uploaded CVs are PII. Gitignored upload dir,
+  content-sniffed type validation, server-side size cap, token-gated endpoint,
+  never logged, never baked into an image. Full rules in §8a.
 
 ---
 
@@ -163,4 +176,65 @@ docker compose run --rm runner python -m pytest tests/
 > browser fallback — have all been pulled already. Anything further means
 > per-board parsers against an authenticated/stealth browser session.
 
-> Note: CV-upload-first flow (upload CV -> scrape/match on it -> Resume Studio surfaces missing sections like projects/certifications) is tracked in PM.md section 3 Backlog, not here. Current behavior: CV must pre-exist in the repo (my_cv.pdf / CV_PATH).
+---
+
+## 8. Planned — Phase 2.1 (operational impact)
+
+Two items scheduled for the next 3–4 days (spec and acceptance criteria in
+`PM.md` §2.1). Both change how this thing is *operated*, so the ops-relevant
+parts are here rather than only in the product tracker.
+
+### 8a. CV-upload-first flow — handling uploaded CVs (PII)
+
+Today the CV is a file an operator places on disk (`CV_PATH` / `CV_DIR`).
+Phase 2.1a adds an upload path through the dashboard, which means the server
+starts **receiving personal data over HTTP**. Operational rules to apply when
+it lands:
+
+| Concern | Rule |
+|---|---|
+| Storage location | A dedicated upload dir (e.g. `uploads/cv/`), **gitignored** — same treatment as `my_cv.pdf` today |
+| Accepted types | PDF/DOCX only, validated by content sniffing, not just the filename extension |
+| Size cap | Enforced server-side (reject oversize before parsing, not after) |
+| Retention | Uploads are PII: define a retention/cleanup policy before enabling, and never log CV contents or parsed personal fields |
+| Auth | The upload endpoint must sit behind the same `API_TOKEN` gate as every other write route; never expose it on a non-local bind without a token (the existing bind guard already refuses this) |
+| Backups/images | Never bake an uploaded CV into a Docker image or a snapshot artifact |
+
+Operator-visible behaviour: the dashboard must always show **which CV is
+active** (uploaded vs on-disk) and offer a reset to the on-disk default.
+Ambiguity here would mean applying with the wrong CV — the one failure mode
+that actually matters in this flow.
+
+### 8b. Multi-worker cache — what will and will not be built
+
+**The problem:** the cache is per-process (see §2). `--workers 4` ⇒ four caches
+⇒ up to 4× Sheet reads and cross-worker inconsistency.
+
+**Deliberately NOT building Redis now.** Nothing in current usage (single
+operator, own dashboard) needs `--workers > 1`, and standing up a Redis
+instance is infrastructure for a scale problem this deployment does not have —
+the same reasoning that correctly deferred Celery and the Docker queue.
+
+What Phase 2.1b *does* deliver:
+
+1. A cache-backend seam in `api/cache.py` so a shared store (Redis, or a shared
+   file/SQLite) can be dropped in later without touching every accessor.
+   In-process remains the default.
+2. A **startup warning** when `--workers > 1` / `WEB_CONCURRENCY > 1` is
+   detected with the in-process backend, naming the consequence explicitly.
+   The current risk is not that multi-worker is impossible — it is that it
+   *silently* works while burning quota and serving inconsistent reads.
+
+Checklist before anyone ever raises worker count:
+
+- [ ] Shared cache backend configured and reachable
+- [ ] `/api/health` reports the active cache backend
+- [ ] Sheet read volume re-measured against quota under the new worker count
+- [ ] `POST /api/jobs/refresh` verified to invalidate across *all* workers
+
+---
+
+> Note: CV-upload-first flow is **scheduled as Phase 2.1a** — product spec and
+> acceptance criteria in `PM.md` §2.1, operational/PII rules in §8a above.
+> Current behavior until it ships: the CV must pre-exist in the repo
+> (`my_cv.pdf` / `CV_PATH`, or a folder via `CV_DIR`).

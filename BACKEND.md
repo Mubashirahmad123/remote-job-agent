@@ -71,6 +71,21 @@ were written under the old keys; a write-only fix would stay split until the
 sheet was rebuilt. Unknown board names pass through untouched, so a genuinely
 new board is never absorbed into an existing one.
 
+### Planned — Phase 2.1 (not implemented yet)
+
+- `POST /api/cv/upload` (multipart) — validate type (content-sniffed) + size,
+  parse through the existing CV chain, return the structured profile. The
+  uploaded profile becomes the active matching profile; `GET /api/cv/profile`
+  gains a field saying **which** CV is active (uploaded vs on-disk) plus a
+  reset path. Token-gated like every write route. Uploaded files are PII —
+  storage rules in `PRODUCTION.md` §8a.
+- Gap analysis reuses `cache.extract_skills` so job-side skills are
+  canonicalized identically to `/api/skills` (role nouns already purged) —
+  no second definition of "skill".
+- Cache backend seam (2.1b): the TTL store moves behind a small interface,
+  in-process stays default, and a `--workers > 1` startup warning is added.
+  Redis is explicitly **not** being added yet. See `PM.md` §2.1.
+
 ### `GET /api/skills?tab=&limit=` → `SkillsOut`
 `{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name, count, pct}]}`
 — aggregates the free-text `tech_stack` column across one job tab.

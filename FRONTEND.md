@@ -22,6 +22,25 @@ frontend/
 
 `index.html` script order matters: `api → store → components → app`.
 
+## Planned — Phase 2.1a (CV-upload-first)
+
+New UI surface, not yet built:
+
+- An upload control (PDF/DOCX) that posts to `POST /api/cv/upload` and swaps
+  the active matching profile for the session.
+- A persistent indicator of **which CV is active** (uploaded vs on-disk) with a
+  reset to default. This is the piece that must not be ambiguous — a user who
+  cannot tell which CV is live can apply with the wrong one.
+- Resume Studio gains a **gap panel**: job requirements the uploaded CV never
+  mentions ("this posting wants Kubernetes — add a project or skill line?").
+  Skills come from the same canonicalized source as the dashboard skill cloud,
+  so role nouns (`developer`, `backend`) can't show up as "missing skills".
+- Honest states apply as everywhere else: parse failure must say why; it must
+  never fall back to the on-disk CV silently while displaying the uploaded
+  filename.
+
+Spec: `PM.md` §2.1a. PII/storage rules: `PRODUCTION.md` §8a.
+
 ## Frontend E2E smoke (`tests/e2e/`)
 
 `./tests/e2e/run.sh` — boots the real FastAPI app (seeded via `SNAPSHOT_FILE`

@@ -1,5 +1,29 @@
 # CHANGELOG.md
 
+## 2026-10-03 — docs: Phase 2.1 scheduled (CV-upload-first, cache seam)
+
+Documentation only; no code change. Two backlog one-liners promoted to a
+scheduled phase, targeted ~3–4 days out.
+
+- **2.1a CV-upload-first flow** — upload PDF/DOCX from the dashboard → existing
+  parse chain → that profile becomes the active matching profile → Resume
+  Studio diffs job requirements against it and reports what the CV is missing.
+  Explicitly *not* a replacement for `CV_DIR` multi-CV best-of-N selection.
+  Flagged as the largest remaining item: upload path + parsing + Studio
+  comparison logic + new UI.
+- **2.1b Multi-worker cache** — the in-process 90s TTL cache means each uvicorn
+  worker holds its own copy: at `--workers 4`, up to 4× Sheets calls and
+  inconsistent data between workers. Deliverable is a **cache backend seam plus
+  a startup warning**, not Redis; standing up Redis now would be infrastructure
+  for a scale problem this single-user deployment does not have (same reasoning
+  that deferred Celery and the Docker queue).
+
+Recorded in `PM.md` §2.1 (spec + acceptance criteria, status table row),
+`PRODUCTION.md` §8 (ops impact, uploaded-CV PII rules, pre-flight checklist
+before raising worker count) with §2/§5 and the compose file cross-referenced,
+`ARCHITECTURE.md` §4b (design intent), `BACKEND.md` (planned endpoints),
+`FRONTEND.md` (planned UI + gap panel), `README.md` (roadmap table).
+
 ## Unreleased (2026-10-03 — source-name canonicalization: one provider, one name)
 
 Closes the `by_source` naming backlog item. The ticket named one pair; the
