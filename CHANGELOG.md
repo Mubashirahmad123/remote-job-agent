@@ -1,5 +1,44 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-03 — source-name canonicalization: one provider, one name)
+
+Closes the `by_source` naming backlog item. The ticket named one pair; the
+config had five labels collapsing onto three providers:
+
+| Board key | Actually | Why |
+|---|---|---|
+| `RemoteOKAPI` | `RemoteOK` | identical URL `remoteok.com/api` — fetched twice per run |
+| `Remojobs-Frontend/Backend/Fullstack` | `Remotive` | `remotive.com/api` with a `?search=` param |
+| `FounditIN` | `Naukri` | configured against `naukri.com/remote-developer-jobs` |
+
+Symptoms: `/api/stats` `by_source` counted one provider twice, the dashboard
+sources grid rendered duplicate cards competing for the same top-8 slots, and
+the Job Desk source dropdown offered two entries each returning half the rows.
+
+- `tools/sources.py` — explicit alias table + `canonical_source()`. No fuzzy
+  matching: an unknown board passes through unchanged, so a genuinely new board
+  can never be absorbed into an existing one (mutation-tested).
+- **Write path:** `tools.sheet_writer.prepare_job_for_sheet` — the one choke
+  point every board and parser already passes through, rather than patching the
+  22 places `agents/scrapper.py` assigns `source`.
+- **Read path:** `api.cache.get_tab_rows` — rows already in the Sheet were
+  written under the old keys, so a write-only fix would stay visibly split
+  until the sheet was rebuilt. This is what actually merges historical data.
+- `GET /api/jobs?source=` canonicalizes the query too, so an old bookmark using
+  `RemoteOKAPI` still returns the merged set instead of a half-empty page.
+- **Duplicate fetches:** `scrape_all` now skips a board whose URL was already
+  fetched this run, logging it as `skipped-duplicate`. Two HTTP round-trips plus
+  their bot-protection sleeps were being spent per run on rows the deduplicator
+  then discarded. Board entries are retained — PRODUCTION.md board-triage
+  history refers to them by name.
+- README corrected: it listed `Remojobs (×3)` and `RemoteOK` under
+  "HTML (requests+BS4)". They are API boards.
+- Tests: `tests/test_source_naming.py` (15) + 1 E2E assertion that the sources
+  grid merges aliases and `by_source` still sums to `total_jobs`.
+  Mutation-tested: dropping read-side normalization → 2 unit + 1 E2E failure;
+  dropping write-side → 1 failure; over-normalizing unknown boards → 3 failures.
+- Suites: **336 passed, 1 skipped** (pytest) and **19 passed** (E2E).
+
 ## Unreleased (2026-10-03 — frontend E2E smoke suite)
 
 `tests/e2e/` — boots the real FastAPI app (seeded through a new `SNAPSHOT_FILE`

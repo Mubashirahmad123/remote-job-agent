@@ -114,6 +114,26 @@ def _rows_to_dicts(values: List[List[str]]) -> List[Dict[str, Any]]:
     return rows
 
 
+def _normalize_sources(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Canonicalize the `source` column on rows read from the Sheet.
+
+    The write path normalizes new rows (tools.sheet_writer), but rows already
+    in the Sheet were written under board keys that alias the same provider
+    (RemoteOKAPI/RemoteOK, Remojobs-*/Remotive). Normalizing on read too is
+    what actually merges `by_source` counts, the sources grid, and the Job Desk
+    source dropdown for historical data — a write-only fix stays split until
+    the sheet is rebuilt. Unknown sources pass through untouched.
+    """
+    try:
+        from tools.sources import canonical_source
+    except Exception:
+        return rows
+    for row in rows:
+        if "source" in row:
+            row["source"] = canonical_source(row.get("source"))
+    return rows
+
+
 def get_tab_rows(tab: str, force: bool = False) -> List[Dict[str, Any]]:
     """Return cached header->dict rows for a tab (TTL-guarded).
 
@@ -140,6 +160,7 @@ def get_tab_rows(tab: str, force: bool = False) -> List[Dict[str, Any]]:
         # snapshot rows (stale Studio dropdown) for the full TTL window
         # while /api/health still reports data_source=sheets.
         rows = _local_snapshot_rows()
+    rows = _normalize_sources(rows)
     now = time.monotonic()
     with _lock:
         _tab_cache[tab] = {"at": now, "rows": rows}

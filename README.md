@@ -304,8 +304,16 @@ CV_EMBEDDINGS_PATH=cv_embeddings.pkl
 
 | Type | Sources |
 |---|---|
-| Free APIs | Remotive, RemoteOK, Arbeitnow, Himalayas, Jobicy, The Muse, Adzuna, WorkingNomads, AuthenticJobs (RSS) |
-| HTML (requests+BS4) | RemoteOK, Jobspresso, EU Remote Jobs, Arc, Lemon, FlexJobs, Remote.co, JustRemote, NoDesk, RemoteTech, GoRemote, Remote4me, DailyRemote, Remojobs (×3), RemoteFrontendJobs, FindBacon, LandingJobs, WeAreDevelopers, NoFluffJobs, JustJoinIt, CWJobs, WorkInStartups, BuiltIn, Dice, GulfTalent, Naukri, NaukriGulf, FounditIN, Shine, TimesJobs, TrueUp, RemoteRocketship, RemoteJobsCom, Remotees |
+| Free APIs | Remotive, RemoteOK, Arbeitnow, Himalayas, Jobicy, The Muse, Adzuna, WorkingNomads, DailyRemote, AuthenticJobs (RSS) |
+
+> **Source naming.** Some board keys are the same provider: `RemoteOKAPI` and
+> `RemoteOK` share one URL, `Remojobs-Frontend/Backend/Fullstack` are Remotive
+> API calls with a `?search=` param, and `FounditIN` is configured against
+> naukri.com. They are canonicalized to one name on write *and* on read
+> (`tools/sources.py`), so `by_source`, the sources grid, and the source filter
+> show one entry per provider. Duplicate URLs are fetched once per run and the
+> second board is logged as `skipped-duplicate`.
+| HTML (requests+BS4) | Jobspresso, EU Remote Jobs, Arc, Lemon, FlexJobs, Remote.co, JustRemote, NoDesk, RemoteTech, GoRemote, Remote4me, RemoteFrontendJobs, FindBacon, LandingJobs, WeAreDevelopers, NoFluffJobs, JustJoinIt, CWJobs, WorkInStartups, BuiltIn, Dice, GulfTalent, Naukri, NaukriGulf, FounditIN, Shine, TimesJobs, TrueUp, RemoteRocketship, RemoteJobsCom, Remotees |
 | Playwright stealth | WeWorkRemotely, Remote.co, Wellfound, NoDesk, YCombinator, Arc, GulfTalent, NoFluffJobs, Lemon, JustJoinIt |
 | JobSpy (opt-in, isolated) | LinkedIn, Indeed, ZipRecruiter — off unless `ENABLE_JOBSPY=true`; runs in a child process so a native `tls-client` crash only fails that board, never the run |
 | Crawl4AI | JustRemote |

@@ -54,7 +54,7 @@ Presence-only — asserts in tests that no secret substrings leak.
 |---|---|---|
 | `tab` | `ALL JOBS` | `ALL JOBS` / `TOP MATCHES` / `GOOD MATCHES`, else 400 |
 | `q` | — | substring over title + company + summary + tech_stack |
-| `source` | — | exact board match, case-insensitive |
+| `source` | — | exact board match, case-insensitive; the value is canonicalized, so `?source=RemoteOKAPI` and `?source=RemoteOK` both return the merged set |
 | `limit` / `offset` | `50` / `0` | `limit` clamped 1–500 |
 
 ### `GET /api/jobs/{fp}` → `JobOut` (404 when unknown; searches ALL JOBS first)
@@ -62,6 +62,14 @@ Presence-only — asserts in tests that no secret substrings leak.
 ### `GET /api/stats`
 `{total_jobs, tabs{…}, by_source{…}, stats_rows[], curated_jobs}` — counts from
 job tabs + raw STATS-tab rows. Never crashes (returns zeros on error).
+
+`by_source` keys are canonical (`tools/sources.py`): board keys that alias the
+same provider — `RemoteOKAPI`→`RemoteOK`, `Remojobs-*`→`Remotive`,
+`FounditIN`→`Naukri` — are merged. Normalization runs on **read** (in
+`cache.get_tab_rows`) as well as on write, because rows already in the Sheet
+were written under the old keys; a write-only fix would stay split until the
+sheet was rebuilt. Unknown board names pass through untouched, so a genuinely
+new board is never absorbed into an existing one.
 
 ### `GET /api/skills?tab=&limit=` → `SkillsOut`
 `{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name, count, pct}]}`

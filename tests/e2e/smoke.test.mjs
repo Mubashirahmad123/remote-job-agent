@@ -139,6 +139,32 @@ describe('happy path — live API', () => {
     assert.ok(!grid.textContent.includes('Loading live stats'), 'loading text must be replaced');
   });
 
+  test('sources grid merges aliased board names', async () => {
+    // The fixture carries RemoteOKAPI and Remojobs-Backend — historical labels
+    // for RemoteOK and Remotive. Both must appear merged, never as separate
+    // cards competing for the same top-8 slots.
+    const grid = await waitFor(() => {
+      const el = ctx.window.document.getElementById('sourcesGrid');
+      return el && el.querySelectorAll('.source-item-card').length ? el : null;
+    }, { label: 'source cards' });
+    const names = [...grid.querySelectorAll('.source-meta-name')].map((n) => n.textContent.trim());
+    for (const alias of ['RemoteOKAPI', 'Remojobs-Backend', 'Remojobs-Frontend', 'FounditIN']) {
+      assert.ok(!names.includes(alias), `alias "${alias}" rendered as its own source card`);
+    }
+    assert.ok(names.includes('RemoteOK'), `expected merged RemoteOK in ${JSON.stringify(names)}`);
+    assert.ok(names.includes('Remotive'), `expected merged Remotive in ${JSON.stringify(names)}`);
+    assert.equal(new Set(names).size, names.length, 'duplicate source cards rendered');
+
+    // Counts must survive the merge, not be halved or double-counted.
+    const res = await fetch(`${api.base}/api/stats`);
+    const stats = await res.json();
+    assert.equal(
+      Object.values(stats.by_source).reduce((a, b) => a + b, 0),
+      stats.total_jobs,
+      'by_source must still sum to total_jobs after alias merging',
+    );
+  });
+
   test('job cards render from /api/jobs', async () => {
     const cards = await waitFor(() => {
       const els = ctx.window.document.querySelectorAll('#jobsGridContainer .job-card');

@@ -233,9 +233,18 @@ def score_as_int(job):
         return 0
 
 def prepare_job_for_sheet(job, timestamp):
-    """Fill dashboard metadata before converting a job to a sheet row."""
+    """Fill dashboard metadata before converting a job to a sheet row.
+
+    Also canonicalizes `source`: the scraper sets it from the board key in 22
+    places, and several keys are the same provider (RemoteOKAPI/RemoteOK,
+    Remojobs-*/Remotive). Normalizing here — one choke point every board and
+    parser passes through — keeps by-source views from splitting one board in
+    two. See tools/sources.py.
+    """
+    from tools.sources import canonical_source
+
     add_job_fingerprint(job)
-    job.setdefault("source", "")
+    job["source"] = canonical_source(job.get("source", ""))
     job.setdefault("scraped_at", timestamp)
     job.setdefault("status", "new")
     return job

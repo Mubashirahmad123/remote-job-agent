@@ -1,8 +1,8 @@
 # TESTER.md — Testing Guide
 
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Suite is pytest,
-last verified 2026-10-03: **321 passed, 1 skipped** across the current test files,
-plus a **frontend E2E smoke suite: 18 passed** (`./tests/e2e/run.sh`).
+last verified 2026-10-03: **336 passed, 1 skipped** across the current test files,
+plus a **frontend E2E smoke suite: 19 passed** (`./tests/e2e/run.sh`).
 The skip is the Lever exact confirmation-copy assertion, a deliberate documented
 limitation (Lever stays fill-only; no paid trial account) — not a blocker.
 Coverage includes `test_api_phase1.py`,

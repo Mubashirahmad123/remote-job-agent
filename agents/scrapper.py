@@ -2311,7 +2311,25 @@ def scrape_all(debug=False, tracker=None):
 
     print("Starting job scraping...")
 
+    # Two board keys can point at the identical URL (RemoteOKAPI/RemoteOK and
+    # FounditIN/Naukri), which fetched the same endpoint twice per run — two
+    # HTTP round-trips plus their bot-protection sleeps, for rows the
+    # deduplicator then threw away. The entries stay in the config (board
+    # triage history references them); the second one is skipped at fetch time
+    # and recorded as such, so the run log says what happened instead of
+    # silently double-counting a provider.
+    fetched_urls = {}
+
     for name, info in MASTER_BOARDS.items():
+        board_url = (info.get("url") or "").strip()
+        if board_url and board_url in fetched_urls:
+            first = fetched_urls[board_url]
+            print(f"\n--- Processing {name} ---")
+            print(f"  Skipped: same URL already fetched as '{first}' this run")
+            tracker.scrape(name, "skipped-duplicate", 0)
+            continue
+        if board_url:
+            fetched_urls[board_url] = name
         if name in JS_RENDERED_BOARDS:
             # Handled by the PlaywrightStealth pass below — a requests attempt
             # here would only burn a 2-4s sleep for a guaranteed-empty result.
