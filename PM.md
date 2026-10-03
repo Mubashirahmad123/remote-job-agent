@@ -17,8 +17,11 @@ Living plan for the remote-job-agent build. Status last reconciled 2026-10-01.
 | 2 — Action API | scrape ✅ + status card; resume/cover-letter ✅ (Studio wired); CV profile GET+PUT ✅ + variants ✅; fill-and-review API ✅; cockpit queue connected | 🟡 in progress — submit remains gated; skills endpoint pending |
 | 3 — Polish | auto-apply telemetry wiring, E2E checks | 🟡 in progress — tracker review mapping done |
 | 4 — Free deployment | compose `api` + `caddy` (automatic Let's Encrypt via `SITE_ADDRESS`), `deploy/` (Oracle Always Free walkthrough + `setup-vm.sh` + `Caddyfile`), `auth-bootstrap.js` token-in-URL capture, tier env vars surfaced | ✅ done (2026-10-03) — code/docs complete; live VM launch is the remaining manual step (`deploy/DEPLOY_ORACLE.md`) |
+| 2 — Action API | scrape ✅ + status card; resume/cover-letter ✅ (Studio wired); CV profile GET+PUT ✅ + variants ✅; fill-and-review API ✅; cockpit queue connected; skills aggregate ✅ | ✅ endpoints complete — 2b live submit stays gated by operator decision, not by missing code |
+| 2.1 — CV-upload-first + cache seam | 2.1a upload→parse→match→gap analysis in Resume Studio; 2.1b cache backend seam + multi-worker warning | ⬜ planned, target 3–4 days from 2026-10-03 (spec in §2.1) |
+| 3 — Polish | auto-apply telemetry wiring, E2E checks | 🟡 in progress — tracker review mapping done; frontend E2E smoke landed (19 assertions, mutation-tested) |
 
-Full suite last verified 2026-10-01: **291 passed, 1 skipped** (`venv\Scripts\python.exe -m pytest tests/ -q`). The skip is the Lever exact confirmation-copy assertion, now a deliberate documented limitation (Lever submit deferred — no paid trial account; see 2b split below), not a temporary blocker. Scrape-log fixes landed the same day (curator sign format, Arbeitnow `company_name` backfill, single-loop poll guard, `scraped_at` warning ordering); details in `CHANGELOG.md` and `PRODUCTION.md` §7. Claim, intent, validation, and Greenhouse verification helpers are implemented; Greenhouse `/intent` + `/submit` routes exist, are kill-switch gated (403 while `SUBMIT_ENABLED=False`), and are tested. Lever has no submit path by design.
+Full suite last verified 2026-10-03: **336 passed, 1 skipped** (+45 since the 291 baseline: `/api/skills`, scraper parity, source naming), plus 19 frontend E2E assertions (`./tests/e2e/run.sh`) (`venv\Scripts\python.exe -m pytest tests/ -q`). The skip is the Lever exact confirmation-copy assertion, now a deliberate documented limitation (Lever submit deferred — no paid trial account; see 2b split below), not a temporary blocker. Scrape-log fixes landed the same day (curator sign format, Arbeitnow `company_name` backfill, single-loop poll guard, and the spurious `scraped_at` missing-column warning); details in `CHANGELOG.md` and `PRODUCTION.md` §7. To be unambiguous about that last one: `scraped_at` **is** populated — `prepare_job_for_sheet` (`tools/sheet_writer.py`) sets `scraped_at`/`status`/`job_fingerprint` defaults on every job before the row is built, on both write paths. The warning was false: `append_rows` validated its sample job *before* those defaults were applied, so it reported columns that the very next step filled in. The fix applies the defaults to the sample first — nothing was suppressed or merely relocated, and a genuinely missing column still warns. Score parsing is also hardened: `_safe_score` (`agents/auto_applier.py`) and the sheet-writer twin coerce `"85.0"`, `"87%"`, `""`, `None`, and bools instead of raising on `int("85.0")`; unparseable values score 0 and fall to `batch`. Covered by `tests/test_apply_submit_primitives.py` (`"85.0"`/`""`/`None`/`"95%"`). Claim, intent, validation, and Greenhouse verification helpers are implemented; Greenhouse `/intent` + `/submit` routes exist, are kill-switch gated (403 while `SUBMIT_ENABLED=False`), and are tested. Lever has no submit path by design.
 
 ## 2. Next: Phase 2 — Action API (spec)
 
@@ -31,7 +34,7 @@ Goal: dashboard buttons do real work, behind the existing safety gates.
 | `POST /api/resume/{fp}` | `resume_generator` 1-page tailor → serve PDF path/bytes | Resume Studio replaces static demo | ✅ done |
 | `POST /api/cover-letter/{fp}` | `gemini_tools` role-aware letter → serve text/PDF | same package card | ✅ done |
 | `PUT /api/cv/profile` | `cache.save_cv_profile` merges Studio edits into on-disk cache | profile Edit/Save panel | ✅ done |
-| `GET /api/skills` | aggregate `tech_stack` over ALL JOBS | replaces `MOCK_SKILLS` cloud | ⬜ next |
+| `GET /api/skills` | aggregate `tech_stack` over a job tab (alias-canonicalized, count-per-job, `pct` of stack-bearing rows) | live skill cloud; `MOCK_SKILLS` path removed | ✅ done 2026-10-03 |
 
 Conventions (from BACKEND.md §6 / existing patterns): schema → `cache.py`
 accessor (lazy imports, never crash) → `routers/<group>.py` → tests in
@@ -91,19 +94,131 @@ open until its application tab closes (maximum 30 minutes), and the review fill
 carries the final tailored materials. The legacy CLI blind submit is permanently
 removed, so there is no unverified submit path left anywhere.
 
+## 2.1 Phase 2.1 — planned (target: 3–4 days from 2026-10-03)
+
+Two items promoted off the backlog into scheduled work. They are unrelated in
+scope — one is a user-facing feature, one is infrastructure — and are sized very
+differently. Do them in that order; the feature is the one with actual user
+value.
+
+### 2.1a CV-upload-first flow (the substantial one)
+
+**Today:** the CV is a fixed file on disk (`my_cv.pdf` / `CV_PATH`, or a folder
+via `CV_DIR`). Everything downstream — scrape relevance, matching, scoring,
+Resume Studio — runs against whatever file happens to be there. Changing CV
+means replacing the file and restarting.
+
+**Phase 2.1a flips the order:** the CV becomes the *starting point of a
+session*. Upload through the dashboard, and everything downstream uses that
+profile from then on.
+
+What it concretely delivers:
+
+1. **Upload control in the dashboard** — PDF/DOCX in, parsed through the CV
+   parsing chain that already exists for `CV_PATH`/`CV_DIR`, into the same
+   structured profile shape. No new parser.
+2. **The parsed profile becomes the active matching profile** for the session —
+   jobs score against *this* CV, not the on-disk default.
+3. **Resume Studio surfaces gaps** — this is the genuinely new capability, not
+   just a new entry point. Studio tailors an existing profile per job today;
+   this adds a comparison: *"this posting wants Kubernetes, your CV never
+   mentions it — add a project or skill line?"* It diffs what the job asks for
+   against what the uploaded CV actually contains.
+
+Why it's worth building (the two real workflows):
+
+- **Try a CV variant** — backend-focused vs fullstack — without touching the
+  `CV_DIR` layout or restarting the server; upload and watch scoring change.
+- **Iterate on the CV itself** — upload a draft, see which *real* postings it's
+  weak against, add the line Studio flagged, re-upload, measure the
+  improvement. That is a different workflow from "tailor a resume from a CV I
+  already finalized": it uses live job data to tell you what the CV is missing.
+
+What it is **not**: a replacement for the `CV_DIR` multi-CV selection (choosing
+the best of several CVs per job). That exists and works. This is about the
+first CV entering the system interactively, with feedback.
+
+Scope honesty: this touches the upload path, the parsing pipeline, Studio's
+comparison logic, and new UI. It is not an afternoon's work like the
+`by_source` fix — it is the largest remaining item by a distance. Build it
+properly or not at all.
+
+Acceptance criteria:
+
+- [ ] `POST /api/cv/upload` (multipart) — validates type + size, parses via the
+      existing chain, returns the structured profile; rejects unparseable files
+      with a stated reason rather than a silent empty profile.
+- [ ] Uploaded profile is what `/api/jobs` scoring and Resume Studio read, and
+      `/api/cv/profile` reports which CV is active (uploaded vs on-disk) so the
+      UI can never imply the wrong one is in use.
+- [ ] Gap analysis: job `tech_stack` (canonicalized via the same
+      `cache.extract_skills` path, so it benefits from the role-noun purge)
+      diffed against CV skills → explicit missing list surfaced in Studio.
+- [ ] Clear reset path back to the on-disk CV; the active CV is visible at all
+      times (no silent state).
+- [ ] Uploaded CVs are PII — see PRODUCTION.md §8 for storage/retention rules.
+      Never committed; `.gitignore` covers the upload dir.
+- [ ] Tests: upload happy path, rejected file types, oversize, unparseable,
+      profile switching, gap-diff correctness. Plus an E2E assertion that the
+      dashboard shows which CV is active.
+
+### 2.1b Multi-worker cache (small, and only if we ever need it)
+
+**What it is:** the API holds the Sheet cache (90s TTL) in process memory. With
+`--workers 1` — what PRODUCTION.md tells you to run — that is correct and
+efficient. Start it with `--workers 4` and you get four processes each holding
+its **own** copy: up to 4× the Google Sheets calls (quota risk), and two users
+hitting the dashboard in the same moment can see **different data** depending
+on which worker answers.
+
+**The fix** is moving the cache out of process memory into something shared —
+Redis, or a shared file/SQLite — so all workers read and write one cache.
+
+**Do we need it? Almost certainly not right now.** It only matters at
+`--workers > 1`, and nothing about current usage (one person, their own
+dashboard) requires that. This is a flag for *if* this is ever deployed for
+multiple simultaneous users — the same "don't build infrastructure for a scale
+problem you don't have" reasoning that correctly deferred Celery and the
+Docker queue items.
+
+So the Phase 2.1 deliverable is deliberately **not** "add Redis". It is:
+
+- [ ] A cache backend seam in `api/cache.py` (the TTL store behind a small
+      interface) so a shared backend can be dropped in without touching every
+      accessor. In-process stays the default.
+- [ ] A startup guard: if `--workers > 1` (or `WEB_CONCURRENCY > 1`) is
+      detected with the in-process backend, log a loud warning naming the
+      consequence (duplicate Sheet reads, cross-worker inconsistency). Failing
+      silently into 4× quota burn is the actual risk.
+- [ ] Documented in PRODUCTION.md §8 — including that Redis is intentionally
+      *not* added until someone needs multi-worker.
+
+Explicit non-goal: standing up Redis now. If that changes, the seam makes it a
+contained change rather than a refactor.
+
 ## 3. Backlog
 
-- CV-upload-first flow (from operator notes): let the user upload their CV
-  first, scrape/match on that basis, and have Resume Studio surface CV
+- **CV-upload-first flow → promoted to Phase 2.1a** (see §2.1; spec, scope and
+  acceptance criteria live there). Originally from operator notes: upload the
+  CV first, scrape/match on that basis, and have Resume Studio surface CV
   sections not yet added (projects, certifications).
 - `POST /api/apply/{fp}/intent` and `/submit` are Greenhouse-only and implemented; Lever submit will not be built (fill-only indefinitely). UI toggle unlock stays a separate decision after review.
 - **Field-drift guard gap (known limitation, narrowed 2026-10-01):** `_run_greenhouse_submit` refills in a fresh page and the metadata-change guard compares only `confirmation_path/message` + requires `filled_ready`. The refill now verifies typed-field readback (`verified`/`repaired`), minimum profile (name + email), and attachment proof, and the artifact stores `field_verification` + `profile_fields_verified` — so a same-shape posting change that drops/renames fields fails closed instead of passing silently. What remains is pure field-shape drift that keeps identical confirmation metadata *and* still fills cleanly. Accepted risk for supervised single runs with human screenshot review; unattended/high-volume submit use must wait for a field-snapshot diff fix. Any future toggle unlock carries this caveat.
-- `GET /api/skills` aggregate → replace `MOCK_SKILLS` cloud.
 - Kanban `review` column is now backed by fill-only/package statuses (`filled_ready`, `needs_review`, `package_only`, `custom_questions`, …) mapped in `tracker.js` — done 2026-10-01. Remaining: tracker E2E coverage.
-- `by_source` naming (`RemoteOK` vs `RemoteOKAPI`) — normalize at write or read.
-- Multi-worker cache: in-process TTL means `--workers 1`; shared cache (Redis/file)
-  if workers ever needed.
-- Frontend E2E smoke (Playwright) against TestClient-seeded API.
+- ~~`by_source` naming (`RemoteOK` vs `RemoteOKAPI`)~~ — **done 2026-10-03**:
+  canonicalized at write *and* read (`tools/sources.py`). Scope was wider than
+  the ticket: `Remojobs-Frontend/Backend/Fullstack` are Remotive API calls and
+  `FounditIN` is configured against naukri.com, so five labels collapsed to
+  three providers. Duplicate URLs now fetch once per run
+  (`skipped-duplicate`). 15 tests + 1 E2E assertion, mutation-tested.
+- **Multi-worker cache → promoted to Phase 2.1b** (see §2.1). In-process TTL
+  means `--workers 1`; the Phase 2.1 deliverable is a backend seam + a loud
+  startup warning, *not* standing up Redis. Only matters if this is ever
+  deployed for multiple simultaneous users.
+- ~~Frontend E2E smoke against a seeded API~~ — **done 2026-10-03**: `tests/e2e/`
+  (jsdom + real uvicorn, 18 assertions, mutation-tested against 5 real past
+  regressions). Playwright/real-browser coverage (CSS, layout, input events)
+  remains open — the browser CDN is unreachable from the build sandbox.
 - 2b submit stays kill-switched and the UI toggle stays disabled; submit is
   reachable only via the authenticated Greenhouse pair (Lever has no submit path).
 

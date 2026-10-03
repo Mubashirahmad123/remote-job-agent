@@ -823,8 +823,9 @@
   </div>
 
   <!-- Component-Wise Modular JavaScript Files -->
-  <script src="js/data/mockData.js"></script>
-  <script src="js/auth-bootstrap.js"></script>
+  <!-- js/data/mockData.js removed 2026-10-03: the file was never in the repo,
+       so every JobAgent.MOCK_* global was undefined and every "mock fallback"
+       branch was dead code. Empty/error states are rendered honestly instead. -->
   <script src="js/api.js"></script>
   <script src="js/store.js"></script>
   <script src="js/escape.js"></script>

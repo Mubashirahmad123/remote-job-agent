@@ -28,6 +28,7 @@ api/
     health.py       GET /api/health
     jobs.py         GET /api/jobs, GET /api/jobs/{job_fingerprint}
     stats.py        GET /api/stats
+    skills.py       GET /api/skills (tech_stack demand aggregate)
     tracker.py      GET /api/tracker, POST /api/tracker, PATCH /api/tracker/{job_fingerprint}
     system.py       POST /api/jobs/refresh
     runs.py         POST /api/scrape, GET /api/scrape[/{run_id}] (registry: api/runs.py)
@@ -53,7 +54,7 @@ Presence-only — asserts in tests that no secret substrings leak.
 |---|---|---|
 | `tab` | `ALL JOBS` | `ALL JOBS` / `TOP MATCHES` / `GOOD MATCHES`, else 400 |
 | `q` | — | substring over title + company + summary + tech_stack |
-| `source` | — | exact board match, case-insensitive |
+| `source` | — | exact board match, case-insensitive; the value is canonicalized, so `?source=RemoteOKAPI` and `?source=RemoteOK` both return the merged set |
 | `limit` / `offset` | `50` / `0` | `limit` clamped 1–500 |
 
 ### `GET /api/jobs/{fp}` → `JobOut` (404 when unknown; searches ALL JOBS first)
@@ -61,6 +62,63 @@ Presence-only — asserts in tests that no secret substrings leak.
 ### `GET /api/stats`
 `{total_jobs, tabs{…}, by_source{…}, stats_rows[], curated_jobs}` — counts from
 job tabs + raw STATS-tab rows. Never crashes (returns zeros on error).
+
+`by_source` keys are canonical (`tools/sources.py`): board keys that alias the
+same provider — `RemoteOKAPI`→`RemoteOK`, `Remojobs-*`→`Remotive`,
+`FounditIN`→`Naukri` — are merged. Normalization runs on **read** (in
+`cache.get_tab_rows`) as well as on write, because rows already in the Sheet
+were written under the old keys; a write-only fix would stay split until the
+sheet was rebuilt. Unknown board names pass through untouched, so a genuinely
+new board is never absorbed into an existing one.
+
+### Planned — Phase 2.1 (not implemented yet)
+
+- `POST /api/cv/upload` (multipart) — validate type (content-sniffed) + size,
+  parse through the existing CV chain, return the structured profile. The
+  uploaded profile becomes the active matching profile; `GET /api/cv/profile`
+  gains a field saying **which** CV is active (uploaded vs on-disk) plus a
+  reset path. Token-gated like every write route. Uploaded files are PII —
+  storage rules in `PRODUCTION.md` §8a.
+- Gap analysis reuses `cache.extract_skills` so job-side skills are
+  canonicalized identically to `/api/skills` (role nouns already purged) —
+  no second definition of "skill".
+- Cache backend seam (2.1b): the TTL store moves behind a small interface,
+  in-process stays default, and a `--workers > 1` startup warning is added.
+  Redis is explicitly **not** being added yet. See `PM.md` §2.1.
+
+### `GET /api/skills?tab=&limit=` → `SkillsOut`
+`{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name, count, pct}]}`
+— aggregates the free-text `tech_stack` column across one job tab.
+
+| Param | Default | Notes |
+|---|---|---|
+| `tab` | `ALL JOBS` | must be a job tab (`ALL JOBS`/`TOP MATCHES`/`GOOD MATCHES`); `APPLIED`/`STATS` → 400 |
+| `limit` | `12` | clamped 1–100; caps the returned list only, `unique_skills` still reports the full total |
+
+Aggregation rules (`cache.extract_skills` / `cache.get_skills_snapshot`):
+- Splits on `, ; |` newline and bullets — **not** on `/`, so `CI/CD` and
+  `TCP/IP` survive intact.
+- Canonicalizes aliases before counting (`js`/`JS`/`javascript` → `JavaScript`,
+  `node`/`nodejs`/`Node.js` → `Node.js`, `k8s` → `Kubernetes`, `postgres` →
+  `PostgreSQL`). Without this the cloud showed the same skill three times,
+  because scraper regex joins, Gemini enrichment, and manual rows all write
+  the column differently.
+- Drops noise: stopwords (`n/a`, `various`, `remote`), tokens with no letters
+  (`5+`), >3-word prose, >32-char tokens.
+- Drops ROLE nouns (`developer`, `engineer`, `software`, `web`, `backend`,
+  `front-end`, `full-stack`). These are not stray text: `TECH_FILTER` emits
+  them into `tech_stack` on nearly every row because the same regex also gates
+  "is this a dev job". Left in, they outrank every real technology. Role is
+  derived separately (`store.js _deriveRole`).
+- Folds hyphen/underscore to space, so `Back-end`/`back end`/`BACKEND` are one
+  key rather than three pills.
+- Counts each skill **once per job**, so a cell listing `Python, python`
+  contributes 1.
+- `pct` = share of `jobs_with_stack`, not `total_jobs` — rows with an empty
+  stack would otherwise deflate every percentage.
+- Sort is count desc, then name asc, so identical reads return identical order.
+- Never crashes: a Sheets failure returns the zeroed shape, same contract as
+  `/api/stats`.
 
 ### `GET /api/tracker?status=` → `TrackerEntry[]` (optional exact status filter)
 Supports both APPLIED header shapes: the compact tracker CLI header and the

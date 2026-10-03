@@ -22,6 +22,7 @@ What this NEVER does (by construction, not by flag):
   - never reads AUTO_APPLY_CONFIRM — env cannot re-enable or bypass submit over HTTP.
 """
 
+import json
 import hashlib
 from typing import Any, Dict
 from queue import Queue
@@ -333,7 +334,7 @@ def create_greenhouse_intent(job_fingerprint: str) -> Dict[str, str]:
     from api.apply_intents import ActiveIntentConflict, create_intent, live_intent_retry_after
     from api.apply_state import connect, get_review_artifact
 
-    if not safety.SUBMIT_ENABLED:
+    if not safety.submit_enabled():
         raise SubmitRejected(403, "Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
     job = _get_cached_job(job_fingerprint)
     if detect_ats_platform(job.get("apply_url", "")) != "greenhouse":
@@ -378,8 +379,57 @@ def create_greenhouse_intent(job_fingerprint: str) -> Dict[str, str]:
     return {"intent_token": token, "expires_at": result["expires_at"]}
 
 
-def _run_greenhouse_submit(artifact: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
-    """Submit once in a fresh page after filling; report whether click was attempted."""
+def _submit_run_dir(job_fingerprint: str) -> Path:
+    """Per-run artifact directory for a submit/dry-run attempt.
+
+    Everything observed during a live run lands here (trace, video, HAR,
+    post-click DOM, screenshots). The whole point of the one supervised live
+    run is the evidence it produces; a run that verifies nothing and keeps
+    nothing teaches nothing.
+    """
+    base = Path(os.getenv("SUBMIT_ARTIFACT_DIR") or "data/submit_runs")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_dir = base / f"{stamp}-{job_fingerprint[:12]}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
+def _detect_bot_protection(page) -> Dict[str, Any]:
+    """Report captcha/bot-protection widgets present on the form page.
+
+    Diagnostic only — never a gate. Greenhouse's hosted boards (including
+    their own `example` demo board) render a reCAPTCHA next to the submit
+    button, and an automated click may be scored/blocked by it. That outcome
+    is a finding, not a crash, so it must be recorded rather than inferred
+    afterwards from a generic failure.
+    """
+    found = []
+    for label, selector in (
+        ("recaptcha", "iframe[src*='recaptcha'], .g-recaptcha, [data-sitekey]"),
+        ("hcaptcha", "iframe[src*='hcaptcha'], .h-captcha"),
+        ("turnstile", "iframe[src*='challenges.cloudflare.com'], .cf-turnstile"),
+    ):
+        try:
+            if page.locator(selector).count() > 0:
+                found.append(label)
+        except Exception:
+            continue
+    return {"present": bool(found), "kinds": found}
+
+
+def _run_greenhouse_submit(
+    artifact: Dict[str, Any],
+    job: Dict[str, Any],
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Run the submit path once; click only when `dry_run` is False.
+
+    In dry-run mode every real step still happens — navigation, fill, field
+    readback, the minimum-profile gate, the attachment gate, the confirmation
+    metadata comparison, and locating the submit button — and the function
+    returns immediately before `.click()`. `clicked` stays False, so no
+    caller can mistake a rehearsal for a submission.
+    """
     from agents.auto_applier import (
         APPLICANT_EMAIL,
         APPLICANT_LINKEDIN,
@@ -391,7 +441,13 @@ def _run_greenhouse_submit(artifact: Dict[str, Any], job: Dict[str, Any]) -> Dic
     )
     from api.apply_verification import verify_greenhouse_confirmation
 
-    result: Dict[str, Any] = {"clicked": False, "verified": False, "error": None}
+    result: Dict[str, Any] = {
+        "clicked": False,
+        "verified": False,
+        "error": None,
+        "dry_run": bool(dry_run),
+        "would_click": False,
+    }
     sync_playwright = _get_playwright()
     if sync_playwright is None:
         result["error"] = "Playwright is not installed"
@@ -404,11 +460,28 @@ def _run_greenhouse_submit(artifact: Dict[str, Any], job: Dict[str, Any]) -> Dic
         "linkedin": APPLICANT_LINKEDIN,
         "portfolio": APPLICANT_PORTFOLIO,
     }
+    run_dir = _submit_run_dir(str(job.get("job_fingerprint") or artifact.get("job_fingerprint") or "unknown"))
+    result["run_dir"] = str(run_dir)
+    # Default headless so unattended paths stay unattended; the supervised
+    # live run sets SUBMIT_HEADLESS=false so the operator watches it happen.
+    headless = (os.getenv("SUBMIT_HEADLESS") or "true").strip().lower() not in {"0", "false", "no", "off"}
     browser = None
+    context = None
+    tracing = False
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            browser = playwright.chromium.launch(headless=headless)
+            context = browser.new_context(
+                viewport={"width": 1280, "height": 900},
+                record_video_dir=str(run_dir / "video"),
+                record_har_path=str(run_dir / "network.har"),
+            )
+            try:
+                context.tracing.start(screenshots=True, snapshots=True, sources=False)
+                tracing = True
+            except Exception:
+                tracing = False
+            page = context.new_page()
             fill_result = _fill_greenhouse_form(
                 page,
                 artifact["apply_url"],
@@ -417,6 +490,12 @@ def _run_greenhouse_submit(artifact: Dict[str, Any], job: Dict[str, Any]) -> Dic
                 profile,
             )
             result["screenshot_path"] = fill_result.get("screenshot_path")
+            result["bot_protection"] = _detect_bot_protection(page)
+            result["fill_status"] = fill_result.get("status")
+            result["field_verification"] = fill_result.get("field_verification")
+            result["profile_fields_verified"] = sorted(fill_result.get("profile_fields_verified") or [])
+            result["confirmation_path_seen"] = fill_result.get("confirmation_path")
+            result["confirmation_message_seen"] = fill_result.get("confirmation_message")
             if fill_result.get("status") != "filled_ready":
                 result["error"] = fill_result.get("error") or fill_result.get("status")
                 return result
@@ -477,6 +556,18 @@ def _run_greenhouse_submit(artifact: Dict[str, Any], job: Dict[str, Any]) -> Dic
                 result["error"] = "Greenhouse submit button was not found"
                 return result
 
+            result["would_click"] = True
+            if dry_run:
+                # Every gate above has passed and the submit control exists.
+                # Stop here: this is the whole purpose of dry run. `clicked`
+                # remains False and no confirmation is claimed.
+                try:
+                    page.screenshot(path=str(run_dir / "dry_run_pre_click.png"), full_page=True)
+                    (run_dir / "pre_click.html").write_text(page.content(), encoding="utf-8")
+                except Exception:
+                    pass
+                return result
+
             result["clicked"] = True
             submit_button.click(timeout=15000)
             confirmation_path = artifact["confirmation_path"]
@@ -488,6 +579,22 @@ def _run_greenhouse_submit(artifact: Dict[str, Any], job: Dict[str, Any]) -> Dic
                 )
             except Exception:
                 pass
+            # Capture the post-click page BEFORE judging it. If verification
+            # fails we need the actual DOM to tell apart "Greenhouse accepted
+            # it and our expected copy was wrong" (false negative — they have
+            # the application) from "an inline validation error blocked it"
+            # (truly not submitted). Without this artifact a failed live run
+            # costs a real application and yields no diagnosis.
+            try:
+                result["post_click_url"] = page.url
+                (run_dir / "post_click.html").write_text(page.content(), encoding="utf-8")
+                (run_dir / "post_click.txt").write_text(
+                    page.locator("body").inner_text(), encoding="utf-8"
+                )
+                page.screenshot(path=str(run_dir / "post_click.png"), full_page=True)
+            except Exception as capture_error:
+                result["capture_error"] = str(capture_error)
+
             result["verified"] = verify_greenhouse_confirmation(
                 page,
                 confirmation_path=confirmation_path,
@@ -498,11 +605,27 @@ def _run_greenhouse_submit(artifact: Dict[str, Any], job: Dict[str, Any]) -> Dic
     except Exception as error:
         result["error"] = str(error)
     finally:
+        if context is not None:
+            if tracing:
+                try:
+                    context.tracing.stop(path=str(run_dir / "trace.zip"))
+                except Exception:
+                    pass
+            try:
+                context.close()  # flushes video + HAR to disk
+            except Exception:
+                pass
         if browser is not None:
             try:
                 browser.close()
             except Exception:
                 pass
+        try:
+            (run_dir / "attempt.json").write_text(
+                json.dumps(result, indent=2, default=str), encoding="utf-8"
+            )
+        except Exception:
+            pass
     return result
 
 
@@ -527,7 +650,7 @@ def submit_greenhouse(
     from api.apply_state import connect, get_review_artifact
     from api.apply_validation import validate_confirmation_echo, validate_submit_inputs
 
-    if not safety.SUBMIT_ENABLED:
+    if not safety.submit_enabled():
         raise SubmitRejected(403, "Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
     job = _get_cached_job(path_fingerprint)
     if detect_ats_platform(job.get("apply_url", "")) != "greenhouse":
@@ -579,6 +702,30 @@ def submit_greenhouse(
         or not (artifact.get("cover_letter_text") or "").strip()
     ):
         raise SubmitRejected(410, "Submit materials are missing — request a fresh intent")
+
+    # --- Dry run: stop here, before anything is claimed or consumed. ---
+    # Placed after every validation gate (so the rehearsal proves the same
+    # preconditions a real submit must satisfy) but before claim_first, so a
+    # dry run never burns the intent, never occupies the unique claim, and
+    # never counts against the daily cap. Rehearsals must be repeatable.
+    if safety.submit_dry_run():
+        attempt = _run_greenhouse_submit(artifact, job, dry_run=True)
+        if attempt.get("clicked"):  # pragma: no cover - defensive invariant
+            raise SubmitRejected(500, "Dry run reported a click; refusing to continue")
+        return {
+            "status": "dry_run",
+            "job_fingerprint": path_fingerprint,
+            "verification": "none_dry_run",
+            "would_click": bool(attempt.get("would_click")),
+            "blocked_at": None if attempt.get("would_click") else (attempt.get("error") or "unknown"),
+            "bot_protection": attempt.get("bot_protection"),
+            "field_verification": attempt.get("field_verification"),
+            "profile_fields_verified": attempt.get("profile_fields_verified"),
+            "expected_confirmation_path": artifact.get("confirmation_path"),
+            "expected_confirmation_message": artifact.get("confirmation_message"),
+            "run_dir": attempt.get("run_dir"),
+            "error": attempt.get("error"),
+        }
 
     import agents.auto_applier as auto_applier
 

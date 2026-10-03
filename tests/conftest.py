@@ -17,3 +17,24 @@ import pytest
 def _clear_api_tokens(monkeypatch):
     monkeypatch.delenv("API_TOKEN", raising=False)
     monkeypatch.delenv("APPLY_API_TOKEN", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _disarm_submit_env(monkeypatch):
+    """Never inherit an armed submit switch from the developer's shell/.env.
+
+    `api.safety.submit_enabled()` honours SUBMIT_ENABLED / SUBMIT_DRY_RUN so a
+    live run can be armed for one process without editing tracked code. That
+    means a leftover `SUBMIT_ENABLED=true` would otherwise silently turn every
+    "must fail closed with 403" assertion into a false pass — the exact class
+    of bug these tests exist to catch. Tests that want the path open set the
+    constants explicitly via monkeypatch.
+    """
+    monkeypatch.delenv("SUBMIT_ENABLED", raising=False)
+    monkeypatch.delenv("SUBMIT_DRY_RUN", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_submit_artifacts(monkeypatch, tmp_path):
+    """Keep submit/dry-run evidence dirs out of the repo during tests."""
+    monkeypatch.setenv("SUBMIT_ARTIFACT_DIR", str(tmp_path / "submit_runs"))

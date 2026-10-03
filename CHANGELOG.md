@@ -23,6 +23,256 @@
 - Docs synced: README (features, env vars, tree, Docker quick start), 
   PRODUCTION.md (§3 stack, §4 vars, §5 HTTPS, §7 rows), ARCHITECTURE.md,
   FRONTEND.md, AGENTS.md.
+## 2026-10-03 — feat(safety): three-state submit switch + dry-run rehearsal (Stage 0/1)
+
+The submit path could previously only be exercised two ways: not at all, or
+by sending a real application to a real employer. That made every rehearsal
+expensive, so none happened, so the first execution would also have been the
+first test. Fixed.
+
+- `api/safety.py` — `submit_enabled()` / `submit_dry_run()` / `submit_mode()`
+  replace direct constant reads. Three states: `disarmed` (default, 403),
+  `dry_run`, `armed`. `SUBMIT_ENABLED = False` stays in git; env can arm a
+  single process so a live run needs no tracked code edit. `SUBMIT_DRY_RUN`
+  alone can never open the path.
+- `api/apply.py` — `_run_greenhouse_submit(dry_run=True)` runs the whole real
+  path (navigate, fill, field readback, minimum-profile gate, attachment
+  gate, confirmation-metadata comparison, submit-button lookup) and returns
+  before `.click()`. `submit_greenhouse` branches to dry run **before**
+  `claim_first`, so rehearsals never consume the intent, take the claim, or
+  spend the daily cap.
+- Instrumentation for the one run that counts: `SUBMIT_HEADLESS` (watch it),
+  Playwright trace + video + HAR, and **unconditional post-click DOM capture
+  before verification is judged** — so a 422 can be diagnosed as "Greenhouse
+  accepted it and our expected copy was wrong" (false negative) versus "an
+  inline validation error blocked it". Evidence: `data/submit_runs/<run>/`.
+- `tools/submit_recon.py` — read-only scanner: confirmation metadata
+  discoverability (if absent, `/intent` 502s and a live test is impossible),
+  required fields vs. what the filler handles, captcha, submit control.
+- `tools/seed_demo_job.py` — seeds Greenhouse's **own demo posting**
+  (`job-boards.greenhouse.io/example/jobs/83446`, Democorp "Full Stack
+  Engineer", fp `94bcd024022152dc3d0d3280d778c1dd`) so the rehearsal involves
+  no real employer.
+- `LIVE_SUBMIT.md` — supervised runbook with the operator screenshot gate and
+  an outcome table. Records the verified finding that the demo form is
+  **reCAPTCHA-protected**, and states plainly that a captcha block is a
+  legitimate result to accept, not something to evade.
+- Tests: +43 (`tests/test_submit_dryrun.py` 27, `tests/test_submit_recon.py`
+  16) → **379 passed, 1 skipped**. Two are source-ordering guards, because
+  "the click is unreachable in dry run" and "nothing mutates before the
+  dry-run return" are ordering properties a refactor breaks silently.
+  Mutations: removing the dry-run stop → 4 fails; letting `SUBMIT_DRY_RUN`
+  open the path → 3; dry run falling through to claim/click → 2.
+- `tests/conftest.py` scrubs `SUBMIT_ENABLED` / `SUBMIT_DRY_RUN` from every
+  test process, so a developer's armed `.env` cannot turn a "must 403"
+  assertion into a false pass.
+
+`SUBMIT_ENABLED` remains `False`. No live submission has been performed.
+
+## 2026-10-03 — docs: Phase 2.1 scheduled (CV-upload-first, cache seam)
+
+Documentation only; no code change. Two backlog one-liners promoted to a
+scheduled phase, targeted ~3–4 days out.
+
+- **2.1a CV-upload-first flow** — upload PDF/DOCX from the dashboard → existing
+  parse chain → that profile becomes the active matching profile → Resume
+  Studio diffs job requirements against it and reports what the CV is missing.
+  Explicitly *not* a replacement for `CV_DIR` multi-CV best-of-N selection.
+  Flagged as the largest remaining item: upload path + parsing + Studio
+  comparison logic + new UI.
+- **2.1b Multi-worker cache** — the in-process 90s TTL cache means each uvicorn
+  worker holds its own copy: at `--workers 4`, up to 4× Sheets calls and
+  inconsistent data between workers. Deliverable is a **cache backend seam plus
+  a startup warning**, not Redis; standing up Redis now would be infrastructure
+  for a scale problem this single-user deployment does not have (same reasoning
+  that deferred Celery and the Docker queue).
+
+Recorded in `PM.md` §2.1 (spec + acceptance criteria, status table row),
+`PRODUCTION.md` §8 (ops impact, uploaded-CV PII rules, pre-flight checklist
+before raising worker count) with §2/§5 and the compose file cross-referenced,
+`ARCHITECTURE.md` §4b (design intent), `BACKEND.md` (planned endpoints),
+`FRONTEND.md` (planned UI + gap panel), `README.md` (roadmap table).
+
+## Unreleased (2026-10-03 — source-name canonicalization: one provider, one name)
+
+Closes the `by_source` naming backlog item. The ticket named one pair; the
+config had five labels collapsing onto three providers:
+
+| Board key | Actually | Why |
+|---|---|---|
+| `RemoteOKAPI` | `RemoteOK` | identical URL `remoteok.com/api` — fetched twice per run |
+| `Remojobs-Frontend/Backend/Fullstack` | `Remotive` | `remotive.com/api` with a `?search=` param |
+| `FounditIN` | `Naukri` | configured against `naukri.com/remote-developer-jobs` |
+
+Symptoms: `/api/stats` `by_source` counted one provider twice, the dashboard
+sources grid rendered duplicate cards competing for the same top-8 slots, and
+the Job Desk source dropdown offered two entries each returning half the rows.
+
+- `tools/sources.py` — explicit alias table + `canonical_source()`. No fuzzy
+  matching: an unknown board passes through unchanged, so a genuinely new board
+  can never be absorbed into an existing one (mutation-tested).
+- **Write path:** `tools.sheet_writer.prepare_job_for_sheet` — the one choke
+  point every board and parser already passes through, rather than patching the
+  22 places `agents/scrapper.py` assigns `source`.
+- **Read path:** `api.cache.get_tab_rows` — rows already in the Sheet were
+  written under the old keys, so a write-only fix would stay visibly split
+  until the sheet was rebuilt. This is what actually merges historical data.
+- `GET /api/jobs?source=` canonicalizes the query too, so an old bookmark using
+  `RemoteOKAPI` still returns the merged set instead of a half-empty page.
+- **Duplicate fetches:** `scrape_all` now skips a board whose URL was already
+  fetched this run, logging it as `skipped-duplicate`. Two HTTP round-trips plus
+  their bot-protection sleeps were being spent per run on rows the deduplicator
+  then discarded. Board entries are retained — PRODUCTION.md board-triage
+  history refers to them by name.
+- README corrected: it listed `Remojobs (×3)` and `RemoteOK` under
+  "HTML (requests+BS4)". They are API boards.
+- Tests: `tests/test_source_naming.py` (15) + 1 E2E assertion that the sources
+  grid merges aliases and `by_source` still sums to `total_jobs`.
+  Mutation-tested: dropping read-side normalization → 2 unit + 1 E2E failure;
+  dropping write-side → 1 failure; over-normalizing unknown boards → 3 failures.
+- Suites: **336 passed, 1 skipped** (pytest) and **19 passed** (E2E).
+
+## Unreleased (2026-10-03 — frontend E2E smoke suite)
+
+`tests/e2e/` — boots the real FastAPI app (seeded through a new `SNAPSHOT_FILE`
+env override, so nothing is written into the project root) and loads the real
+`index.html` + real `js/*` in jsdom over HTTP. 18 assertions: asset integrity,
+happy path, API-unreachable. `./tests/e2e/run.sh`.
+
+- Targets the failure mode the pytest suite structurally cannot see: a
+  `<script>` that 404s, a guard on an undefined global, an unreachable error
+  state, a widget that renders empty in every environment. All four shipped in
+  this repo and none of them crashed.
+- **Mutation-tested.** Each real past bug was reintroduced to confirm the suite
+  fails: mockData.js 404 → 4 failures; dead `MOCK_SOURCES` guard → 2; role nouns
+  in the skill cloud → 2; skill cloud guarded on an undefined global → 3; store
+  swallowing the `/api/skills` error → 2.
+- Two of those initially passed under mutation and required real fixes to the
+  suite: the role-noun case needed a fixture row in the *pre-fix* producer
+  format (`"back-end, Engineer, Developer, developer, Back-end"` — rows written
+  by the old parser still exist in the Sheet), and the swallowed-error case
+  needed an assertion that the cause reaches the DOM rather than just the word
+  "unavailable".
+- Fixture `tech_stack` values are real `top_techs()` output over verbatim live
+  Remotive/WeWorkRemotely copy, not invented stacks.
+- `cache._snapshot_paths()` adds the `SNAPSHOT_FILE` override (also useful for
+  pointing ops at an archived scrape).
+- Known gap, stated rather than papered over: no real browser. `playwright
+  install chromium` cannot reach the browser CDN from this sandbox, so CSS,
+  layout, visual regressions and real input events are uncovered. jsdom runs the
+  same JS against the same API; it is not a substitute for a browser.
+- Python suite unchanged: **321 passed, 1 skipped**. E2E: **18 passed**.
+
+## Unreleased (2026-10-03 — skills aggregate verified against REAL board text; two real bugs)
+
+The first `/api/skills` corpus was hand-written, so it tested text that looks
+like `tech_stack` rather than what the pipeline actually writes. Re-checked
+against verbatim copy pulled from live Remotive + WeWorkRemotely postings. It
+failed, for reasons no invented fixture would have surfaced.
+
+**What the column really contains.** `TECH_FILTER` (`agents/scrapper.py`)
+deliberately matches ROLE words — `developer`, `engineer`, `software`, `web`,
+`backend`, `front-end`, `full-stack` — because the same regex also decides
+whether a posting is a dev job. The API parsers then did
+`", ".join(re.findall(TECH_FILTER, combined_text)[:5])`: raw matches, **no
+dedupe**. A real Golang + Python + Kubernetes posting produced
+`"back-end, Engineer, Developer, developer, Back-end"` — five slots, zero
+technologies, the stack pushed clean out of the window.
+
+- **Producer fix:** the three `parse_json_*` parsers now call the existing
+  `top_techs()` instead of raw `findall[:5]`, matching the RSS/HTML path
+  (previously the two paths disagreed). `top_techs()` now also skips
+  `ROLE_WORDS`, so the 5-item cap is spent on real technologies and a
+  non-technical posting yields `""` instead of a cell full of job-title nouns.
+  Same posting now writes `"python, react, java, php, vue"`.
+- **Aggregator fix:** role nouns added to `_SKILL_STOPWORDS`, plus
+  hyphen/underscore folding so `Back-end` / `backend` / `back end` resolve to
+  one key. Without it the cloud ranked Web/Software/Backend at the top of every
+  real scrape — and `Back-end` vs `Backend` rendered as two separate pills,
+  which is exactly the alias-drift failure this endpoint was built to prevent,
+  occurring on the single most common token in live data.
+- Verified end to end on real copy: `Senior back-end Engineer` →
+  `['Python','React','Java','PHP','Vue']`; `Staff Software Engineer` →
+  `['API','Python','TypeScript','JavaScript','React']`; a content-review and a
+  German customer-service posting → `[]` (previously both contributed "Web").
+- Tests: `TestRealPipelineText` + `TestScraperProducerParity` (7 new) pin the
+  real strings, the fold, and that the parsers can't regress to `findall[:5]`.
+  Full suite: **321 passed, 1 skipped**.
+
+Note on provenance: the sandbox has no direct egress (TLS blocked), so board
+JSON/RSS was pulled through a proxied fetch and replayed through the real
+parser code. Postings are real; the HTTP leg was not the scraper's own.
+
+## Unreleased (2026-10-03 — the mock layer never existed: dead fallbacks removed)
+
+Follow-up to the `MOCK_SKILLS` finding. The root cause is bigger than one
+widget: **`frontend/js/data/mockData.js` has never existed in this repo** (no
+git history, 404 on every page load), yet `index.html` loaded it and five
+places branched on the globals it was supposed to define. Every
+`JobAgent.MOCK_*` reference was `undefined`.
+
+- `else if (JobAgent.MOCK_SOURCES)` in `dashboard.js` was permanently false, so
+  a failed `/api/stats` left `"Loading live stats from /api/stats…"` on screen
+  **forever** — and the amber API-error banner was unreachable inside that dead
+  branch. A hard backend outage looked exactly like a slow load.
+- `store.loadJobs` / `loadTracker` logged "fallback to mock" and set
+  `dataSource = 'mock'` while actually producing `[]` via `|| []`.
+  The Job Desk then rendered the suffix `(mock: 0)` and the banner line
+  "Showing cached mock data." — both false.
+- `jobDesk._allJobs()` and `tracker._cards()` had the same `|| []` dead tail.
+- Fix: dropped the 404 `<script>` tag and every mock branch. Each section now
+  renders explicit loading / error / empty states that name the failed
+  endpoint. `dataSource` reports `unavailable` instead of `mock`.
+- Docs corrected where they described the phantom layer as real: FRONTEND.md
+  (file tree, script order, first-paint claim, state shape), README tree,
+  PRODUCTION.md §6/§7, ARCHITECTURE.md failure-mode table.
+- Verified: all 13 scripts `index.html` loads now return 200 (was 12/13 + one
+  404), and a static sweep finds no `JobAgent.*` reference that is never
+  assigned.
+
+Same bug class as the two before it: a guard that looks like it checks
+something real, is always false, and fails silently because nothing throws.
+
+## Unreleased (2026-10-03 — GET /api/skills: live skill-demand aggregate)
+
+- New read endpoint `GET /api/skills?tab=&limit=` (`api/routers/skills.py`,
+  `cache.get_skills_snapshot`, `SkillsOut`/`SkillOut` schemas). Aggregates the
+  free-text `tech_stack` column across one job tab and returns
+  `{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name,count,pct}]}`.
+- Canonicalization (`cache.extract_skills`) collapses the alias drift the column
+  actually contains — `js`/`javascript`, `node`/`nodejs`/`Node.js`, `k8s`,
+  `postgres` — so one skill is one pill. Splits on `, ; |`/newline/bullets but
+  **not** `/` (keeps `CI/CD`), drops stopwords/numeric/prose tokens, counts each
+  skill once per job, and sorts count desc then name asc for stable output.
+- `pct` is a share of `jobs_with_stack` (rows that list a stack), not of
+  `total_jobs`, so empty-stack rows don't deflate every figure.
+- Cache-backed (same TTL as `/api/jobs`), token-gated like every other read, and
+  fails soft: a Sheets outage returns the zeroed shape, never a 500. A non-job
+  tab (`APPLIED`/`STATS`) is a 400.
+- Frontend: `api.getSkills()`, `store.loadSkills()` (+ `skills` state, wired into
+  `loadAll`), and `dashboard._renderSkills()` replace the dead `MOCK_SKILLS`
+  branch. The cloud now shows real percentages with a hover count, and
+  distinguishes loading / API-error / "no tech_stack data yet" instead of
+  rendering nothing. No mock fallback — invented demand figures would be worse
+  than an empty state.
+- Note: `JobAgent.MOCK_SKILLS` was never defined anywhere in the codebase, so the
+  old guard `if (this.topSkillsCloud && JobAgent.MOCK_SKILLS)` silently rendered
+  an empty cloud in every environment. The widget was dead UI, not stale mock UI.
+- Fixed during live verification: `.NET` aggregated as **`Net`**. Edge-punctuation
+  stripping (needed so `React.` and `(CSS)` normalize) ran *before* alias lookup,
+  so the meaningful leading dot was discarded and the leftover `NET` was
+  title-cased into a plausible-looking wrong answer. `_canonical_skill` now keeps
+  two forms — wrappers-only (`.NET`, `C++` intact) and fully stripped — and tries
+  the alias table against both, wrapper form first. Same silent-wrong-answer
+  class as the `MOCK_SKILLS` guard: no crash, no error, just a quietly incorrect
+  label. Caught only by eyeballing the full 47-row output, not by the tests.
+- Tests: `tests/test_api_skills.py` — 23 cases (alias collapse, in-cell dupes,
+  pct denominator, sort stability, `CI/CD` non-split, noise rejection, quote/
+  bracket stripping, limit cap, tab filter, 400 on bad tab, 422 on bad limit,
+  Sheets-failure soft landing, token gate, `.NET`/`C#`/`C++`/`ASP.NET` punctuation
+  survival + `.NET`/`dotnet`/`NET` collapse). Full suite: **314 passed, 1 skipped**.
+- Phase 2 endpoint work is now complete; the only remaining 2b item is the
+  operator-held live submit run. `SUBMIT_ENABLED` stays `False`.
 
 ## Unreleased (2026-10-01 — Manual-application modal scroll fix)
 
