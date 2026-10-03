@@ -178,7 +178,36 @@ docker compose run --rm runner python -m pytest tests/
 
 ---
 
-## 8. Planned — Phase 2.1 (operational impact)
+## 8. Live submit (supervised, one-time)
+
+The submit switch now has **three** states, resolved by
+`api.safety.submit_mode()`:
+
+| Mode | How | Behaviour |
+|---|---|---|
+| `disarmed` | default | `/intent` + `/submit` → 403. No browser launched. |
+| `dry_run` | `SUBMIT_ENABLED=true` **and** `SUBMIT_DRY_RUN=true` | Full real path — browser, fill, readback, every gate, submit-button lookup — then stops before `.click()`. No intent consumed, no claim, no daily-cap spend. Repeatable. |
+| `armed` | `SUBMIT_ENABLED=true` only | The click happens. |
+
+`api/safety.py` keeps `SUBMIT_ENABLED = False` in git; env arming is for a
+single process so a live run never requires a tracked code edit.
+`SUBMIT_DRY_RUN` alone cannot open the path.
+
+Evidence per run lands in `data/submit_runs/<timestamp>-<fp>/` (trace, video,
+HAR, pre/post-click DOM, `attempt.json`) and is gitignored. The post-click DOM
+is captured **before** verification is judged, so a failed verification can be
+diagnosed instead of guessed at.
+
+Full procedure, including the operator review gate and how to read each
+outcome: **`LIVE_SUBMIT.md`**.
+
+Recon any posting without touching the pipeline:
+`python -m tools.submit_recon <url> --json recon.json` (read-only; never
+clicks or fills).
+
+---
+
+## 9. Planned — Phase 2.1 (operational impact)
 
 Two items scheduled for the next 3–4 days (spec and acceptance criteria in
 `PM.md` §2.1). Both change how this thing is *operated*, so the ops-relevant

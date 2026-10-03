@@ -513,6 +513,23 @@ python -m tools.embedding_matcher
 
 ---
 
+## Live submit status
+
+`SUBMIT_ENABLED = False` in git. The switch is three-state —
+`disarmed` / `dry_run` / `armed` (`api.safety.submit_mode()`) — so the submit
+path can be rehearsed end-to-end against a real posting *without clicking*:
+real browser, real fill, real readback, every gate, submit-button lookup,
+then stop. No intent consumed, no claim taken.
+
+- `python -m tools.submit_recon <url>` — read-only posting scan (confirmation
+  metadata, required fields, captcha, submit control).
+- `python -m tools.seed_demo_job` — seeds Greenhouse's own demo posting
+  (Democorp "Full Stack Engineer", job 83446) for a no-real-employer rehearsal.
+- **[`LIVE_SUBMIT.md`](LIVE_SUBMIT.md)** — the supervised live-run procedure.
+
+No live submission has been performed. Known blocker on the demo board: the
+Greenhouse form is reCAPTCHA-protected.
+
 ## Roadmap — Phase 2.1 (next 3–4 days)
 
 | Item | What it adds | Status |

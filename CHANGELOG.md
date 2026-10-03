@@ -1,5 +1,51 @@
 # CHANGELOG.md
 
+## 2026-10-03 — feat(safety): three-state submit switch + dry-run rehearsal (Stage 0/1)
+
+The submit path could previously only be exercised two ways: not at all, or
+by sending a real application to a real employer. That made every rehearsal
+expensive, so none happened, so the first execution would also have been the
+first test. Fixed.
+
+- `api/safety.py` — `submit_enabled()` / `submit_dry_run()` / `submit_mode()`
+  replace direct constant reads. Three states: `disarmed` (default, 403),
+  `dry_run`, `armed`. `SUBMIT_ENABLED = False` stays in git; env can arm a
+  single process so a live run needs no tracked code edit. `SUBMIT_DRY_RUN`
+  alone can never open the path.
+- `api/apply.py` — `_run_greenhouse_submit(dry_run=True)` runs the whole real
+  path (navigate, fill, field readback, minimum-profile gate, attachment
+  gate, confirmation-metadata comparison, submit-button lookup) and returns
+  before `.click()`. `submit_greenhouse` branches to dry run **before**
+  `claim_first`, so rehearsals never consume the intent, take the claim, or
+  spend the daily cap.
+- Instrumentation for the one run that counts: `SUBMIT_HEADLESS` (watch it),
+  Playwright trace + video + HAR, and **unconditional post-click DOM capture
+  before verification is judged** — so a 422 can be diagnosed as "Greenhouse
+  accepted it and our expected copy was wrong" (false negative) versus "an
+  inline validation error blocked it". Evidence: `data/submit_runs/<run>/`.
+- `tools/submit_recon.py` — read-only scanner: confirmation metadata
+  discoverability (if absent, `/intent` 502s and a live test is impossible),
+  required fields vs. what the filler handles, captcha, submit control.
+- `tools/seed_demo_job.py` — seeds Greenhouse's **own demo posting**
+  (`job-boards.greenhouse.io/example/jobs/83446`, Democorp "Full Stack
+  Engineer", fp `94bcd024022152dc3d0d3280d778c1dd`) so the rehearsal involves
+  no real employer.
+- `LIVE_SUBMIT.md` — supervised runbook with the operator screenshot gate and
+  an outcome table. Records the verified finding that the demo form is
+  **reCAPTCHA-protected**, and states plainly that a captcha block is a
+  legitimate result to accept, not something to evade.
+- Tests: +43 (`tests/test_submit_dryrun.py` 27, `tests/test_submit_recon.py`
+  16) → **379 passed, 1 skipped**. Two are source-ordering guards, because
+  "the click is unreachable in dry run" and "nothing mutates before the
+  dry-run return" are ordering properties a refactor breaks silently.
+  Mutations: removing the dry-run stop → 4 fails; letting `SUBMIT_DRY_RUN`
+  open the path → 3; dry run falling through to claim/click → 2.
+- `tests/conftest.py` scrubs `SUBMIT_ENABLED` / `SUBMIT_DRY_RUN` from every
+  test process, so a developer's armed `.env` cannot turn a "must 403"
+  assertion into a false pass.
+
+`SUBMIT_ENABLED` remains `False`. No live submission has been performed.
+
 ## 2026-10-03 — docs: Phase 2.1 scheduled (CV-upload-first, cache seam)
 
 Documentation only; no code change. Two backlog one-liners promoted to a
