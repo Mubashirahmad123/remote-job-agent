@@ -48,6 +48,9 @@ FAKE_TABS = {
         _row("Frontend", 'React\n"TypeScript"\n(CSS)', "fp-7"),
         # Prose leakage: >3-word token is dropped, real skills kept.
         _row("Fullstack", "React, strong experience with distributed teams", "fp-8"),
+        # Punctuation-bearing names must survive the aggregate, not just the
+        # unit-level splitter.
+        _row("Dotnet Dev", "C#, .NET, Azure", "fp-9"),
     ],
     "TOP MATCHES": [
         BASE_HEADER,
@@ -85,8 +88,8 @@ class TestSkillsEndpoint:
         assert r.status_code == 200
         body = r.json()
         assert body["tab"] == "ALL JOBS"
-        assert body["total_jobs"] == 8          # blank-stack row included
-        assert body["jobs_with_stack"] == 7     # blank-stack row excluded
+        assert body["total_jobs"] == 9          # blank-stack row included
+        assert body["jobs_with_stack"] == 8     # blank-stack row excluded
         assert body["unique_skills"] >= 8
         names = _by_name(body)
         # node/nodejs/Node.js collapse to one entry across 3 jobs.
@@ -100,7 +103,7 @@ class TestSkillsEndpoint:
         body = client.get("/api/skills").json()
         names = _by_name(body)
         # 4 of 7 stack-bearing rows mention Python -> 57%, not 4/8 = 50%.
-        assert names["Python"]["pct"] == round(4 * 100 / 7)
+        assert names["Python"]["pct"] == round(4 * 100 / 8)
 
     def test_sorted_desc_with_alphabetical_tiebreak(self, client):
         body = client.get("/api/skills?limit=100").json()
@@ -120,6 +123,11 @@ class TestSkillsEndpoint:
         names = _by_name(client.get("/api/skills?limit=100").json())
         for junk in ("N/A", "Na", "5+", "Various", "", "Strong Experience With Distributed Teams"):
             assert junk not in names
+
+    def test_dotnet_not_mangled_in_aggregate(self, client):
+        names = _by_name(client.get("/api/skills?limit=100").json())
+        assert ".NET" in names
+        assert "Net" not in names
 
     def test_quotes_and_brackets_stripped(self, client):
         names = _by_name(client.get("/api/skills?limit=100").json())
@@ -195,6 +203,25 @@ class TestCanonicalization:
         assert cache.extract_skills(None) == []
         assert cache.extract_skills("") == []
         assert cache.extract_skills(",,  ,;") == []
+
+    def test_punctuation_bearing_names_survive_stripping(self):
+        """Regression: ".NET" was stripped to "NET" and title-cased to "Net".
+
+        Edge-punctuation stripping (needed for "React." / "(CSS)") must not
+        run before alias lookup, or names whose punctuation is meaningful get
+        mangled into a plausible-looking wrong answer.
+        """
+        assert cache.extract_skills(".NET") == [".NET"]
+        assert cache.extract_skills("dotnet") == [".NET"]
+        assert cache.extract_skills("ASP.NET") == ["ASP.NET"]
+        assert cache.extract_skills("C#") == ["C#"]
+        assert cache.extract_skills("C++") == ["C++"]
+        # The lossy pass still has to work for ordinary trailing punctuation.
+        assert cache.extract_skills("React.") == ["React"]
+        assert cache.extract_skills("(CSS)") == ["CSS"]
+
+    def test_dotnet_variants_collapse_to_one_entry(self):
+        assert cache.extract_skills(".NET, dotnet, NET") == [".NET"]
 
     def test_overlong_token_dropped(self):
         assert cache.extract_skills("x" * 40) == []

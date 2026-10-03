@@ -392,6 +392,9 @@ _SKILL_SPLIT = re.compile(r"[,;|\n\r\t•·]+")
 # Trim surrounding punctuation/quotes/brackets but keep inner . + # (Node.js,
 # C++, C#) and inner - (Objective-C).
 _SKILL_STRIP = " \t\"'`()[]{}<>*:•·-–—."
+# Conservative pass: wrappers only, never meaningful leading/trailing
+# punctuation. ".NET" and "C++" must come through this one intact.
+_SKILL_QUOTES = " \t\"'`()[]{}<>"
 
 # lowercase lookup key -> canonical display form.
 _SKILL_ALIASES: Dict[str, str] = {
@@ -420,7 +423,8 @@ _SKILL_ALIASES: Dict[str, str] = {
     "django": "Django", "flask": "Flask", "fastapi": "FastAPI",
     "rails": "Rails", "ruby on rails": "Rails", "ruby": "Ruby",
     "spring": "Spring", "spring boot": "Spring Boot",
-    "dotnet": ".NET", ".net": ".NET", "asp.net": "ASP.NET", "c#": "C#",
+    "dotnet": ".NET", ".net": ".NET", "net": ".NET", "dot net": ".NET",
+    "asp.net": "ASP.NET", "aspnet": "ASP.NET", "c#": "C#", "csharp": "C#",
     "c++": "C++", "cpp": "C++", "c": "C",
     "java": "Java", "kotlin": "Kotlin", "swift": "Swift", "scala": "Scala",
     "php": "PHP", "laravel": "Laravel", "rust": "Rust", "elixir": "Elixir",
@@ -462,15 +466,21 @@ _SKILL_MAX_LEN = 32
 
 def _canonical_skill(token: str) -> str:
     """Normalize one raw tech_stack token to a display name ('' = drop it)."""
-    raw = str(token or "").strip().strip(_SKILL_STRIP).strip()
-    # Collapse internal whitespace so "node  js" and "node js" agree.
-    raw = " ".join(raw.split())
+    # Two forms, because punctuation stripping is lossy for a few real names:
+    #   quoted  = only whitespace/quotes/brackets removed  -> ".NET" survives
+    #   raw     = also edge punctuation removed            -> "React." -> "React"
+    # Aliases are looked up against BOTH, quoted first, so a leading-dot or
+    # trailing-plus name is matched before its punctuation is thrown away.
+    # (Regression: ".NET" was stripped to "NET" and title-cased into "Net".)
+    quoted = " ".join(str(token or "").strip(_SKILL_QUOTES).split())
+    raw = " ".join(quoted.strip(_SKILL_STRIP).split())
     if not raw or len(raw) > _SKILL_MAX_LEN:
         return ""
+    quoted_key = quoted.lower()
     key = raw.lower()
-    if key in _SKILL_STOPWORDS:
+    if key in _SKILL_STOPWORDS or quoted_key in _SKILL_STOPWORDS:
         return ""
-    alias = _SKILL_ALIASES.get(key)
+    alias = _SKILL_ALIASES.get(quoted_key) or _SKILL_ALIASES.get(key)
     if alias:
         return alias
     if len(key.split()) > _SKILL_MAX_WORDS:

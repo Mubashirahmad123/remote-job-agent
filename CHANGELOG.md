@@ -25,10 +25,19 @@
 - Note: `JobAgent.MOCK_SKILLS` was never defined anywhere in the codebase, so the
   old guard `if (this.topSkillsCloud && JobAgent.MOCK_SKILLS)` silently rendered
   an empty cloud in every environment. The widget was dead UI, not stale mock UI.
-- Tests: `tests/test_api_skills.py` — 20 cases (alias collapse, in-cell dupes,
+- Fixed during live verification: `.NET` aggregated as **`Net`**. Edge-punctuation
+  stripping (needed so `React.` and `(CSS)` normalize) ran *before* alias lookup,
+  so the meaningful leading dot was discarded and the leftover `NET` was
+  title-cased into a plausible-looking wrong answer. `_canonical_skill` now keeps
+  two forms — wrappers-only (`.NET`, `C++` intact) and fully stripped — and tries
+  the alias table against both, wrapper form first. Same silent-wrong-answer
+  class as the `MOCK_SKILLS` guard: no crash, no error, just a quietly incorrect
+  label. Caught only by eyeballing the full 47-row output, not by the tests.
+- Tests: `tests/test_api_skills.py` — 23 cases (alias collapse, in-cell dupes,
   pct denominator, sort stability, `CI/CD` non-split, noise rejection, quote/
   bracket stripping, limit cap, tab filter, 400 on bad tab, 422 on bad limit,
-  Sheets-failure soft landing, token gate). Full suite: **311 passed, 1 skipped**.
+  Sheets-failure soft landing, token gate, `.NET`/`C#`/`C++`/`ASP.NET` punctuation
+  survival + `.NET`/`dotnet`/`NET` collapse). Full suite: **314 passed, 1 skipped**.
 - Phase 2 endpoint work is now complete; the only remaining 2b item is the
   operator-held live submit run. `SUBMIT_ENABLED` stays `False`.
 
