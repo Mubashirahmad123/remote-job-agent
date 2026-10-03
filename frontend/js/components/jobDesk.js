@@ -99,9 +99,7 @@ JobAgent.jobDesk = {
   },
 
   _allJobs() {
-    const live = JobAgent.store.state.jobs || [];
-    if (live.length) return live;
-    return JobAgent.MOCK_JOBS || [];
+    return JobAgent.store.state.jobs || [];
   },
 
   _findJob(id) {
@@ -205,7 +203,7 @@ JobAgent.jobDesk = {
       return `<div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-muted); background: var(--bg-card); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">Loading live jobs from <code>/api/jobs</code>…</div>`;
     }
     if (errors.jobs) {
-      const src = usingLive ? '' : 'Showing cached mock data.';
+      const src = usingLive ? '' : 'No cached data to fall back on.';
       return `<div style="grid-column: 1 / -1; padding: 16px 20px; color: #f59e0b; background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.3); border-radius: var(--radius-lg); font-size: 12.5px;">API error: ${errors.jobs} ${src}</div>`;
     }
     return '';
@@ -217,7 +215,7 @@ JobAgent.jobDesk = {
 
     if (this.filteredJobCount) {
       const live = JobAgent.store.state.jobs.length;
-      const src = JobAgent.store.state.dataSource || 'mock';
+      const src = JobAgent.store.state.dataSource || 'unavailable';
       const tag = live ? ` (${src}: ${live})` : '';
       this.filteredJobCount.textContent = jobs.length + tag;
     }

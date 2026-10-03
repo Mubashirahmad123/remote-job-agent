@@ -180,7 +180,7 @@ remote-job-agent/
 │   ├── css/                  # Per-component stylesheets (see DESIGN.md tokens)
 │   └── js/
 │       ├── api.js            # Live FastAPI client (one fn per endpoint group)
-│       ├── store.js          # Reactive state + backend→UI normalization + mock fallback
+│       ├── store.js          # Reactive state + backend→UI normalization (no mock layer)
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
 ├── tests/
 │   └── test_api_*.py etc.   # 291 isolated API tests (faked Sheets, no network) + auto_applier + country_filter

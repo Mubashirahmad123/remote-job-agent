@@ -81,8 +81,8 @@ starts a background scrape run in a daemon thread inside the API process
 
 | Failure | Behavior |
 |---|---|
-| Sheets down / `keys.json` missing | `data_source: snapshot` → local snapshot; else `empty` → UI mock fallback with error banner |
+| Sheets down / `keys.json` missing | `data_source: snapshot` → local snapshot; else `empty` → UI empty state with error banner (no mock layer exists) |
 | `curated_jobs.json` missing/corrupt | Enrichment fields `null`, never crash |
-| API unreachable from browser | Per-section mock fallback; UI stays usable, banners explain |
+| API unreachable from browser | Per-section error/empty state naming the failed endpoint; UI stays usable |
 | Slow first paint | Mock renders instantly; live data re-renders via `store.subscribe` |
 | Bot-protected / generic-selector boards repeatedly `empty` (Naukri, CWJobs, TimesJobs, GoRemote, …) | Structural, not a regression (no per-board parser, bot wall, duplicate/dead URLs) — expected-empty, but already partially addressed (`BOT_PROTECTED_BOARDS` retry/header rotation, `SSL_ISSUE_BOARDS`, generic parser for GoRemote); see `PRODUCTION.md` §7 |

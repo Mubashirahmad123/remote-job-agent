@@ -1,5 +1,35 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-03 — the mock layer never existed: dead fallbacks removed)
+
+Follow-up to the `MOCK_SKILLS` finding. The root cause is bigger than one
+widget: **`frontend/js/data/mockData.js` has never existed in this repo** (no
+git history, 404 on every page load), yet `index.html` loaded it and five
+places branched on the globals it was supposed to define. Every
+`JobAgent.MOCK_*` reference was `undefined`.
+
+- `else if (JobAgent.MOCK_SOURCES)` in `dashboard.js` was permanently false, so
+  a failed `/api/stats` left `"Loading live stats from /api/stats…"` on screen
+  **forever** — and the amber API-error banner was unreachable inside that dead
+  branch. A hard backend outage looked exactly like a slow load.
+- `store.loadJobs` / `loadTracker` logged "fallback to mock" and set
+  `dataSource = 'mock'` while actually producing `[]` via `|| []`.
+  The Job Desk then rendered the suffix `(mock: 0)` and the banner line
+  "Showing cached mock data." — both false.
+- `jobDesk._allJobs()` and `tracker._cards()` had the same `|| []` dead tail.
+- Fix: dropped the 404 `<script>` tag and every mock branch. Each section now
+  renders explicit loading / error / empty states that name the failed
+  endpoint. `dataSource` reports `unavailable` instead of `mock`.
+- Docs corrected where they described the phantom layer as real: FRONTEND.md
+  (file tree, script order, first-paint claim, state shape), README tree,
+  PRODUCTION.md §6/§7, ARCHITECTURE.md failure-mode table.
+- Verified: all 13 scripts `index.html` loads now return 200 (was 12/13 + one
+  404), and a static sweep finds no `JobAgent.*` reference that is never
+  assigned.
+
+Same bug class as the two before it: a guard that looks like it checks
+something real, is always false, and fails silently because nothing throws.
+
 ## Unreleased (2026-10-03 — GET /api/skills: live skill-demand aggregate)
 
 - New read endpoint `GET /api/skills?tab=&limit=` (`api/routers/skills.py`,

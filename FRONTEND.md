@@ -13,7 +13,6 @@ frontend/
   css/                  variables, base, layout, components, dashboard, jobs,
                         resume, autoapply, tracker (one file per concern)
   js/
-    data/mockData.js    OFFLINE FALLBACK ONLY (MOCK_JOBS/SOURCES/SKILLS/KANBAN)
     api.js              live client — must load before store.js
     store.js            reactive state + normalization + loaders
     components/*.js     navigation, dashboard, jobDesk, jobDrawer,
@@ -21,8 +20,16 @@ frontend/
     app.js              bootstrapper (loads LAST)
 ```
 
-`index.html` script order matters: `mockData → api → store → components → app`.
-`mockData.js` is fallback paint, not the data model — new code must read
+`index.html` script order matters: `api → store → components → app`.
+
+> **Removed 2026-10-03 — there is no mock layer.** `js/data/mockData.js` was
+> referenced by `index.html` and by every `JobAgent.MOCK_*` fallback branch, but
+> the file was never committed to this repo (no git history, 404 at runtime). So
+> every mock global was `undefined`: `|| []` sites degraded to empty arrays and
+> `else if (JobAgent.MOCK_SOURCES)` was permanently false — a failed `/api/stats`
+> left the "Loading live stats…" text on screen forever with the error banner
+> unreachable inside the dead branch. The script tag and all mock branches are
+> gone; each section now renders an explicit loading / error / empty state. New code must read
 `store.state`, never `MOCK_*` directly (grep before adding usages).
 | `autoApply.js` | fill-and-review queue, safety lock, per-run results and activity log | up to three highest-scoring eligible jobs sequentially → `POST /api/apply/{fp}` `{mode:review}` → visible Greenhouse/Lever fill window or package-only fallback; submit toggle disabled | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider` (enforced: localStorage daily count blocks queue at cap), `btnRunAutoApplyQueue`, `btnViewScreenshots` (labelled View Review Results), `terminalLog`, `reviewQueueResults` |
 | `scrapeMonitor.js` | scrape run monitor, board diagnostics, structured event stream, run history | `/api/scrape` polling | `scrapeMonitorStatus/Phase/Progress/Summary`, `scrapeMonitorBoards`, `scrapeMonitorEvents`, `scrapeMonitorHistory` |
@@ -53,7 +60,7 @@ frontend/
 
 State: `activeTab, viewMode, selectedJob, filters{search,role,minScore,location,
 source,status}, autoApply{mode,threshold,dailyCap,appliedToday}`,
-live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|mock)`,
+live: `jobs[], tracker[], stats, skills, health, usingLive, dataSource(sheets|snapshot|unavailable)`,
 `loading{…}, errors{…}`. `subscribe(fn)` → `notify()` re-renders components.
 
 - **Normalization:** backend `JobOut` (string `tech_stack`, fingerprint key) →
@@ -62,9 +69,10 @@ live: `jobs[], tracker[], stats, health, usingLive, dataSource(sheets|snapshot|m
   Backend tracker statuses + auto-apply fill statuses → kanban columns (`filled_ready/package_only/custom_questions→review`, `interviewing→interview`;
   `withdrawn/ghosted→rejected`; `review` is UI-only).
 - **Loaders:** `loadAll()` = `loadJobs + loadTracker + loadStats` in parallel,
-  each with per-section mock fallback so one dead endpoint never blanks the UI.
+  each with a per-section error/empty state so one dead endpoint never blanks
+  the UI silently (it says which endpoint failed).
   Snapshot (all scores 0) auto-drops `minScore` to 0 and syncs the slider.
-- **First paint:** components render from mock instantly, then re-render live
+- **First paint:** components render a loading state, then re-render live
   via subscription — keep it that way (never `await` before `init`).
 
 ## 4. Components

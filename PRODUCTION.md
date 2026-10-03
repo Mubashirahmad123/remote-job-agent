@@ -118,7 +118,7 @@ docker compose run --rm runner python -m pytest tests/
 
 - `GET /api/health` → `{"status":"ok","sheets_configured":true,"data_source":"sheets"}`
   - `data_source: snapshot` = Sheets unreachable, serving local scrape snapshot
-  - `data_source: empty` = no Sheets, no snapshot (UI shows mock fallback)
+  - `data_source: empty` = no Sheets, no snapshot (UI shows an explicit empty state)
 - `POST /api/jobs/refresh` clears the TTL cache after a scheduled scrape lands.
 - Logs: `logs/scraper.log` (scheduler); `docker compose logs -f api` (container).
 - Sidebar `Hot` badge is live (`dashboard.js:_applyMetrics` ← `/api/stats`
@@ -133,7 +133,7 @@ docker compose run --rm runner python -m pytest tests/
 
 | Symptom | Cause → Fix |
 |---|---|
-| UI shows `(snapshot: N)` / `(mock)` | Sheets unreachable → check `keys.json` present, sheet shared with `client_email`, `/api/health` |
+| UI shows `(snapshot: N)` / `(unavailable)` | Sheets unreachable → check `keys.json` present, sheet shared with `client_email`, `/api/health` |
 | `UnicodeEncodeError: 'charmap' ... '\u274c'` on Windows | Fixed in `tools/sheet_writer.py` (UTF-8 stdout reconfigure); pull latest |
 | CORS `null` origin blocked | By design — open `http://127.0.0.1:8000/`, never `file://...index.html` |
 | `401 Unauthorized` on `/api/*` | `API_TOKEN` is set → send `Authorization: Bearer <token>` (frontend: `localStorage rja_api_token`) |

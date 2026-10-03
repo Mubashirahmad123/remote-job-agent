@@ -1,6 +1,7 @@
 /**
  * DASHBOARD.JS — Command Deck Bento Grid & Telemetry Widgets
- * Live data: GET /api/stats (counts + by_source) with mock fallback.
+ * Live data: GET /api/stats (counts + by_source) and GET /api/skills.
+ * No mock fallback: unavailable sections render an explicit empty/error note.
  */
 
 window.JobAgent = window.JobAgent || {};
@@ -138,7 +139,7 @@ JobAgent.dashboard = {
     this._applyMetrics(stats);
     this._applyPipelineMetrics(tracker);
 
-    // 1. Scraper Sources Grid — live by_source, else mock.
+    // 1. Scraper Sources Grid — live by_source, else an honest note.
     if (this.sourcesGrid) {
       if (loading.stats) {
         this.sourcesGrid.innerHTML = `<div style="color: var(--text-muted); font-size: 12.5px; padding: 12px;">Loading live stats from <code>/api/stats</code>…</div>`;
@@ -154,17 +155,13 @@ JobAgent.dashboard = {
             <span class="source-count-pill">${esc(count)} jobs</span>
           </div>
         `).join('') || `<div style="color: var(--text-muted); font-size: 12.5px;">No live sources yet.</div>`;
-      } else if (JobAgent.MOCK_SOURCES) {
-        const err = errors.stats ? `<div style="font-size:11.5px;color:#f59e0b;margin-bottom:8px;">API error: ${(JobAgent.escapeHtml || ((v) => String(v ?? '')))(errors.stats)} — showing mock.</div>` : '';
-        this.sourcesGrid.innerHTML = err + JobAgent.MOCK_SOURCES.map(src => `
-          <div class="source-item-card">
-            <div class="source-meta">
-              <span class="source-meta-name">${src.name}</span>
-              <span class="source-meta-status">${src.badge} • ${src.status}</span>
-            </div>
-            <span class="source-count-pill">${src.jobs} jobs</span>
-          </div>
-        `).join('');
+      } else {
+        // No mock fallback exists (mockData.js was never shipped), so say what
+        // actually happened instead of leaving the loading text on screen.
+        const esc = (JobAgent.escapeHtml || ((v) => String(v ?? '')));
+        this.sourcesGrid.innerHTML = errors.stats
+          ? `<div style="font-size:12.5px;color:#f59e0b;padding:12px;">Source stats unavailable: ${esc(errors.stats)}</div>`
+          : `<div style="color: var(--text-muted); font-size: 12.5px; padding: 12px;">No live sources yet — run a scrape.</div>`;
       }
     }
 
