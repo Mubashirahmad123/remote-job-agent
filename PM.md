@@ -15,7 +15,7 @@ Living plan for the remote-job-agent build. Status last reconciled 2026-10-01.
 | 1d — Data honesty | snapshot fallback, `data_source`, cp1252 emoji-crash fix in `sheet_writer.py` | ✅ done, live Sheets confirmed |
 | 1e — Docs | README API section, PRODUCTION/ARCHITECTURE/BACKEND/FRONTEND/PM | ✅ done |
 | 2 — Action API | scrape ✅ + status card; resume/cover-letter ✅ (Studio wired); CV profile GET+PUT ✅ + variants ✅; fill-and-review API ✅; cockpit queue connected; skills aggregate ✅ | ✅ endpoints complete — 2b live submit stays gated by operator decision, not by missing code |
-| 3 — Polish | auto-apply telemetry wiring, E2E checks | 🟡 in progress — tracker review mapping done |
+| 3 — Polish | auto-apply telemetry wiring, E2E checks | 🟡 in progress — tracker review mapping done; frontend E2E smoke landed (18 assertions, mutation-tested) |
 
 Full suite last verified 2026-10-03: **321 passed, 1 skipped** (+30 `/api/skills` + scraper-parity tests; previous baseline 291) (`venv\Scripts\python.exe -m pytest tests/ -q`). The skip is the Lever exact confirmation-copy assertion, now a deliberate documented limitation (Lever submit deferred — no paid trial account; see 2b split below), not a temporary blocker. Scrape-log fixes landed the same day (curator sign format, Arbeitnow `company_name` backfill, single-loop poll guard, and the spurious `scraped_at` missing-column warning); details in `CHANGELOG.md` and `PRODUCTION.md` §7. To be unambiguous about that last one: `scraped_at` **is** populated — `prepare_job_for_sheet` (`tools/sheet_writer.py`) sets `scraped_at`/`status`/`job_fingerprint` defaults on every job before the row is built, on both write paths. The warning was false: `append_rows` validated its sample job *before* those defaults were applied, so it reported columns that the very next step filled in. The fix applies the defaults to the sample first — nothing was suppressed or merely relocated, and a genuinely missing column still warns. Score parsing is also hardened: `_safe_score` (`agents/auto_applier.py`) and the sheet-writer twin coerce `"85.0"`, `"87%"`, `""`, `None`, and bools instead of raising on `int("85.0")`; unparseable values score 0 and fall to `batch`. Covered by `tests/test_apply_submit_primitives.py` (`"85.0"`/`""`/`None`/`"95%"`). Claim, intent, validation, and Greenhouse verification helpers are implemented; Greenhouse `/intent` + `/submit` routes exist, are kill-switch gated (403 while `SUBMIT_ENABLED=False`), and are tested. Lever has no submit path by design.
 
@@ -101,7 +101,10 @@ removed, so there is no unverified submit path left anywhere.
 - `by_source` naming (`RemoteOK` vs `RemoteOKAPI`) — normalize at write or read.
 - Multi-worker cache: in-process TTL means `--workers 1`; shared cache (Redis/file)
   if workers ever needed.
-- Frontend E2E smoke (Playwright) against TestClient-seeded API.
+- ~~Frontend E2E smoke against a seeded API~~ — **done 2026-10-03**: `tests/e2e/`
+  (jsdom + real uvicorn, 18 assertions, mutation-tested against 5 real past
+  regressions). Playwright/real-browser coverage (CSS, layout, input events)
+  remains open — the browser CDN is unreachable from the build sandbox.
 - 2b submit stays kill-switched and the UI toggle stays disabled; submit is
   reachable only via the authenticated Greenhouse pair (Lever has no submit path).
 

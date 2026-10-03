@@ -1,0 +1,82 @@
+{
+ "_note": "E2E fixture. tech_stack values are REAL agents.scrapper.top_techs() output over verbatim copy from live Remotive / WeWorkRemotely postings (2026-10-03), not hand-written stacks. Two deliberately non-technical postings carry an empty stack so the 'jobs_with_stack' denominator is exercised. The last row is PRE-FIX producer output (raw findall[:5], role nouns, mixed case) because rows written by the old parser still live in the Sheet and must not pollute the cloud.",
+ "jobs": [
+  {
+   "job_title": "Senior back-end Engineer",
+   "company": "Lemon.io",
+   "salary": "",
+   "tech_stack": "python, react, java, php, vue",
+   "timezone": "Europe, USA, UK, Canada",
+   "apply_url": "https://example.invalid/e2e/1",
+   "summary": "Lemon.io connects hand-picked senior developers with vetted startups.",
+   "posted_date_iso": "2026-10-01",
+   "source": "Remotive"
+  },
+  {
+   "job_title": "Staff Software Engineer",
+   "company": "Samsara",
+   "salary": "$162,400 - $290,000 USD",
+   "tech_stack": "api, python, typescript, javascript, react",
+   "timezone": "Anywhere in the World",
+   "apply_url": "https://example.invalid/e2e/2",
+   "summary": "Design and ship full-stack features end to end.",
+   "posted_date_iso": "2026-10-02",
+   "source": "WeWorkRemotely"
+  },
+  {
+   "job_title": "Senior AI Engineer",
+   "company": "Lemon.io",
+   "salary": "",
+   "tech_stack": "python",
+   "timezone": "Northern America, LATAM, Europe, APAC",
+   "apply_url": "https://example.invalid/e2e/3",
+   "summary": "Experience with Vector Databases, LangChain, RAG or OpenAI.",
+   "posted_date_iso": "2026-10-01",
+   "source": "Remotive"
+  },
+  {
+   "job_title": "Backend Developer (Django)",
+   "company": "Northwind",
+   "salary": "EUR 70k",
+   "tech_stack": "python, django, postgresql, docker",
+   "timezone": "Europe",
+   "apply_url": "https://example.invalid/e2e/4",
+   "summary": "Django services on PostgreSQL, containerised.",
+   "posted_date_iso": "2026-09-30",
+   "source": "Arbeitnow"
+  },
+  {
+   "job_title": "Content Reviewer - United States",
+   "company": "TELUS Digital",
+   "salary": "",
+   "tech_stack": "",
+   "timezone": "USA",
+   "apply_url": "https://example.invalid/e2e/5",
+   "summary": "Analyze and rate online content for leading search engines.",
+   "posted_date_iso": "2026-09-21",
+   "source": "Remotive"
+  },
+  {
+   "job_title": "Kundenservice Mobilfunk Inbound",
+   "company": "hey contact heroes GmbH",
+   "salary": "",
+   "tech_stack": "",
+   "timezone": "Europe",
+   "apply_url": "https://example.invalid/e2e/6",
+   "summary": "Inbound-Anrufe rund um Prepaid-Produkte und Tarife.",
+   "posted_date_iso": "2026-09-18",
+   "source": "Remotive"
+  },
+  {
+   "job_title": "Senior Back-end Engineer (legacy row)",
+   "company": "Kestrel",
+   "salary": "",
+   "tech_stack": "back-end, Engineer, Developer, developer, Back-end",
+   "timezone": "Worldwide",
+   "apply_url": "https://example.invalid/e2e/7",
+   "summary": "Row written by the pre-2026-10-03 parser; stack is role nouns only.",
+   "posted_date_iso": "2026-09-15",
+   "source": "RemoteOK"
+  }
+ ]
+}

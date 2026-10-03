@@ -1,5 +1,36 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-03 — frontend E2E smoke suite)
+
+`tests/e2e/` — boots the real FastAPI app (seeded through a new `SNAPSHOT_FILE`
+env override, so nothing is written into the project root) and loads the real
+`index.html` + real `js/*` in jsdom over HTTP. 18 assertions: asset integrity,
+happy path, API-unreachable. `./tests/e2e/run.sh`.
+
+- Targets the failure mode the pytest suite structurally cannot see: a
+  `<script>` that 404s, a guard on an undefined global, an unreachable error
+  state, a widget that renders empty in every environment. All four shipped in
+  this repo and none of them crashed.
+- **Mutation-tested.** Each real past bug was reintroduced to confirm the suite
+  fails: mockData.js 404 → 4 failures; dead `MOCK_SOURCES` guard → 2; role nouns
+  in the skill cloud → 2; skill cloud guarded on an undefined global → 3; store
+  swallowing the `/api/skills` error → 2.
+- Two of those initially passed under mutation and required real fixes to the
+  suite: the role-noun case needed a fixture row in the *pre-fix* producer
+  format (`"back-end, Engineer, Developer, developer, Back-end"` — rows written
+  by the old parser still exist in the Sheet), and the swallowed-error case
+  needed an assertion that the cause reaches the DOM rather than just the word
+  "unavailable".
+- Fixture `tech_stack` values are real `top_techs()` output over verbatim live
+  Remotive/WeWorkRemotely copy, not invented stacks.
+- `cache._snapshot_paths()` adds the `SNAPSHOT_FILE` override (also useful for
+  pointing ops at an archived scrape).
+- Known gap, stated rather than papered over: no real browser. `playwright
+  install chromium` cannot reach the browser CDN from this sandbox, so CSS,
+  layout, visual regressions and real input events are uncovered. jsdom runs the
+  same JS against the same API; it is not a substitute for a browser.
+- Python suite unchanged: **321 passed, 1 skipped**. E2E: **18 passed**.
+
 ## Unreleased (2026-10-03 — skills aggregate verified against REAL board text; two real bugs)
 
 The first `/api/skills` corpus was hand-written, so it tested text that looks

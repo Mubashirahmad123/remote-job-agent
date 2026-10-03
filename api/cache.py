@@ -152,6 +152,18 @@ def get_tab_rows(tab: str, force: bool = False) -> List[Dict[str, Any]]:
 SNAPSHOT_FILES = ("scraped_jobs.json", "fresh_scrape.json")
 
 
+def _snapshot_paths() -> List[Path]:
+    """Snapshot files to try, honouring the SNAPSHOT_FILE override.
+
+    The override exists so a harness (or an operator pointing at an archived
+    scrape) can seed the API without writing into the project root.
+    """
+    override = (os.getenv("SNAPSHOT_FILE") or "").strip()
+    if override:
+        return [Path(override)]
+    return [PROJECT_ROOT / name for name in SNAPSHOT_FILES]
+
+
 def _local_snapshot_rows() -> List[Dict[str, Any]]:
     """Load real scraped jobs from a local snapshot file (no network).
 
@@ -160,8 +172,7 @@ def _local_snapshot_rows() -> List[Dict[str, Any]]:
     curated_jobs.json enrichment join and /api/jobs/{fp} keep working.
     Unscored fields stay "" (never invented). Missing/invalid files -> [].
     """
-    for name in SNAPSHOT_FILES:
-        path = PROJECT_ROOT / name
+    for path in _snapshot_paths():
         try:
             if not path.exists():
                 continue
@@ -208,9 +219,8 @@ def _local_snapshot_rows() -> List[Dict[str, Any]]:
 
 def snapshot_available() -> bool:
     """True when a non-empty local snapshot file exists (offline fallback)."""
-    for name in SNAPSHOT_FILES:
+    for path in _snapshot_paths():
         try:
-            path = PROJECT_ROOT / name
             if not path.exists():
                 continue
             with open(path, "r", encoding="utf-8") as f:

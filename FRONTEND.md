@@ -22,6 +22,43 @@ frontend/
 
 `index.html` script order matters: `api → store → components → app`.
 
+## Frontend E2E smoke (`tests/e2e/`)
+
+`./tests/e2e/run.sh` — boots the real FastAPI app (seeded via `SNAPSHOT_FILE`
+with `tests/e2e/fixtures/jobs.snapshot.json`) and loads the real `index.html`
+plus the real `js/*` in jsdom over HTTP. 18 assertions across three suites:
+asset integrity, happy path, and API-unreachable.
+
+**Why jsdom, not Playwright:** `playwright install chromium` cannot reach the
+browser CDN from this environment, so a real-browser run isn't reproducible
+here. jsdom executes the same application code against the same API, which
+covers the failure mode this project keeps hitting (dead guards, undefined
+globals, states that never render). It does **not** cover CSS, layout,
+visual regressions, or real pointer/keyboard input — that gap is open, and a
+Playwright run is the way to close it wherever egress exists.
+
+**The fixture is not hand-written.** `tech_stack` values are real
+`agents.scrapper.top_techs()` output over verbatim copy from live Remotive /
+WeWorkRemotely postings, including one pre-fix legacy row
+(`"back-end, Engineer, Developer, developer, Back-end"`) because rows written
+by the old parser still exist in the Sheet.
+
+**Mutation-tested** — the suite was validated by reintroducing each real bug
+and confirming it fails:
+
+| Reintroduced bug | Result |
+|---|---|
+| `mockData.js` `<script>` restored (404) | 4 tests fail |
+| `else if (JobAgent.MOCK_SOURCES)` dead guard restored | 2 tests fail |
+| Role nouns allowed back into the skill cloud | 2 tests fail |
+| Skill cloud guarded on an undefined global (the original bug) | 3 tests fail |
+| Store swallows the `/api/skills` error message | 2 tests fail |
+
+The last two only fail because of fixes made *after* a first pass let them
+through: the role-noun case needed the legacy fixture row, and the swallowed
+error needed an assertion on the cause reaching the DOM rather than the word
+"unavailable".
+
 > **Removed 2026-10-03 — there is no mock layer.** `js/data/mockData.js` was
 > referenced by `index.html` and by every `JobAgent.MOCK_*` fallback branch, but
 > the file was never committed to this repo (no git history, 404 at runtime). So
