@@ -444,12 +444,28 @@ _SKILL_ALIASES: Dict[str, str] = {
     "jest": "Jest", "pytest": "pytest",
 }
 
-# Tokens that are noise rather than skills (scraper teaser text leaks these in).
+# Tokens that are noise rather than skills.
+#
+# The second block matters more than it looks. `agents/scrapper.py` builds
+# tech_stack with TECH_FILTER, whose alternation deliberately includes ROLE
+# words — developer, engineer, software, web, backend, back-end, frontend,
+# front-end, full-stack — because the same regex is reused to decide whether a
+# posting is a dev job at all. Those words therefore land in the column on
+# nearly every row. Verified 2026-10-03 against live Remotive/WeWorkRemotely
+# copy: a real cell reads "back-end, Engineer, Developer, developer, Back-end".
+# Left in, the "High-Yield Skill Demand" cloud ranks Web/Software/Backend at
+# the top of every scrape and buries the actual stack. Role is already derived
+# separately (store.js `_deriveRole`), so these are dropped here.
 _SKILL_STOPWORDS = frozenset({
     "", "n/a", "na", "none", "null", "-", "--", "etc", "and", "or", "the",
-    "remote", "developer", "engineer", "senior", "junior", "mid", "fulltime",
+    "remote", "senior", "junior", "mid", "fulltime",
     "full time", "part time", "contract", "various", "other", "others",
     "tbd", "unknown", "not specified", "experience", "years", "plus",
+    # Role / seniority / generic-industry nouns emitted by TECH_FILTER.
+    "developer", "developers", "engineer", "engineers", "engineering",
+    "programmer", "software", "web", "tech", "technology", "it",
+    "backend", "back-end", "back end", "frontend", "front-end", "front end",
+    "fullstack", "full-stack", "full stack", "development", "coding",
 })
 
 # Acronyms that must stay uppercase when no alias matched.
@@ -478,9 +494,22 @@ def _canonical_skill(token: str) -> str:
         return ""
     quoted_key = quoted.lower()
     key = raw.lower()
-    if key in _SKILL_STOPWORDS or quoted_key in _SKILL_STOPWORDS:
+    # Fold hyphen/underscore to space so "back-end"/"back end"/"back_end" and
+    # "react-native"/"react native" resolve to one key. Real scrapes contain
+    # both spellings of the same token in a single cell.
+    folded = re.sub(r"[-_]+", " ", key).strip()
+    folded = " ".join(folded.split())
+    if (
+        key in _SKILL_STOPWORDS
+        or quoted_key in _SKILL_STOPWORDS
+        or folded in _SKILL_STOPWORDS
+    ):
         return ""
-    alias = _SKILL_ALIASES.get(quoted_key) or _SKILL_ALIASES.get(key)
+    alias = (
+        _SKILL_ALIASES.get(quoted_key)
+        or _SKILL_ALIASES.get(key)
+        or _SKILL_ALIASES.get(folded)
+    )
     if alias:
         return alias
     if len(key.split()) > _SKILL_MAX_WORDS:

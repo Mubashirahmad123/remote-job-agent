@@ -178,6 +178,76 @@ class TestSkillsEndpoint:
         assert ok.status_code == 200
 
 
+class TestRealPipelineText:
+    """Regression against text the REAL pipeline produces, not invented stacks.
+
+    Strings below are `agents.scrapper.top_techs()` output over verbatim copy
+    pulled from live Remotive / WeWorkRemotely postings on 2026-10-03. The
+    first hand-written corpus in this file missed all of this, because it
+    assumed tech_stack contains technologies — the producer also emits role
+    nouns from TECH_FILTER, which dominated every real row.
+    """
+
+    def test_role_nouns_never_become_skills(self):
+        # Verbatim pre-fix output for a Golang/Python/Kubernetes posting.
+        assert cache.extract_skills(
+            "back-end, Engineer, Developer, developer, Back-end"
+        ) == []
+        assert cache.extract_skills("Software, Engineer, software, backend") == []
+        assert cache.extract_skills("Full-Stack, Developer") == []
+        assert cache.extract_skills("web") == []
+
+    def test_hyphen_and_space_variants_fold_together(self):
+        # "Back-end" and "backend" must not become two separate pills.
+        assert cache.extract_skills("Back-end, backend, back end, BACKEND") == []
+        assert cache.extract_skills("React Native, react-native") == ["React Native"]
+
+    def test_real_skills_survive_the_role_purge(self):
+        assert cache.extract_skills("Engineer, Engineer, Engineer, Python") == ["Python"]
+        assert cache.extract_skills(
+            "python, react, java, php, vue"
+        ) == ["Python", "React", "Java", "PHP", "Vue"]
+        assert cache.extract_skills(
+            "api, python, typescript, javascript, react"
+        ) == ["API", "Python", "TypeScript", "JavaScript", "React"]
+
+    def test_non_technical_posting_yields_nothing(self):
+        # A customer-service posting matched TECH_FILTER only on "web".
+        assert cache.extract_skills("Web, web") == []
+
+
+class TestScraperProducerParity:
+    """The producer side of the same contract (agents/scrapper.top_techs)."""
+
+    def test_top_techs_dedupes_and_drops_role_words(self):
+        from agents.scrapper import top_techs
+
+        text = ("Senior Back-end Engineer. Developer with Python, Kubernetes, "
+                "React. Engineer. Engineer. Backend developer.")
+        out = top_techs(text)
+        assert "engineer" not in out and "developer" not in out
+        assert "backend" not in out and "back-end" not in out
+        assert "python" in out and "react" in out
+        # No duplicates inside one cell.
+        parts = [p.strip() for p in out.split(",")]
+        assert len(parts) == len(set(parts))
+
+    def test_top_techs_empty_for_non_technical_copy(self):
+        from agents.scrapper import top_techs
+
+        assert top_techs("Content Reviewer. Rate search results online.") == ""
+
+    def test_api_parsers_use_the_same_producer(self):
+        """parse_json_* must not re-introduce the raw findall[:5] path."""
+        import inspect
+        import agents.scrapper as sc
+
+        src = inspect.getsource(sc)
+        assert "re.findall(TECH_FILTER, combined_text)[:5]" not in src
+        for fn in ("parse_json_remotive", "parse_json_remoteok", "parse_json_arbeitnow"):
+            assert "top_techs(combined_text)" in inspect.getsource(getattr(sc, fn))
+
+
 class TestCanonicalization:
     """Unit-level checks on the splitter (no HTTP)."""
 

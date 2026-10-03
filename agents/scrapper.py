@@ -127,16 +127,38 @@ def clean_html(raw_html):
     return _html.unescape(cleaned).strip()
 
 
+# TECH_FILTER intentionally also matches ROLE words (developer, engineer,
+# software, web, backend, full-stack) because the same regex decides whether a
+# posting is a dev job at all. Those are not stack entries: with a 5-item cap
+# they crowd out the real technologies. Verified 2026-10-03 against live
+# Remotive/WeWorkRemotely copy, where a Golang+Python+Kubernetes posting
+# produced "back-end, Engineer, Developer, developer, Back-end" — not one
+# actual technology. Role is classified elsewhere (DEV_TITLE_FILTER / the
+# frontend's _deriveRole), so tech_stack keeps only technologies.
+ROLE_WORDS = {
+    "backend", "back-end", "back end", "frontend", "front-end", "front end",
+    "fullstack", "full-stack", "full stack", "developer", "engineer",
+    "software", "web",
+}
+
+
 def top_techs(text, limit=5):
-    """Extract up to N unique, normalized tech keywords from text."""
+    """Extract up to N unique technology keywords from text.
+
+    Case-insensitively deduplicated (a description saying "Engineer" three
+    times used to burn three of the five slots) and role words are skipped so
+    the cap is spent on real stack terms. Returns "" when a posting mentions no
+    technology — an honest empty cell beats a cell full of job-title nouns.
+    """
     found = re.findall(TECH_FILTER, text or "")
     seen, out = set(), []
     for w in (t.lower() for t in found):
-        if w not in seen:
-            seen.add(w)
-            out.append(w)
-            if len(out) == limit:
-                break
+        if w in seen or w in ROLE_WORDS:
+            continue
+        seen.add(w)
+        out.append(w)
+        if len(out) == limit:
+            break
     return ", ".join(out)
 
 
@@ -872,7 +894,7 @@ def parse_json_remotive(board, data, debug=False):
             "job_title": title,
             "company": j.get("company_name", ""),
             "salary": j.get("salary", ""),
-            "tech_stack": ", ".join(re.findall(TECH_FILTER, combined_text)[:5]),
+            "tech_stack": top_techs(combined_text),  # dedupes + normalizes (RSS path parity)
             "timezone": j.get("candidate_required_location", "Worldwide"),
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
@@ -919,7 +941,7 @@ def parse_json_remoteok(board, data, debug=False):
             "job_title": title,
             "company": j.get("company", "") or "",
             "salary": j.get("salary", "") or "",
-            "tech_stack": ", ".join(re.findall(TECH_FILTER, combined_text)[:5]),
+            "tech_stack": top_techs(combined_text),  # dedupes + normalizes (RSS path parity)
             "timezone": j.get("location", "") or "Worldwide",
             "apply_url": j.get("url", "") or j.get("apply_url", "") or "",
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
@@ -973,7 +995,7 @@ def parse_json_arbeitnow(board, data, debug=False):
             "job_title": title,
             "company": j.get("company_name", "") or j.get("company", ""),
             "salary": j.get("salary", ""),
-            "tech_stack": ", ".join(re.findall(TECH_FILTER, combined_text)[:5]),
+            "tech_stack": top_techs(combined_text),  # dedupes + normalizes (RSS path parity)
             "timezone": j.get("location", "Worldwide"),
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),

@@ -82,6 +82,13 @@ Aggregation rules (`cache.extract_skills` / `cache.get_skills_snapshot`):
   the column differently.
 - Drops noise: stopwords (`n/a`, `various`, `remote`), tokens with no letters
   (`5+`), >3-word prose, >32-char tokens.
+- Drops ROLE nouns (`developer`, `engineer`, `software`, `web`, `backend`,
+  `front-end`, `full-stack`). These are not stray text: `TECH_FILTER` emits
+  them into `tech_stack` on nearly every row because the same regex also gates
+  "is this a dev job". Left in, they outrank every real technology. Role is
+  derived separately (`store.js _deriveRole`).
+- Folds hyphen/underscore to space, so `Back-end`/`back end`/`BACKEND` are one
+  key rather than three pills.
 - Counts each skill **once per job**, so a cell listing `Python, python`
   contributes 1.
 - `pct` = share of `jobs_with_stack`, not `total_jobs` — rows with an empty

@@ -1,5 +1,45 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-03 — skills aggregate verified against REAL board text; two real bugs)
+
+The first `/api/skills` corpus was hand-written, so it tested text that looks
+like `tech_stack` rather than what the pipeline actually writes. Re-checked
+against verbatim copy pulled from live Remotive + WeWorkRemotely postings. It
+failed, for reasons no invented fixture would have surfaced.
+
+**What the column really contains.** `TECH_FILTER` (`agents/scrapper.py`)
+deliberately matches ROLE words — `developer`, `engineer`, `software`, `web`,
+`backend`, `front-end`, `full-stack` — because the same regex also decides
+whether a posting is a dev job. The API parsers then did
+`", ".join(re.findall(TECH_FILTER, combined_text)[:5])`: raw matches, **no
+dedupe**. A real Golang + Python + Kubernetes posting produced
+`"back-end, Engineer, Developer, developer, Back-end"` — five slots, zero
+technologies, the stack pushed clean out of the window.
+
+- **Producer fix:** the three `parse_json_*` parsers now call the existing
+  `top_techs()` instead of raw `findall[:5]`, matching the RSS/HTML path
+  (previously the two paths disagreed). `top_techs()` now also skips
+  `ROLE_WORDS`, so the 5-item cap is spent on real technologies and a
+  non-technical posting yields `""` instead of a cell full of job-title nouns.
+  Same posting now writes `"python, react, java, php, vue"`.
+- **Aggregator fix:** role nouns added to `_SKILL_STOPWORDS`, plus
+  hyphen/underscore folding so `Back-end` / `backend` / `back end` resolve to
+  one key. Without it the cloud ranked Web/Software/Backend at the top of every
+  real scrape — and `Back-end` vs `Backend` rendered as two separate pills,
+  which is exactly the alias-drift failure this endpoint was built to prevent,
+  occurring on the single most common token in live data.
+- Verified end to end on real copy: `Senior back-end Engineer` →
+  `['Python','React','Java','PHP','Vue']`; `Staff Software Engineer` →
+  `['API','Python','TypeScript','JavaScript','React']`; a content-review and a
+  German customer-service posting → `[]` (previously both contributed "Web").
+- Tests: `TestRealPipelineText` + `TestScraperProducerParity` (7 new) pin the
+  real strings, the fold, and that the parsers can't regress to `findall[:5]`.
+  Full suite: **321 passed, 1 skipped**.
+
+Note on provenance: the sandbox has no direct egress (TLS blocked), so board
+JSON/RSS was pulled through a proxied fetch and replayed through the real
+parser code. Postings are real; the HTTP leg was not the scraper's own.
+
 ## Unreleased (2026-10-03 — the mock layer never existed: dead fallbacks removed)
 
 Follow-up to the `MOCK_SKILLS` finding. The root cause is bigger than one
