@@ -14,6 +14,9 @@ Living plan for the remote-job-agent build. Status last reconciled 2026-10-01.
 | 1c — Frontend wiring | `api.js` client, `store` normalization+fallback, jobDesk/dashboard/tracker/drawer live, source badges | ✅ done, verified via TestClient |
 | 1d — Data honesty | snapshot fallback, `data_source`, cp1252 emoji-crash fix in `sheet_writer.py` | ✅ done, live Sheets confirmed |
 | 1e — Docs | README API section, PRODUCTION/ARCHITECTURE/BACKEND/FRONTEND/PM | ✅ done |
+| 2 — Action API | scrape ✅ + status card; resume/cover-letter ✅ (Studio wired); CV profile GET+PUT ✅ + variants ✅; fill-and-review API ✅; cockpit queue connected | 🟡 in progress — submit remains gated; skills endpoint pending |
+| 3 — Polish | auto-apply telemetry wiring, E2E checks | 🟡 in progress — tracker review mapping done |
+| 4 — Free deployment | compose `api` + `caddy` (automatic Let's Encrypt via `SITE_ADDRESS`), `deploy/` (Oracle Always Free walkthrough + `setup-vm.sh` + `Caddyfile`), `auth-bootstrap.js` token-in-URL capture, tier env vars surfaced | ✅ done (2026-10-03) — code/docs complete; live VM launch is the remaining manual step (`deploy/DEPLOY_ORACLE.md`) |
 | 2 — Action API | scrape ✅ + status card; resume/cover-letter ✅ (Studio wired); CV profile GET+PUT ✅ + variants ✅; fill-and-review API ✅; cockpit queue connected; skills aggregate ✅ | ✅ endpoints complete — 2b live submit stays gated by operator decision, not by missing code |
 | 2.1 — CV-upload-first + cache seam | 2.1a upload→parse→match→gap analysis in Resume Studio; 2.1b cache backend seam + multi-worker warning | ⬜ planned, target 3–4 days from 2026-10-03 (spec in §2.1) |
 | 3 — Polish | auto-apply telemetry wiring, E2E checks | 🟡 in progress — tracker review mapping done; frontend E2E smoke landed (19 assertions, mutation-tested) |

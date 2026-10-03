@@ -1,0 +1,27 @@
+# Caddy reverse proxy for the Remote Job Agent.
+#
+# SITE_ADDRESS comes from .env (defaults to ":80" via docker-compose.yml):
+#   SITE_ADDRESS=:80                 -> plain HTTP on port 80 (bare-IP access)
+#   SITE_ADDRESS=jobs.example.com    -> automatic Let's Encrypt HTTPS + redirect
+#
+# The API itself enforces API_TOKEN; this proxy only terminates TLS and forwards.
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# Large scrape payloads and PDF downloads; give slow resume generation room.
+	reverse_proxy api:8000 {
+		transport http {
+			read_timeout 300s
+			write_timeout 300s
+		}
+	}
+
+	# Basic hardening headers (the app has no session cookies to protect).
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+}

@@ -1,5 +1,28 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-03 — Free deployment stack: Caddy + Oracle guide + token bootstrap)
+
+- `docker-compose.yml` now ships the full public stack: `api` (dashboard +
+  endpoints; container-internal `0.0.0.0` bind with a `127.0.0.1:8000` host
+  escape hatch for SSH tunnels) and `caddy` (reverse proxy on 80/443 —
+  automatic Let's Encrypt when `SITE_ADDRESS` is a real hostname; `:80`
+  default serves plain HTTP on a bare IP). Secrets stay read-only mounts;
+  Caddy config/certs live in `deploy/Caddyfile` + named volumes.
+- New `deploy/` folder: `DEPLOY_ORACLE.md` ($0 deployment walkthrough on
+  Oracle Cloud Always Free — 4 ARM OCPU / 24 GB / 200 GB, free DuckDNS
+  hostname, VCN ingress, ops + troubleshooting tables), `setup-vm.sh`
+  (Docker install, ufw/iptables fixups, runtime-file creation), `Caddyfile`.
+- `frontend/js/auth-bootstrap.js` (+ script tag in `index.html`): opening the
+  dashboard once as `/?token=<API_TOKEN>` stores it in
+  `localStorage['rja_api_token']` and strips it from the address bar via
+  `replaceState` — token-protected deploys need no manual header setup.
+- `.env.example`: added `SITE_ADDRESS` (Caddy site address), surfaced
+  `TIER_BATCH_MAX=75` / `TIER_DREAM_THRESHOLD=90` (auto-apply tier bounds in
+  `agents/auto_applier.py`), bumped `AUTO_APPLY_THRESHOLD` default 70 → 75,
+  and noted compose overrides `API_HOST` to `0.0.0.0` (token required).
+- Docs synced: README (features, env vars, tree, Docker quick start), 
+  PRODUCTION.md (§3 stack, §4 vars, §5 HTTPS, §7 rows), ARCHITECTURE.md,
+  FRONTEND.md, AGENTS.md.
 ## 2026-10-03 — feat(safety): three-state submit switch + dry-run rehearsal (Stage 0/1)
 
 The submit path could previously only be exercised two ways: not at all, or

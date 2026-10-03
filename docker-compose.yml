@@ -51,3 +51,58 @@ services:
       - ./resumes:/app/resumes
       - ./cover_letters:/app/cover_letters
       - ./screenshots:/app/screenshots
+
+  # FastAPI backend + same-origin Command Center dashboard.
+  # Binds 0.0.0.0 inside the container; public traffic reaches it only through
+  # Caddy. API_TOKEN must be set in .env or api/app.py refuses the non-local bind.
+  api:
+    build: .
+    container_name: job-agent-api
+    restart: unless-stopped
+    command: ["python", "-m", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    env_file:
+      - .env
+    environment:
+      - PLAYWRIGHT_HEADLESS=true
+      - TZ=${TZ:-Asia/Kolkata}
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+    ports:
+      # Localhost-only escape hatch (SSH tunnel); public access is via Caddy.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./keys.json:/app/keys.json:ro
+      - ./my_cv.pdf:/app/my_cv.pdf:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./seen_jobs.json:/app/seen_jobs.json
+      - ./scraped_jobs.json:/app/scraped_jobs.json
+      - ./curated_jobs.json:/app/curated_jobs.json
+      - ./apply_packages:/app/apply_packages
+      - ./resumes:/app/resumes
+      - ./cover_letters:/app/cover_letters
+      - ./screenshots:/app/screenshots
+
+  # HTTPS reverse proxy with automatic Let's Encrypt certs.
+  # SITE_ADDRESS=:80 serves plain HTTP (fine for a bare IP); set it to a real
+  # hostname (e.g. jobs.example.com) for automatic HTTPS + HTTP->HTTPS redirect.
+  caddy:
+    image: caddy:2-alpine
+    container_name: job-agent-caddy
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      - SITE_ADDRESS=${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

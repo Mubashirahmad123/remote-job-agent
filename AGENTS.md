@@ -7,6 +7,7 @@
 - `frontend/` — vanilla-JS dashboard, no build step: `js/api.js` (one fn per endpoint group), `js/store.js` (state + normalization + mock fallback), `js/components/` (dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply).
 - `tests/` — pytest suites mirroring the modules they test (e.g., `test_auto_applier.py`, `test_api_phase1.py` — faked Sheets, no network).
 - `tools/` — reusable utilities: `cv_parser.py`, `cv_matcher.py`, `deduplicator.py`, `sheet_writer.py`, `resume_generator.py`, and scraper helpers.
+- `deploy/` — free-cloud deployment: `DEPLOY_ORACLE.md` (Oracle Always Free $0 walkthrough), `setup-vm.sh` (VM bootstrap), `Caddyfile` (compose `caddy` reverse proxy).
 - LLM fallback chain (shared by `gemini_tools.py`, `resume_generator.py`, `cv_parser.py`): Gemini → Groq → Mistral → GLM → Ollama Cloud. Mistral/Groq use OpenAI-compatible endpoints via `requests` (no extra SDK deps); GLM needs `GLM_API_KEY` + `zhipuai` package (model via `GLM_MODEL`, default `glm-4`); Ollama sends `Authorization: Bearer` only when `OLLAMA_API_KEY` is set (empty = local server).
 - Top-level entry points: `main.py` (CrewAI pipeline), `Run.py` (setup/run), `scheduler.py` (cron), `track.py` (application tracker), `clean_jobs.py` and `format_jobs_xlsx.py` (Excel tooling).
 - Generated artifacts (`apply_packages/`, `cover_letters/`, `resumes/`, `screenshots/`, `cache/`) are gitignored — never commit them.
@@ -23,7 +24,8 @@ python scheduler.py                                         # scheduled scraping
 python -m pytest tests/                                     # run all tests
 
 # Docker workflow
-docker compose up -d scheduler                              # run 24/7 scheduler daemon
+docker compose up -d --build                                 # full stack: api + scheduler + caddy (needs API_TOKEN)
+docker compose up -d scheduler                              # run 24/7 scheduler daemon only
 docker compose run --rm runner python main.py simple        # run scrape on-demand via container
 docker compose run --rm runner python -m pytest tests/      # run test suite in container
 ```

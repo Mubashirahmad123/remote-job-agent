@@ -13,6 +13,9 @@ frontend/
   css/                  variables, base, layout, components, dashboard, jobs,
                         resume, autoapply, tracker (one file per concern)
   js/
+    data/mockData.js    OFFLINE FALLBACK ONLY (MOCK_JOBS/SOURCES/SKILLS/KANBAN)
+    auth-bootstrap.js   one-time ?token=<API_TOKEN> capture → localStorage
+                        (loads before api.js; no-op without the parameter)
     api.js              live client — must load before store.js
     store.js            reactive state + normalization + loaders
     components/*.js     navigation, dashboard, jobDesk, jobDrawer,
@@ -20,6 +23,8 @@ frontend/
     app.js              bootstrapper (loads LAST)
 ```
 
+`index.html` script order matters: `mockData → auth-bootstrap → api → store → components → app`.
+`mockData.js` is fallback paint, not the data model — new code must read
 `index.html` script order matters: `api → store → components → app`.
 
 ## Planned — Phase 2.1a (CV-upload-first)
@@ -100,7 +105,9 @@ error needed an assertion on the cause reaching the DOM rather than the word
 
 - Base URL: `JobAgent.API_BASE` → `localStorage rja_api_base` → same-origin →
   `http://127.0.0.1:8000` (for `file://` accidents).
-- Token: `localStorage rja_api_token` → `Authorization: Bearer` header.
+- Token: `localStorage rja_api_token` → `Authorization: Bearer` header (on
+  token-protected deploys, `auth-bootstrap.js` captures `?token=` from the
+  first URL into that key and strips it from the address bar).
 - Errors carry `.code`: `UNREACHABLE` (server down), `UNAUTHORIZED` (bad token),
   `HTTP_nnn`. All throw — callers show banners/toasts, never silent-fail.
 - One fn per backend router: `getHealth` / `getJobs/getJob` / `getStats` /
