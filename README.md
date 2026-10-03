@@ -366,6 +366,7 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `GET /api/jobs?tab=&q=&source=&limit=&offset=` | Enriched jobs from `ALL JOBS` / `TOP MATCHES` / `GOOD MATCHES` |
 | `GET /api/jobs/{fingerprint}` | One job by MD5 fingerprint |
 | `GET /api/stats` | `{total_jobs, tabs, by_source, stats_rows, curated_jobs}` |
+| `GET /api/skills?tab=&limit=` | `{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name,count,pct}]}` — canonicalized `tech_stack` demand (powers the dashboard skill cloud) |
 | `GET /api/tracker?status=` | APPLIED-tab rows; supports both tracker CLI header and auto-apply APPLIED header fork (`job_fingerprint`, `applied_at`, fill-review statuses) |
 | `POST /api/tracker` | Add a manual application row to APPLIED (`apply_url`, optional title/company/notes/source/salary/contact/follow-up) |
 | `PATCH /api/tracker/{fp}` | `{status, notes}` — status whitelist: applied, interviewing, offer, rejected, withdrawn, ghosted |

@@ -92,8 +92,48 @@ JobAgent.dashboard = {
     if (bar) bar.style.width = progress + '%';
   },
 
+  _skillNote(text, color) {
+    const style = `color: ${color || 'var(--text-muted)'}; font-size: 12.5px; padding: 12px;`;
+    return `<div style="${style}">${text}</div>`;
+  },
+
+  // Live skill demand. Honest empty states: the sheet genuinely having no
+  // tech_stack data must not look identical to the API being down.
+  _renderSkills(skills, isLoading, error) {
+    if (!this.topSkillsCloud) return;
+    const esc = (JobAgent.escapeHtml || ((v) => String(v ?? '')));
+
+    if (isLoading && !skills) {
+      this.topSkillsCloud.innerHTML = this._skillNote('Aggregating <code>tech_stack</code> from <code>/api/skills</code>…');
+      return;
+    }
+    if (!skills) {
+      this.topSkillsCloud.innerHTML = this._skillNote(
+        error ? `Skill demand unavailable: ${esc(error)}` : 'Skill demand unavailable.',
+        error ? '#f59e0b' : undefined,
+      );
+      return;
+    }
+    const list = Array.isArray(skills.skills) ? skills.skills : [];
+    if (!list.length) {
+      const total = this._count(skills.total_jobs, 0);
+      this.topSkillsCloud.innerHTML = this._skillNote(
+        total > 0
+          ? `No <code>tech_stack</code> data on ${total} active listing${total === 1 ? '' : 's'} yet — run a scrape with enrichment.`
+          : 'No active listings yet — run a scrape to populate skill demand.',
+      );
+      return;
+    }
+    this.topSkillsCloud.innerHTML = list.map(sk => `
+      <div class="skill-pill" title="${esc(sk.name)} — ${esc(sk.count)} of ${esc(skills.jobs_with_stack)} listings with a stack">
+        <span>${esc(sk.name)}</span>
+        <span class="skill-pct">${esc(sk.pct)}%</span>
+      </div>
+    `).join('');
+  },
+
   render() {
-    const { stats, tracker, loading, errors } = JobAgent.store.state;
+    const { stats, tracker, skills, loading, errors } = JobAgent.store.state;
 
     this._applyMetrics(stats);
     this._applyPipelineMetrics(tracker);
@@ -128,14 +168,7 @@ JobAgent.dashboard = {
       }
     }
 
-    // 2. Skills cloud — no backend endpoint yet, keep mock (Phase 2).
-    if (this.topSkillsCloud && JobAgent.MOCK_SKILLS) {
-      this.topSkillsCloud.innerHTML = JobAgent.MOCK_SKILLS.map(sk => `
-        <div class="skill-pill">
-          <span>${sk.name}</span>
-          <span class="skill-pct">${sk.count}%</span>
-        </div>
-      `).join('');
-    }
+    // 2. Skills cloud — live GET /api/skills aggregate over tech_stack.
+    this._renderSkills(skills, loading.skills, errors.skills);
   }
 };

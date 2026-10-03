@@ -17,6 +17,7 @@ Router layout (one file per group for easy debugging):
    api/routers/health.py  — GET /api/health
    api/routers/jobs.py    — GET /api/jobs, GET /api/jobs/{fp}
    api/routers/stats.py   — GET /api/stats
+   api/routers/skills.py  — GET /api/skills (tech_stack demand aggregate)
    api/routers/tracker.py — GET/PATCH /api/tracker
     api/routers/system.py  — POST /api/jobs/refresh
     api/runs.py + api/routers/runs.py — POST/GET /api/scrape (background runs)
@@ -34,7 +35,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from api.deps import cors_origins
-from api.routers import health, jobs, cv, materials, runs, stats, system, tracker, apply
+from api.routers import health, jobs, cv, materials, runs, skills, stats, system, tracker, apply
 
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(jobs.router)
     app.include_router(stats.router)
+    app.include_router(skills.router)
     app.include_router(tracker.router)
     app.include_router(system.router)
     app.include_router(runs.router)

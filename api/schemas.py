@@ -355,3 +355,26 @@ class ApplyOut(BaseModel):
     screenshot_url: Optional[str] = None
     materials_note: Optional[str] = None
     submit_enabled: bool = False
+
+
+class SkillOut(BaseModel):
+    """One aggregated skill from the `tech_stack` column (GET /api/skills)."""
+
+    name: str
+    count: int
+    pct: int
+
+
+class SkillsOut(BaseModel):
+    """Skill-demand aggregate for one job tab.
+
+    `pct` is a share of `jobs_with_stack` (rows that actually list a stack),
+    not of `total_jobs` — otherwise empty-stack rows would silently deflate
+    every percentage shown in the dashboard cloud.
+    """
+
+    tab: str
+    total_jobs: int
+    jobs_with_stack: int
+    unique_skills: int
+    skills: List[SkillOut] = []

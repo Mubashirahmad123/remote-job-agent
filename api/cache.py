@@ -24,6 +24,7 @@ TTL
 
 import json
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -376,6 +377,185 @@ def get_stats_snapshot() -> Dict[str, Any]:
             "by_source": {},
             "stats_rows": [],
             "curated_jobs": 0,
+        }
+
+
+# --- Skill aggregation (GET /api/skills) -------------------------------------
+# tech_stack is a free-text sheet column written by several producers
+# (agents/scrapper.py TECH_FILTER joins, Gemini enrichment, manual rows), so the
+# same skill arrives as "Node.js" / "nodejs" / "NODE". Aggregation therefore
+# canonicalizes before counting, otherwise the cloud shows three Node entries.
+
+# Separators actually observed in the column. "/" is deliberately NOT a
+# separator: it would split CI/CD and TCP/IP into nonsense tokens.
+_SKILL_SPLIT = re.compile(r"[,;|\n\r\t•·]+")
+# Trim surrounding punctuation/quotes/brackets but keep inner . + # (Node.js,
+# C++, C#) and inner - (Objective-C).
+_SKILL_STRIP = " \t\"'`()[]{}<>*:•·-–—."
+
+# lowercase lookup key -> canonical display form.
+_SKILL_ALIASES: Dict[str, str] = {
+    "js": "JavaScript", "javascript": "JavaScript", "ecmascript": "JavaScript",
+    "ts": "TypeScript", "typescript": "TypeScript",
+    "node": "Node.js", "nodejs": "Node.js", "node js": "Node.js", "node.js": "Node.js",
+    "react": "React", "reactjs": "React", "react.js": "React", "react js": "React",
+    "next": "Next.js", "nextjs": "Next.js", "next.js": "Next.js",
+    "nuxt": "Nuxt", "nuxtjs": "Nuxt", "nuxt.js": "Nuxt",
+    "vue": "Vue", "vuejs": "Vue", "vue.js": "Vue",
+    "angular": "Angular", "angularjs": "Angular",
+    "svelte": "Svelte", "sveltekit": "SvelteKit",
+    "py": "Python", "python": "Python", "python3": "Python",
+    "golang": "Go", "go": "Go",
+    "postgres": "PostgreSQL", "postgresql": "PostgreSQL", "psql": "PostgreSQL",
+    "mysql": "MySQL", "mongodb": "MongoDB", "mongo": "MongoDB",
+    "redis": "Redis", "elasticsearch": "Elasticsearch", "elastic": "Elasticsearch",
+    "k8s": "Kubernetes", "kubernetes": "Kubernetes",
+    "docker": "Docker", "terraform": "Terraform", "ansible": "Ansible",
+    "aws": "AWS", "amazon web services": "AWS",
+    "gcp": "GCP", "google cloud": "GCP", "azure": "Azure",
+    "sql": "SQL", "nosql": "NoSQL", "graphql": "GraphQL", "rest": "REST",
+    "restful": "REST", "rest api": "REST", "grpc": "gRPC",
+    "html": "HTML", "html5": "HTML", "css": "CSS", "css3": "CSS",
+    "sass": "Sass", "scss": "Sass", "tailwind": "Tailwind", "tailwindcss": "Tailwind",
+    "django": "Django", "flask": "Flask", "fastapi": "FastAPI",
+    "rails": "Rails", "ruby on rails": "Rails", "ruby": "Ruby",
+    "spring": "Spring", "spring boot": "Spring Boot",
+    "dotnet": ".NET", ".net": ".NET", "asp.net": "ASP.NET", "c#": "C#",
+    "c++": "C++", "cpp": "C++", "c": "C",
+    "java": "Java", "kotlin": "Kotlin", "swift": "Swift", "scala": "Scala",
+    "php": "PHP", "laravel": "Laravel", "rust": "Rust", "elixir": "Elixir",
+    "react native": "React Native", "flutter": "Flutter",
+    "ios": "iOS", "android": "Android",
+    "ci/cd": "CI/CD", "cicd": "CI/CD", "ci cd": "CI/CD",
+    "devops": "DevOps", "linux": "Linux", "git": "Git", "github": "GitHub",
+    "gitlab": "GitLab", "jenkins": "Jenkins", "kafka": "Kafka",
+    "rabbitmq": "RabbitMQ", "airflow": "Airflow", "spark": "Spark",
+    "pandas": "Pandas", "numpy": "NumPy", "pytorch": "PyTorch",
+    "tensorflow": "TensorFlow", "ml": "Machine Learning",
+    "machine learning": "Machine Learning", "ai": "AI",
+    "llm": "LLM", "llms": "LLM", "nlp": "NLP",
+    "api": "API", "apis": "API", "microservices": "Microservices",
+    "microservice": "Microservices", "graphite": "Graphite",
+    "playwright": "Playwright", "selenium": "Selenium", "cypress": "Cypress",
+    "jest": "Jest", "pytest": "pytest",
+}
+
+# Tokens that are noise rather than skills (scraper teaser text leaks these in).
+_SKILL_STOPWORDS = frozenset({
+    "", "n/a", "na", "none", "null", "-", "--", "etc", "and", "or", "the",
+    "remote", "developer", "engineer", "senior", "junior", "mid", "fulltime",
+    "full time", "part time", "contract", "various", "other", "others",
+    "tbd", "unknown", "not specified", "experience", "years", "plus",
+})
+
+# Acronyms that must stay uppercase when no alias matched.
+_SKILL_UPPER = frozenset({
+    "aws", "gcp", "sql", "api", "css", "html", "php", "ios", "jwt", "orm",
+    "oop", "saas", "ui", "ux", "cms", "crm", "etl", "qa", "ci", "cd", "ml",
+    "ai", "bi", "erp", "sdk", "cli", "xml", "json", "yaml", "tcp", "http",
+})
+
+# Max words in a token before it's treated as prose, not a skill.
+_SKILL_MAX_WORDS = 3
+_SKILL_MAX_LEN = 32
+
+
+def _canonical_skill(token: str) -> str:
+    """Normalize one raw tech_stack token to a display name ('' = drop it)."""
+    raw = str(token or "").strip().strip(_SKILL_STRIP).strip()
+    # Collapse internal whitespace so "node  js" and "node js" agree.
+    raw = " ".join(raw.split())
+    if not raw or len(raw) > _SKILL_MAX_LEN:
+        return ""
+    key = raw.lower()
+    if key in _SKILL_STOPWORDS:
+        return ""
+    alias = _SKILL_ALIASES.get(key)
+    if alias:
+        return alias
+    if len(key.split()) > _SKILL_MAX_WORDS:
+        return ""
+    # Must contain a letter (drops "3", "5+", "2026").
+    if not any(ch.isalpha() for ch in key):
+        return ""
+    if key in _SKILL_UPPER:
+        return key.upper()
+    # Preserve deliberate casing (Kubernetes, PostgreSQL, iOS typed by hand);
+    # only fix obviously-unstyled all-lower / all-upper tokens.
+    if raw.islower() or raw.isupper():
+        return " ".join(w[:1].upper() + w[1:] for w in key.split())
+    return raw
+
+
+def extract_skills(raw: Any) -> List[str]:
+    """Split one tech_stack cell into canonical, de-duplicated skill names."""
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple, set)):
+        tokens: List[str] = [str(t) for t in raw]
+    else:
+        tokens = _SKILL_SPLIT.split(str(raw))
+    out: List[str] = []
+    seen = set()
+    for token in tokens:
+        name = _canonical_skill(token)
+        if not name:
+            continue
+        dedupe_key = name.lower()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        out.append(name)
+    return out
+
+
+def get_skills_snapshot(tab: str = "ALL JOBS", limit: int = 12) -> Dict[str, Any]:
+    """Aggregate `tech_stack` demand across a job tab. Never crashes.
+
+    Counts each skill once per job (a row listing "React, React" counts once),
+    so `pct` = share of stack-bearing jobs on the tab that mention the skill.
+    Ties break alphabetically, keeping output stable across identical reads.
+    """
+    if tab not in JOB_TABS:
+        raise ValueError(f"Unknown tab '{tab}'. Expected one of: {', '.join(JOB_TABS)}")
+    try:
+        rows = get_tab_rows(tab)
+        counts: Dict[str, int] = {}
+        display: Dict[str, str] = {}
+        jobs_with_stack = 0
+        for row in rows:
+            names = extract_skills(row.get("tech_stack"))
+            if not names:
+                continue
+            jobs_with_stack += 1
+            for name in names:
+                key = name.lower()
+                counts[key] = counts.get(key, 0) + 1
+                display.setdefault(key, name)
+        ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        top = ranked[: max(0, limit)]
+        skills = [
+            {
+                "name": display[key],
+                "count": count,
+                "pct": round(count * 100 / jobs_with_stack) if jobs_with_stack else 0,
+            }
+            for key, count in top
+        ]
+        return {
+            "tab": tab,
+            "total_jobs": len(rows),
+            "jobs_with_stack": jobs_with_stack,
+            "unique_skills": len(counts),
+            "skills": skills,
+        }
+    except Exception:
+        return {
+            "tab": tab,
+            "total_jobs": 0,
+            "jobs_with_stack": 0,
+            "unique_skills": 0,
+            "skills": [],
         }
 
 

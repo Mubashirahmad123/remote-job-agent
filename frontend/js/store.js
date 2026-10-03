@@ -29,11 +29,12 @@ JobAgent.store = {
     jobs: [],
     tracker: [],
     stats: null,
+    skills: null,
     health: null,
     usingLive: false,
     dataSource: 'mock', // sheets|snapshot|mock (from GET /api/health)
-    loading: { jobs: false, tracker: false, stats: false },
-    errors: { jobs: '', tracker: '', stats: '' },
+    loading: { jobs: false, tracker: false, stats: false, skills: false },
+    errors: { jobs: '', tracker: '', stats: '', skills: '' },
   },
 
   listeners: [],
@@ -300,7 +301,26 @@ JobAgent.store = {
     }
   },
 
+  // Skill cloud: live aggregate over tech_stack (GET /api/skills). No mock
+  // fallback — an empty list renders an honest "no stack data" note rather
+  // than inventing demand figures the sheet never contained.
+  async loadSkills() {
+    this.state.loading.skills = true;
+    this.state.errors.skills = '';
+    this.notify();
+    try {
+      this.state.skills = await JobAgent.api.getSkills({ limit: 12 });
+    } catch (e) {
+      this.state.errors.skills = e.message;
+      this.state.skills = null;
+      console.warn('[store] skills unavailable:', e.message);
+    } finally {
+      this.state.loading.skills = false;
+      this.notify();
+    }
+  },
+
   async loadAll() {
-    await Promise.all([this.loadJobs(), this.loadTracker(), this.loadStats()]);
+    await Promise.all([this.loadJobs(), this.loadTracker(), this.loadStats(), this.loadSkills()]);
   },
 };

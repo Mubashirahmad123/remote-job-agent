@@ -1,5 +1,37 @@
 # CHANGELOG.md
 
+## Unreleased (2026-10-03 — GET /api/skills: live skill-demand aggregate)
+
+- New read endpoint `GET /api/skills?tab=&limit=` (`api/routers/skills.py`,
+  `cache.get_skills_snapshot`, `SkillsOut`/`SkillOut` schemas). Aggregates the
+  free-text `tech_stack` column across one job tab and returns
+  `{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name,count,pct}]}`.
+- Canonicalization (`cache.extract_skills`) collapses the alias drift the column
+  actually contains — `js`/`javascript`, `node`/`nodejs`/`Node.js`, `k8s`,
+  `postgres` — so one skill is one pill. Splits on `, ; |`/newline/bullets but
+  **not** `/` (keeps `CI/CD`), drops stopwords/numeric/prose tokens, counts each
+  skill once per job, and sorts count desc then name asc for stable output.
+- `pct` is a share of `jobs_with_stack` (rows that list a stack), not of
+  `total_jobs`, so empty-stack rows don't deflate every figure.
+- Cache-backed (same TTL as `/api/jobs`), token-gated like every other read, and
+  fails soft: a Sheets outage returns the zeroed shape, never a 500. A non-job
+  tab (`APPLIED`/`STATS`) is a 400.
+- Frontend: `api.getSkills()`, `store.loadSkills()` (+ `skills` state, wired into
+  `loadAll`), and `dashboard._renderSkills()` replace the dead `MOCK_SKILLS`
+  branch. The cloud now shows real percentages with a hover count, and
+  distinguishes loading / API-error / "no tech_stack data yet" instead of
+  rendering nothing. No mock fallback — invented demand figures would be worse
+  than an empty state.
+- Note: `JobAgent.MOCK_SKILLS` was never defined anywhere in the codebase, so the
+  old guard `if (this.topSkillsCloud && JobAgent.MOCK_SKILLS)` silently rendered
+  an empty cloud in every environment. The widget was dead UI, not stale mock UI.
+- Tests: `tests/test_api_skills.py` — 20 cases (alias collapse, in-cell dupes,
+  pct denominator, sort stability, `CI/CD` non-split, noise rejection, quote/
+  bracket stripping, limit cap, tab filter, 400 on bad tab, 422 on bad limit,
+  Sheets-failure soft landing, token gate). Full suite: **311 passed, 1 skipped**.
+- Phase 2 endpoint work is now complete; the only remaining 2b item is the
+  operator-held live submit run. `SUBMIT_ENABLED` stays `False`.
+
 ## Unreleased (2026-10-01 — Manual-application modal scroll fix)
 
 - The Pipeline Tracker `+ Add Manual Application` modal clipped its

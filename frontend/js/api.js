@@ -4,6 +4,7 @@
  *   health  -> GET /api/health
  *   jobs    -> GET /api/jobs, GET /api/jobs/{fp}
  *   stats   -> GET /api/stats
+ *   skills  -> GET /api/skills (tech_stack demand aggregate)
  *   tracker -> GET /api/tracker, PATCH /api/tracker/{fp}
  *   system  -> POST /api/jobs/refresh
  *   runs    -> POST /api/scrape, GET /api/scrape[/{run_id}]
@@ -101,6 +102,10 @@ JobAgent.api = (() => {
 
   async function getStats() {
     return request('/api/stats');
+  }
+
+  async function getSkills({ tab = 'ALL JOBS', limit = 12 } = {}) {
+    return request('/api/skills' + query({ tab, limit }));
   }
 
   async function getTracker(status = '') {
@@ -239,6 +244,7 @@ JobAgent.api = (() => {
     getJobs,
     getJob,
     getStats,
+    getSkills,
     getTracker,
     createTracker,
     patchTracker,

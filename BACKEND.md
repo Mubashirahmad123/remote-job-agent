@@ -28,6 +28,7 @@ api/
     health.py       GET /api/health
     jobs.py         GET /api/jobs, GET /api/jobs/{job_fingerprint}
     stats.py        GET /api/stats
+    skills.py       GET /api/skills (tech_stack demand aggregate)
     tracker.py      GET /api/tracker, POST /api/tracker, PATCH /api/tracker/{job_fingerprint}
     system.py       POST /api/jobs/refresh
     runs.py         POST /api/scrape, GET /api/scrape[/{run_id}] (registry: api/runs.py)
@@ -61,6 +62,33 @@ Presence-only — asserts in tests that no secret substrings leak.
 ### `GET /api/stats`
 `{total_jobs, tabs{…}, by_source{…}, stats_rows[], curated_jobs}` — counts from
 job tabs + raw STATS-tab rows. Never crashes (returns zeros on error).
+
+### `GET /api/skills?tab=&limit=` → `SkillsOut`
+`{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name, count, pct}]}`
+— aggregates the free-text `tech_stack` column across one job tab.
+
+| Param | Default | Notes |
+|---|---|---|
+| `tab` | `ALL JOBS` | must be a job tab (`ALL JOBS`/`TOP MATCHES`/`GOOD MATCHES`); `APPLIED`/`STATS` → 400 |
+| `limit` | `12` | clamped 1–100; caps the returned list only, `unique_skills` still reports the full total |
+
+Aggregation rules (`cache.extract_skills` / `cache.get_skills_snapshot`):
+- Splits on `, ; |` newline and bullets — **not** on `/`, so `CI/CD` and
+  `TCP/IP` survive intact.
+- Canonicalizes aliases before counting (`js`/`JS`/`javascript` → `JavaScript`,
+  `node`/`nodejs`/`Node.js` → `Node.js`, `k8s` → `Kubernetes`, `postgres` →
+  `PostgreSQL`). Without this the cloud showed the same skill three times,
+  because scraper regex joins, Gemini enrichment, and manual rows all write
+  the column differently.
+- Drops noise: stopwords (`n/a`, `various`, `remote`), tokens with no letters
+  (`5+`), >3-word prose, >32-char tokens.
+- Counts each skill **once per job**, so a cell listing `Python, python`
+  contributes 1.
+- `pct` = share of `jobs_with_stack`, not `total_jobs` — rows with an empty
+  stack would otherwise deflate every percentage.
+- Sort is count desc, then name asc, so identical reads return identical order.
+- Never crashes: a Sheets failure returns the zeroed shape, same contract as
+  `/api/stats`.
 
 ### `GET /api/tracker?status=` → `TrackerEntry[]` (optional exact status filter)
 Supports both APPLIED header shapes: the compact tracker CLI header and the
