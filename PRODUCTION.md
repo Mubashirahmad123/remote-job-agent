@@ -141,6 +141,26 @@ docker compose run --rm runner python -m pytest tests/
 | Stale data after scrape | `POST /api/jobs/refresh`, or wait out the TTL (≤120s) |
 | Arbeitnow jobs saved with blank company (older runs) | Fixed 2026-10-01: parser now reads the API's `company_name` field; re-scrape to backfill |
 | A few Arbeitnow postings link to the company homepage, not the job page | Upstream API limitation (`url` = company site for a minority of postings); kept as-is — verified a slug-built `/jobs/<slug>` URL 404s, so no safe rewrite exists |
-| Bot-protected/generic-selector boards (Naukri, CWJobs, TimesJobs, GoRemote, etc.) repeatedly `empty` | Structural, not a regression: no dedicated parser exists (generic HTML selectors vs bot walls), GoRemote/FounditIN URLs duplicate other boards, Adzuna needs keys, JustRemote/NoDesk fail DNS. No earlier targeted fix found in history; leave as expected-empty |
+| Bot-protected/generic-selector boards (Naukri, CWJobs, TimesJobs, GoRemote, etc.) repeatedly `empty` | Structural, not a regression — **and not untried**: these boards have already had targeted work (see note below). Remaining causes: bot walls defeat generic HTML selectors (no per-board parser), GoRemote/FounditIN URLs duplicate other boards, Adzuna needs keys, JustRemote/NoDesk fail DNS. Treat as expected-empty; the next real fix is per-board parsers behind a browser render, not more retry tuning |
+
+> **Prior work on the "expected-empty" boards (so this isn't read as virgin territory).**
+> These boards were triaged and partially addressed before being parked:
+> - `BOT_PROTECTED_BOARDS` (`agents/scrapper.py`) already contains `Naukri`,
+>   `CWJobs`, `WorkInStartups`, plus Dice/BuiltIn/Shine/NoFluffJobs/etc. Membership
+>   buys longer base delays (3–6s vs 1–3s), header-pool rotation on retry, and a
+>   5–10s backoff + retry specifically on 403 instead of an immediate give-up.
+> - `SSL_ISSUE_BOARDS` = {`TimesJobs`, `NaukriGulf`} — these fetch with
+>   verification pre-disabled (`NaukriGulf` also carries `verify_ssl: False` in its
+>   board config) after SSL handshake failures were observed.
+> - `GoRemote` is explicitly routed to `parse_html_generic` in the board dispatch,
+>   so it has a parser path; it yields nothing because its URL overlaps boards
+>   already scraped and the generic selectors don't match its markup.
+> - `JS_RENDERED_BOARDS` diverts browser-only boards to the PlaywrightStealth pass
+>   rather than dropping them.
+>
+> Conclusion stands (these are structurally hard and may never reliably yield), but
+> the cheap levers — retries, delays, header rotation, SSL fallback, generic parser,
+> browser fallback — have all been pulled already. Anything further means
+> per-board parsers against an authenticated/stealth browser session.
 
 > Note: CV-upload-first flow (upload CV -> scrape/match on it -> Resume Studio surfaces missing sections like projects/certifications) is tracked in PM.md section 3 Backlog, not here. Current behavior: CV must pre-exist in the repo (my_cv.pdf / CV_PATH).

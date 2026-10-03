@@ -85,4 +85,4 @@ starts a background scrape run in a daemon thread inside the API process
 | `curated_jobs.json` missing/corrupt | Enrichment fields `null`, never crash |
 | API unreachable from browser | Per-section mock fallback; UI stays usable, banners explain |
 | Slow first paint | Mock renders instantly; live data re-renders via `store.subscribe` |
-| Bot-protected / generic-selector boards repeatedly `empty` (Naukri, CWJobs, TimesJobs, GoRemote, …) | Structural, not a regression (no dedicated parser, bot wall, duplicate/dead URLs) — expected-empty; see `PRODUCTION.md` §7 |
+| Bot-protected / generic-selector boards repeatedly `empty` (Naukri, CWJobs, TimesJobs, GoRemote, …) | Structural, not a regression (no per-board parser, bot wall, duplicate/dead URLs) — expected-empty, but already partially addressed (`BOT_PROTECTED_BOARDS` retry/header rotation, `SSL_ISSUE_BOARDS`, generic parser for GoRemote); see `PRODUCTION.md` §7 |
