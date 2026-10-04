@@ -40,6 +40,17 @@ this repo's history (table in FRONTEND.md); each one fails the suite.
 Known gap: no real browser (the Playwright browser CDN is unreachable from the
 build sandbox), so CSS/layout/visual and real input events are not covered.
 
+Known E2E environment limitation: the jsdom harness starts a real API and
+loads the dashboard without a browser token. During dashboard boot,
+`/api/cv/profile` imports `tools.cv_parser`, whose module-level `load_dotenv()`
+can reload a tokenized local `.env`; subsequent read requests such as
+`/api/stats` then correctly return 401 and the happy-path assertions time out.
+This is a harness-isolation/auth-fixture gap, not a stats regression. Before
+using the smoke suite as a release gate on a tokenized checkout, make the
+harness explicitly isolate `API_TOKEN` after lazy imports or seed
+`localStorage['rja_api_token']` with a test credential. Do not put real tokens
+in test output.
+
 Live smoke (reads only, real app, no fakes):
 ```powershell
 venv\Scripts\python.exe -m uvicorn api.app:app --host 127.0.0.1 --port 8000
