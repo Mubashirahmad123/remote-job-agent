@@ -562,16 +562,6 @@ then stop. No intent consumed, no claim taken.
 No live submission has been performed. Known blocker on the demo board: the
 Greenhouse form is reCAPTCHA-protected.
 
-## Roadmap — Phase 2.1 (next 3–4 days)
-
-| Item | What it adds | Status |
-|---|---|---|
-| **CV-upload-first flow** | Upload a CV from the dashboard, match jobs against *that* profile for the session, and have Resume Studio report the gaps between a posting's requirements and your CV ("wants Kubernetes, your CV doesn't mention it"). Not a replacement for `CV_DIR` multi-CV selection — that already works. | Planned (largest remaining item) |
-| **Multi-worker cache seam** | The sheet cache is in-process, so `--workers 1` is required today. Phase 2.1 adds a backend seam + a loud warning at `--workers > 1`; a shared store (Redis) is intentionally deferred until someone actually needs multiple workers. | Planned (conditional) |
-
-Full spec in [`PM.md`](PM.md) §2.1; operational and PII rules in
-[`PRODUCTION.md`](PRODUCTION.md) §8.
-
 ## License
 
 MIT
