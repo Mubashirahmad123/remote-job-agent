@@ -213,3 +213,22 @@ expect N=3 across different board types. Until then, say what was actually
 tested: *the demo board, once, under supervision.*
 
 Lever remains deferred — no trial account, documented skip.
+
+---
+
+## Run log
+
+### 2026-10-03 — Democorp recon only (blocked)
+
+- **Target:** Greenhouse public demo board, Full Stack Engineer, Democorp
+  (`https://job-boards.greenhouse.io/example/jobs/83446`).
+- **Mode reached:** read-only recon; neither `dry_run` nor `armed` was reached.
+- **Outcome:** `confirmation_metadata_found` was `false`: both
+  `confirmation_path` and `confirmation_message` were absent. The intended
+  `/intent` call would therefore fail closed with 502 before any fill or
+  click. reCAPTCHA was also detected. First Name, Last Name, and Email were
+  the only required fields and none were unhandled.
+- **Submission:** none. No fields were filled, files attached, or submit
+  controls clicked.
+- **Evidence:** `recon-democorp.json`; no `data/submit_runs/` evidence
+  directory exists because the browser submission path was never entered.

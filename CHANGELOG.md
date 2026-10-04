@@ -1,5 +1,18 @@
 # CHANGELOG.md
 
+## 2026-10-03 — live-submit recon: Greenhouse Democorp demo board blocked pre-flight
+
+- Ran the read-only Playwright recon against Greenhouse's public Democorp
+  "Full Stack Engineer" demo posting (`job-boards.greenhouse.io/example/jobs/83446`).
+  No fields were filled, no files uploaded, and no submit control was clicked.
+- Result: `confirmation_metadata_found=false` (`confirmation_path` and
+  `confirmation_message` were both absent), so `/intent` would fail closed
+  with 502 before any browser fill or click. The page also exposed reCAPTCHA.
+- The only required fields detected were First Name, Last Name, and Email;
+  none were unhandled. Per the supervised-run procedure, dry-run and armed
+  stages were not attempted and no submission occurred. Evidence:
+  `recon-democorp.json` (local, removed before commit).
+
 ## Unreleased (2026-10-03 — Free deployment stack: Caddy + Oracle guide + token bootstrap)
 
 - `docker-compose.yml` now ships the full public stack: `api` (dashboard +
