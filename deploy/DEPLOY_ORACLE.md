@@ -132,6 +132,20 @@ the address bar, so subsequent visits to `http://<VM_PUBLIC_IP>/` just work.
 
 Then use `https://yourname.duckdns.org/?token=<API_TOKEN>`.
 
+> DuckDNS pre-fills your *current* (home/office) IP when you add a domain —
+> replace it with the **VM's public IP**. To keep it in sync, run the update
+> URL **on the VM** (with no `&ip=` param DuckDNS auto-detects the caller's
+> address, i.e. the VM's own IP):
+>
+> ```bash
+> curl "https://www.duckdns.org/update?domains=yourname&token=<duckdns-token>"
+> ```
+>
+> Find the token at the top of the DuckDNS page after login — treat it like a
+> password (never commit it). Also **reserve the VM's public IP** (Instance →
+> Attached VNIC → IPv4s → Edit → Reserved) so a stop/reboot doesn't change it
+> and break DNS.
+
 ---
 
 ## Operations
