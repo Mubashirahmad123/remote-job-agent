@@ -18,7 +18,12 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = resolve(HERE, '..', '..');
-const PYTHON = resolve(REPO, 'venv', 'bin', 'python');
+import { existsSync } from 'node:fs';
+
+const VENV_PYTHON = process.platform === 'win32'
+  ? resolve(REPO, 'venv', 'Scripts', 'python.exe')
+  : resolve(REPO, 'venv', 'bin', 'python');
+const PYTHON = existsSync(VENV_PYTHON) ? VENV_PYTHON : (process.platform === 'win32' ? 'python' : 'python3');
 const INDEX_HTML = resolve(REPO, 'frontend', 'index.html');
 const SNAPSHOT = resolve(HERE, 'fixtures', 'jobs.snapshot.json');
 
