@@ -1,4 +1,4 @@
-"""Shared FastAPI dependencies: CORS origins + Bearer auth.
+"""Shared FastAPI dependencies: CORS origins + session/Bearer auth.
 
 Extracted from api/app.py so every router file stays small and
 debuggable. No pipeline imports here (lazy-import rule still holds).
@@ -6,7 +6,7 @@ debuggable. No pipeline imports here (lazy-import rule still holds).
 
 import os
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 # CORS: localhost-only by default. Override with comma-separated
@@ -34,34 +34,64 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 def require_token(
+    request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> None:
-    """Enforce Authorization: Bearer <API_TOKEN> when API_TOKEN is set.
+    """Authenticate every /api/* call: session cookie OR server-side Bearer.
 
-    No token configured -> allow all (local-dev default). Token configured ->
-    require an exact match on every /api/* call, including reads, so a
-    non-local bind (API_HOST=0.0.0.0 + API_TOKEN) is actually protected.
+    Order of checks:
+      1. Valid HttpOnly session cookie (browser login flow) -> allow.
+      2. Authorization: Bearer <API_TOKEN> exact match (server-to-server:
+         scheduler/CI; the token never appears in the browser) -> allow.
+         A wrong Bearer is a 401, never a fallthrough.
+      3. Fresh local-dev default: API_TOKEN unset AND no users exist ->
+         allow, preserving today's open-localhost behavior until the first
+         user is created or API_TOKEN is set. DB errors fail closed (401).
     """
-    expected = (os.getenv("API_TOKEN") or "").strip()
-    if not expected:
+    from api.auth import open_access, session_user
+
+    if session_user(request) is not None:
         return None
+    expected = (os.getenv("API_TOKEN") or "").strip()
+    if expected:
+        provided = (creds.credentials or "").strip() if creds else ""
+        if provided != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        return None
+    if open_access():
+        return None
+    raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def apply_access_ok(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = None,
+) -> bool:
+    """True when the caller may use submit-adjacent endpoints.
+
+    Two credential classes, both server-issued, never browser-stored:
+      1. A valid user session cookie — the logged-in dashboard user acting
+         human-in-the-loop (the apply flow is user-initiated by design).
+      2. Authorization: Bearer <APPLY_API_TOKEN> exact match — the dedicated
+         elevated env secret for server-to-server/scripted use. The general
+         API_TOKEN is never accepted here, and the value stays server-side.
+    The SUBMIT_ENABLED kill-switch (api/safety.py) still gates /submit
+    regardless of which credential class passed.
+    """
+    from api.auth import session_user
+
+    if session_user(request) is not None:
+        return True
+    expected = (os.getenv("APPLY_API_TOKEN") or "").strip()
     provided = (creds.credentials or "").strip() if creds else ""
-    if not provided or provided != expected:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return None
+    return bool(expected) and provided != "" and provided == expected
 
 
 def require_apply_token(
+    request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> None:
-    """Require the dedicated Bearer secret for apply actions, even in local dev.
-
-    Only APPLY_API_TOKEN authorizes the intent/submit routes — the general
-    API_TOKEN is never accepted here, so read-API credentials cannot reach
-    submit-adjacent endpoints. An unset APPLY_API_TOKEN fails closed (401).
-    """
-    expected = (os.getenv("APPLY_API_TOKEN") or "").strip()
-    provided = (creds.credentials or "").strip() if creds else ""
-    if not expected or not provided or provided != expected:
+    """Session OR Bearer APPLY_API_TOKEN; anything else is a 401."""
+    if not apply_access_ok(request, creds):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return None

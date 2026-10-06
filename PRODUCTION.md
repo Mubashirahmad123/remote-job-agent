@@ -104,9 +104,11 @@ docker compose run --rm runner python -m pytest tests/
 - `SITE_ADDRESS=:80` (default) — plain HTTP on the bare IP.
 - `SITE_ADDRESS=yourname.duckdns.org` — Caddy fetches a Let's Encrypt cert
   automatically (needs 80/443 open) and redirects HTTP → HTTPS.
-- Open the dashboard once with the token in the URL —
-  `http://<host>/?token=<API_TOKEN>`; `frontend/js/auth-bootstrap.js` stores
-  it in `localStorage` and strips it from the address bar.
+- Open the dashboard at `http://<host>/` — you'll reach the login page.
+  Create the first user with `python create_user.py <username> [password]`
+  (run inside the container: `docker compose exec api python create_user.py ...`).
+  The `API_TOKEN` is server-side only (never in URLs, localStorage, JS, or
+  responses); browser users authenticate via the session cookie.
 
 **$0 walkthrough:** [`deploy/DEPLOY_ORACLE.md`](deploy/DEPLOY_ORACLE.md) —
 Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
@@ -122,8 +124,8 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
 | `GOOGLE_SERVICE_ACCOUNT` | `keys.json` | Path must exist; presence-only check in `/api/health` |
 | `API_HOST` | `127.0.0.1` | Non-local bind refuses to start without `API_TOKEN` |
 | `API_PORT` | `8000` | — |
-| `API_TOKEN` | empty | When set, all `/api/*` need `Authorization: Bearer <token>` (even reads) |
-| `APPLY_API_TOKEN` | empty | Dedicated token for `POST /api/apply/{fp}/intent` + `/submit` (unconditional auth; `API_TOKEN` is never accepted there). Set before any submit unlock; unset fails closed with 401 |
+| `API_TOKEN` | empty | **Server-side only.** When set, non-local binds are allowed and `Authorization: Bearer <API_TOKEN>` authorizes server-to-server `/api/*` calls (scheduler/CI). Browser users log in with username/password (HttpOnly session cookie). Never exposed to the browser. |
+| `APPLY_API_TOKEN` | empty | Dedicated elevated token for `POST /api/apply/{fp}/intent` + `/submit` + tracker reconcile. These routes accept EITHER a valid dashboard login session (human-in-the-loop) OR `Bearer <APPLY_API_TOKEN>` (server-to-server). The general `API_TOKEN` is never accepted on them. Set before any submit unlock; unset fails closed with 401. |
 | `API_CORS_ORIGINS` | localhost:3000/5173/8000/8080 | Comma-separated override; `file://` (`null` origin) is never allowed — serve the UI from the API |
 | `API_CACHE_TTL` | `90` | Seconds, clamped to 60–120 |
 | `SITE_ADDRESS` | `:80` | Caddy site address (compose `caddy` service). A real hostname — free: DuckDNS — enables automatic Let's Encrypt HTTPS + HTTP→HTTPS redirect; bare IP stays plain HTTP |
@@ -175,14 +177,14 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
 | UI shows `(snapshot: N)` / `(unavailable)` | Sheets unreachable → check `keys.json` present, sheet shared with `client_email`, `/api/health` |
 | `UnicodeEncodeError: 'charmap' ... '\u274c'` on Windows | Fixed in `tools/sheet_writer.py` (UTF-8 stdout reconfigure); pull latest |
 | CORS `null` origin blocked | By design — open `http://127.0.0.1:8000/`, never `file://...index.html` |
-| `401 Unauthorized` on `/api/*` | `API_TOKEN` is set → send `Authorization: Bearer <token>` (frontend: `localStorage rja_api_token`) |
+| `401 Unauthorized` on `/api/*` | No valid session. Browser: open `/` and log in. Server-to-server: if `API_TOKEN` is set, send `Authorization: Bearer <API_TOKEN>` |
 | `Refusing non-local bind without API_TOKEN` | Bind `127.0.0.1` or set `API_TOKEN` |
 | Stale data after scrape | `POST /api/jobs/refresh`, or wait out the TTL (≤120s) |
 | Arbeitnow jobs saved with blank company (older runs) | Fixed 2026-10-01: parser now reads the API's `company_name` field; re-scrape to backfill |
 | A few Arbeitnow postings link to the company homepage, not the job page | Upstream API limitation (`url` = company site for a minority of postings); kept as-is — verified a slug-built `/jobs/<slug>` URL 404s, so no safe rewrite exists |
 | Bot-protected/generic-selector boards (Naukri, CWJobs, TimesJobs, GoRemote, etc.) repeatedly `empty` | Structural, not a regression: no dedicated parser exists (generic HTML selectors vs bot walls), GoRemote/FounditIN URLs duplicate other boards, Adzuna needs keys, JustRemote/NoDesk fail DNS. No earlier targeted fix found in history; leave as expected-empty |
 | Caddy can't get a certificate | `SITE_ADDRESS` must be a real hostname resolving to the host and 80/443 open (VCN ingress + ufw) — see `deploy/DEPLOY_ORACLE.md` §8 |
-| Dashboard `401` on a token-protected deploy | Reopen `/?token=<API_TOKEN>` once — `auth-bootstrap.js` stores it in `localStorage` |
+| Dashboard `401` / redirects to `/login.html` | Not signed in — open `/` and log in, or create the first user with `python create_user.py` |
 | Bot-protected/generic-selector boards (Naukri, CWJobs, TimesJobs, GoRemote, etc.) repeatedly `empty` | Structural, not a regression — **and not untried**: these boards have already had targeted work (see note below). Remaining causes: bot walls defeat generic HTML selectors (no per-board parser), GoRemote/FounditIN URLs duplicate other boards, Adzuna needs keys, JustRemote/NoDesk fail DNS. Treat as expected-empty; the next real fix is per-board parsers behind a browser render, not more retry tuning |
 
 > **Prior work on the "expected-empty" boards (so this isn't read as virgin territory).**

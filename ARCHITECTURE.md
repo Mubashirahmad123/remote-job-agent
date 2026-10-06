@@ -59,9 +59,10 @@ starts a background scrape run in a daemon thread inside the API process
 4. **Same-origin UI** — `api/app.py` mounts `frontend/` so the dashboard opens at
    `http://127.0.0.1:8000/`; `file://` (`null` origin) is blocked by CORS by design.
 5. **Localhost-first auth** — no token locally; non-local bind requires `API_TOKEN`
-   enforced on every `/api/*` call including reads. Token-protected deploys
-   boot the dashboard once via `/?token=<API_TOKEN>` (`auth-bootstrap.js`
-   stores it in `localStorage`, then strips the URL).
+    (server-to-server only). Browser users log in via username + password →
+    HttpOnly `rja_session` cookie → Dashboard. The login page is at `/login.html`,
+    and unauthenticated visits to `/` redirect there. The `API_TOKEN` is never
+    exposed to the browser (no URL, localStorage, JS, or responses).
 6. **Dashboard apply gate** — `POST /api/apply/{fp}` creates a local review
    package and, for Greenhouse/Lever only, fills the final tailored resume +
    cover letter in a visible Playwright browser window and captures a
@@ -79,6 +80,8 @@ starts a background scrape run in a daemon thread inside the API process
    verified. A Greenhouse fill with missing/unverified required fields is
    stored and reported as `needs_review`, never `filled_ready`. The legacy
    CLI blind submit is permanently removed. See `README.md` and `PM.md`.
+
+7. **Auth precedence & actor attribution (Scenario A)** — Human session → attributed by `username`; service token (`APPLY_API_TOKEN`) → attributed as `"automation"`. If both present, **session wins** (explicit rule, not accidental). No ambiguous middle case. All action records (claims, intents, artifacts, tracker entries) carry an `actor`/`created_by` field populated at write time. See `BACKEND.md` §4 and `PM.md` §5.
 
 ## 4b. Planned — Phase 2.1 (design intent, not yet built)
 

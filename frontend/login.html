@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in — Remote Job Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <style>
+    /* Login page — standalone, no dashboard layout, no JS storage of secrets. */
+    .login-shell {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--bg-canvas);
+    }
+    .login-card {
+      width: 100%;
+      max-width: 380px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 32px 28px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    }
+    .login-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .login-brand .brand-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-md);
+      background: var(--primary-blue-glow);
+      color: var(--primary-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-brand .brand-title {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      color: var(--text-primary);
+    }
+    .login-title {
+      margin: 0 0 6px;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .login-sub {
+      margin: 0 0 22px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .login-field {
+      display: block;
+      margin-bottom: 14px;
+    }
+    .login-field span {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .login-field input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: var(--font-sans);
+      color: var(--text-primary);
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      outline: none;
+      transition: border-color var(--transition-fast);
+    }
+    .login-field input:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px var(--primary-blue-glow);
+    }
+    .login-error {
+      min-height: 18px;
+      margin: 2px 0 10px;
+      font-size: 12.5px;
+      color: var(--accent-rose);
+    }
+    .login-footnote {
+      margin-top: 18px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body class="theme-dark">
+  <main class="login-shell">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="brand-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        </div>
+        <span class="brand-title">JOB AGENT</span>
+      </div>
+      <h1 class="login-title">Sign in</h1>
+      <p class="login-sub">Use the username and password created on this server.</p>
+      <form id="loginForm" novalidate>
+        <label class="login-field">
+          <span for="loginUsername">Username</span>
+          <input type="text" id="loginUsername" name="username" autocomplete="username" required autofocus>
+        </label>
+        <label class="login-field">
+          <span for="loginPassword">Password</span>
+          <input type="password" id="loginPassword" name="password" autocomplete="current-password" required>
+        </label>
+        <div class="login-error" id="loginError" role="alert" aria-live="polite"></div>
+        <button type="submit" class="action-btn primary full-width">
+          <svg viewBox="0 0 24 24" style="width:15px;height:15px" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
+          <span>Sign in</span>
+        </button>
+      </form>
+      <p class="login-footnote">Sessions last 7 days. Sign out from the dashboard header to end yours early.</p>
+    </div>
+  </main>
+  <script>
+    (function () {
+      'use strict';
+      var form = document.getElementById('loginForm');
+      var user = document.getElementById('loginUsername');
+      var pass = document.getElementById('loginPassword');
+      var errorEl = document.getElementById('loginError');
+      var btn = form.querySelector('button[type="submit"]');
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        errorEl.textContent = '';
+        btn.disabled = true;
+        try {
+          var res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ username: user.value.trim(), password: pass.value }),
+          });
+          if (res.status === 401) {
+            errorEl.textContent = 'Invalid username or password.';
+            pass.value = '';
+            pass.focus();
+            btn.disabled = false;
+            return;
+          }
+          if (!res.ok) {
+            var detail = 'Sign in failed (HTTP ' + res.status + ').';
+            try {
+              var body = await res.json();
+              if (body && body.detail) detail = String(body.detail);
+            } catch (_) { /* keep generic message */ }
+            errorEl.textContent = detail;
+            btn.disabled = false;
+            return;
+          }
+          window.location.replace('/');
+        } catch (_) {
+          errorEl.textContent = 'Cannot reach the server — is it running?';
+          btn.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

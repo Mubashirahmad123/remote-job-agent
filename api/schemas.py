@@ -210,6 +210,13 @@ class TrackerUpdate(BaseModel):
         return _empty_to_none(v)
 
 
+class LoginRequest(BaseModel):
+    """POST /api/auth/login body — username + password (never logged)."""
+
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
 VALID_TRACKER_STATUSES = frozenset(
     {"applied", "interviewing", "offer", "rejected", "withdrawn", "ghosted"}
 )

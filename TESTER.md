@@ -47,9 +47,8 @@ can reload a tokenized local `.env`; subsequent read requests such as
 `/api/stats` then correctly return 401 and the happy-path assertions time out.
 This is a harness-isolation/auth-fixture gap, not a stats regression. Before
 using the smoke suite as a release gate on a tokenized checkout, make the
-harness explicitly isolate `API_TOKEN` after lazy imports or seed
-`localStorage['rja_api_token']` with a test credential. Do not put real tokens
-in test output.
+harness explicitly isolate `API_TOKEN` after lazy imports or seed the
+session cookie with a test credential. Do not put real tokens in test output.
 
 Live smoke (reads only, real app, no fakes):
 ```powershell

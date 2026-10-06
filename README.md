@@ -179,8 +179,8 @@ remote-job-agent/
 │   ├── index.html            # Shell + all views (deck, jobs, resume, auto-apply, tracker)
 │   ├── css/                  # Per-component stylesheets (see DESIGN.md tokens)
 │   └── js/
-│       ├── auth-bootstrap.js # One-time ?token=<API_TOKEN> capture → localStorage (token-protected deploys)
 │       ├── api.js            # Live FastAPI client (one fn per endpoint group)
+│       ├── auth.js           # Session identity + sign-out wiring
 │       ├── store.js          # Reactive state + backend→UI normalization (no mock layer)
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
 ├── tests/
@@ -415,11 +415,14 @@ Notes:
   and the UI badges row counts as `(snapshot: N)`. Snapshot rows are unscored,
   so the dashboard drops the score gate to 0% automatically.
 - Binding is `127.0.0.1` by default; a non-local bind refuses to start unless
-  `API_TOKEN` is set (then every `/api/*` needs `Authorization: Bearer <token>`).
-- Token-protected deploys: open the dashboard once as `/?token=<API_TOKEN>`;
-  `frontend/js/auth-bootstrap.js` stores it in `localStorage` and strips it
-  from the address bar.
-- `file://` origins are blocked by design — always open the dashboard via the URL above.
+  `API_TOKEN` is set (then `Authorization: Bearer <API_TOKEN>` authorizes
+  server-to-server `/api/*` calls; browser users log in via the session flow).
+- Production login: open `http://<host>/` → login page → username + password
+  → HttpOnly session cookie → Dashboard. The `API_TOKEN` is **server-side
+  only** (never in URLs, localStorage, JS, or responses). Create the first
+  user with `python create_user.py <username> [password]`.
+- `file://` origins are blocked by design — always open the dashboard via the
+  server URL (the dashboard and API are served same-origin).
 - Scrape-status polling is one 5s loop per page (single-loop guard in
   `frontend/js/app.js`); treat a run-registry 404 as terminal (server restart
   wipes in-memory runs).
@@ -488,13 +491,15 @@ The application includes a production-grade container setup with pre-installed P
    docker compose down
    ```
 
-   The compose `api` service binds `0.0.0.0` inside the container, so
-   **`API_TOKEN` must be set** in `.env` (the app refuses the non-local bind
-   without it). Open the dashboard once at `http://<host>/?token=<API_TOKEN>` —
-   `auth-bootstrap.js` stores the token in `localStorage` and strips it from
-   the URL. `SITE_ADDRESS=:80` (default) serves plain HTTP on a bare IP; set a
-   hostname (free: DuckDNS) for automatic HTTPS. A `127.0.0.1:8000` host port
-   remains as an SSH-tunnel escape hatch.
+The compose `api` service binds `0.0.0.0` inside the container, so
+    **`API_TOKEN` must be set** in `.env` (the app refuses the non-local bind
+    without it; `API_TOKEN` is for server-to-server calls only). Open the
+    dashboard at `http://<host>/` — you'll reach the login page. Create the
+    first user with `python create_user.py <username> [password]` (run inside
+    the container: `docker compose exec api python create_user.py ...`).
+    `SITE_ADDRESS=:80` (default) serves plain HTTP on a bare IP; set a
+    hostname (free: DuckDNS) for automatic HTTPS. A `127.0.0.1:8000` host port
+    remains as an SSH-tunnel escape hatch.
 
 3. **Run on-demand CLI tasks via Docker:**
    ```bash

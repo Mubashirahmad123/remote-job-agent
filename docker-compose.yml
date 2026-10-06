@@ -67,6 +67,9 @@ services:
       - TZ=${TZ:-Asia/Kolkata}
       - API_HOST=0.0.0.0
       - API_PORT=8000
+      # Caddy terminates TLS in front of the api container, so the session
+      # cookie must carry Secure via env (the api itself sees plain HTTP).
+      - SESSION_COOKIE_SECURE=true
     ports:
       # Localhost-only escape hatch (SSH tunnel); public access is via Caddy.
       - "127.0.0.1:8000:8000"
