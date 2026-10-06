@@ -315,9 +315,10 @@ JobAgent.autoApply = {
       fallback.textContent = 'No screenshot yet — package-only (no form fill ran for this ATS).';
       return;
     }
-    // Direct <img> works on open local-dev (no API_TOKEN). If the API is
-    // token-protected, <img> cannot send Authorization, so fall back to an
-    // authenticated fetch -> blob URL. Either way never show a broken icon.
+    // Direct <img> works same-origin (the HttpOnly session cookie rides along).
+    // For a cross-origin rja_api_base, SameSite=Lax withholds the cookie from
+    // <img>, so fall back to an authenticated fetch -> blob URL. Either way
+    // never show a broken icon.
     img.src = directUrl;
     img.onerror = async () => {
       img.onerror = null;

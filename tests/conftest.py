@@ -20,6 +20,19 @@ def _clear_api_tokens(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_auth_db(tmp_path, monkeypatch):
+    """Point the auth store at a per-test SQLite file.
+
+    api.auth.db_path() resolves env lazily, so a user created in one test
+    never leaks into another (or into the developer's real
+    data/apply_submit.db, which would flip unauthenticated routes to 401).
+    AUTH_DB_PATH wins over APPLY_STATE_DB_PATH, so apply-state tests that set
+    the latter keep their own isolation.
+    """
+    monkeypatch.setenv("AUTH_DB_PATH", str(tmp_path / "auth_test.db"))
+
+
+@pytest.fixture(autouse=True)
 def _disarm_submit_env(monkeypatch):
     """Never inherit an armed submit switch from the developer's shell/.env.
 

@@ -50,3 +50,6 @@ fastapi==0.141.1
 uvicorn==0.49.0
 pydantic>=2.0,<3.0
 httpx==0.28.1  # required for fastapi.testclient.TestClient (tests/test_api_phase1.py)
+
+# Session auth (api/auth.py)
+argon2-cffi==25.1.0  # Argon2id password hashing for user login

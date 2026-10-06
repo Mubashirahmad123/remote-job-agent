@@ -124,9 +124,13 @@
             <svg id="themeIconLight" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
           </button>
 
-          <div class="user-profile-badge" title="Active CV Profile: Mubashir">
-            <span class="avatar-initials">MA</span>
+          <div class="session-chip hidden" id="sessionChip" title="Signed in">
+            <span class="avatar-initials" id="sessionInitial">–</span>
+            <span class="session-name" id="sessionUsername">…</span>
           </div>
+          <button class="action-btn secondary small" id="btnSignOut" title="Sign out — invalidates this browser's session">
+            <span>Sign out</span>
+          </button>
         </div>
       </header>
 
@@ -826,8 +830,8 @@
   <!-- js/data/mockData.js removed 2026-10-03: the file was never in the repo,
        so every JobAgent.MOCK_* global was undefined and every "mock fallback"
        branch was dead code. Empty/error states are rendered honestly instead. -->
-  <script src="js/auth-bootstrap.js"></script>
   <script src="js/api.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/store.js"></script>
   <script src="js/escape.js"></script>
   <script src="js/components/toast.js"></script>

@@ -11,12 +11,23 @@
  *   materials -> POST /api/resume/{fp}, GET download, POST /api/cover-letter/{fp}, GET download
  *   cv        -> GET /api/cv/profile, GET /api/cv/variants (Phase 2, may 404/501)
  *   apply     -> POST /api/apply/{fp} (review), GET /api/apply/{fp}/screenshot
+ *   auth      -> GET /api/auth/me, POST /api/auth/logout
  * Backend contract: api/schemas.py (JobOut, TrackerEntry, HealthOut).
+ *
+ * Auth: the server sets an HttpOnly rja_session cookie at /login.html.
+ * Every request is same-origin with credentials so the cookie is attached
+ * automatically. No API token ever lives in the browser (the old
+ * ?token=/localStorage Bearer flow was removed). A 401 means the session
+ * is missing/expired -> redirect to the login page.
  */
 
 window.JobAgent = window.JobAgent || {};
 
 JobAgent.api = (() => {
+  // One-time migration: the legacy ?token= flow stored the server API_TOKEN
+  // in localStorage — that key must never hold credentials anymore.
+  try { localStorage.removeItem('rja_api_token'); } catch (_) { /* ignore */ }
+
   // Same-origin by default; override via window.JobAgent.API_BASE or
   // localStorage 'rja_api_base' (e.g. http://127.0.0.1:8000 for file:// dev).
   function baseUrl() {
@@ -29,13 +40,8 @@ JobAgent.api = (() => {
     return 'http://127.0.0.1:8000';
   }
 
-  function authHeaders() {
-    let token = '';
-    try {
-      token = localStorage.getItem('rja_api_token') || '';
-    } catch (_) { /* ignore */ }
-    token = (token || '').trim();
-    return token ? { Authorization: 'Bearer ' + token } : {};
+  function sendToLoginPage() {
+    window.location.replace(baseUrl() + '/login.html');
   }
 
   async function request(path, options = {}) {
@@ -44,9 +50,9 @@ JobAgent.api = (() => {
     try {
       res = await fetch(url, {
         ...options,
+        credentials: 'same-origin',
         headers: {
           'Content-Type': 'application/json',
-          ...authHeaders(),
           ...(options.headers || {}),
         },
       });
@@ -57,7 +63,8 @@ JobAgent.api = (() => {
       throw err;
     }
     if (res.status === 401) {
-      const err = new Error('Unauthorized — check API_TOKEN (localStorage rja_api_token).');
+      sendToLoginPage();
+      const err = new Error('Not signed in — redirecting to the login page.');
       err.code = 'UNAUTHORIZED';
       err.status = 401;
       throw err;
@@ -166,6 +173,16 @@ JobAgent.api = (() => {
     });
   }
 
+  // ---- auth (session cookie; no token in the browser) ----
+
+  async function getMe() {
+    return request('/api/auth/me');
+  }
+
+  async function logout() {
+    return request('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) });
+  }
+
   function screenshotUrl(fingerprint) {
     return baseUrl() + '/api/apply/' + encodeURIComponent(fingerprint) + '/screenshot';
   }
@@ -174,8 +191,7 @@ JobAgent.api = (() => {
     const url = baseUrl() + '/api/apply/' + encodeURIComponent(fingerprint) + '/screenshot';
     let res;
     try {
-      const headers = { ...authHeaders() };
-      res = await fetch(url, { headers });
+      res = await fetch(url, { credentials: 'same-origin' });
     } catch (e) {
       const err = new Error('Screenshot unreachable at ' + baseUrl() + ' — is uvicorn running?');
       err.code = 'UNREACHABLE';
@@ -183,7 +199,8 @@ JobAgent.api = (() => {
       throw err;
     }
     if (res.status === 401) {
-      const err = new Error('Unauthorized — check API_TOKEN (localStorage rja_api_token).');
+      sendToLoginPage();
+      const err = new Error('Not signed in — redirecting to the login page.');
       err.code = 'UNAUTHORIZED';
       err.status = 401;
       throw err;
@@ -255,6 +272,8 @@ JobAgent.api = (() => {
     createResume,
     createCoverLetter,
     applyReview,
+    getMe,
+    logout,
     screenshotUrl,
     fetchScreenshotBlob,
     getCvProfile,

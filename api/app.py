@@ -11,8 +11,15 @@ Bind rule: serve on 127.0.0.1 by default; a non-local bind requires API_TOKEN
 to be set (enforced at import time inside create_app(), so the documented
 `uvicorn api.app:app` path is covered — not just `python api/app.py`).
 
+Auth rule: browser users log in (api/routers/auth.py — username+password ->
+server-side session -> HttpOnly cookie); /api/* require a valid session via
+deps.require_token. API_TOKEN stays server-side only (Bearer for
+server-to-server calls) and is never exposed to the browser. `GET /` gates
+the dashboard: unauthenticated visitors are redirected to /login.html.
+
 Router layout (one file per group for easy debugging):
-   api/deps.py            — CORS origins + Bearer auth
+   api/deps.py            — CORS origins + session/Bearer auth
+   api/routers/auth.py    — POST /api/auth/login, POST logout, GET /api/auth/me
    api/mappers.py         — row -> schema converters
    api/routers/health.py  — GET /api/health
    api/routers/jobs.py    — GET /api/jobs, GET /api/jobs/{fp}
@@ -30,12 +37,13 @@ Router layout (one file per group for easy debugging):
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.deps import cors_origins
-from api.routers import health, jobs, cv, materials, runs, skills, stats, system, tracker, apply
+from api.routers import auth, health, jobs, cv, materials, runs, skills, stats, system, tracker, apply
 
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
@@ -70,6 +78,7 @@ def create_app() -> FastAPI:
     )
 
     # One include per group — comment out a single line to isolate a bug.
+    app.include_router(auth.router)
     app.include_router(health.router)
     app.include_router(jobs.router)
     app.include_router(stats.router)
@@ -81,9 +90,24 @@ def create_app() -> FastAPI:
     app.include_router(cv.router)
     app.include_router(apply.router)
 
+    @app.get("/", include_in_schema=False)
+    def root_gate(request: Request):
+        """Dashboard entry point: valid session (or fresh open local dev) gets
+        the dashboard; anyone else is redirected to the login page. The API
+        stays the hard gate — this only shapes the UX.
+        """
+        from api.auth import open_access, session_user
+
+        if session_user(request) is not None or open_access():
+            index = FRONTEND_DIR / "index.html"
+            if index.is_file():
+                return FileResponse(str(index))
+            return {"detail": "Dashboard frontend missing (frontend/index.html)"}
+        return RedirectResponse("/login.html", status_code=302)
+
     # Serve the dashboard UI same-origin so file:// CORS ("null" origin)
     # is never an issue: open http://127.0.0.1:8000/ instead of index.html.
-    # Mounted LAST so /api/* and /docs always win over static files.
+    # Mounted LAST so /api/*, /docs, and the / gate above always win.
     if FRONTEND_DIR.is_dir():
         app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 

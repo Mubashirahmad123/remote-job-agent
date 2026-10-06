@@ -243,6 +243,26 @@ no submit path by design.
   `API_CORS_ORIGINS`. `allow_methods = GET, POST, PUT, PATCH, OPTIONS`.
 - Static UI mount is **last** so `/api/*` and `/docs` always win.
 
+### Session vs Token Precedence (Scenario A — Multi-Operator Attribution)
+
+**Rule (explicit, not accidental):**
+
+| Credential Present | Actor Recorded |
+|---|---|
+| Valid session cookie only | `username` (from `session_user(request)`) |
+| Valid `APPLY_API_TOKEN` Bearer only | `"automation"` (fixed sentinel) |
+| **Both** valid session **and** valid `APPLY_API_TOKEN` | **Session wins** → `username` |
+
+This precedence is **intentional**: a human operator logged into the dashboard should always be attributed by their username, even if an automation token is also present in the request (e.g., from a reverse proxy or test harness). The session check runs first in `apply_access_ok()` and `require_apply_token()`.
+
+**Implementation:** `api.deps.require_actor(request, creds) -> str` returns the attributed actor string for use in write paths. Never returns empty/`None` — fails closed (401) if no identifiable actor.
+
+### Apply-Gated Routes Auth (unchanged, documented for clarity)
+
+- `POST /api/apply/{fp}/intent` + `/submit` + tracker reconcile: **session OR `APPLY_API_TOKEN` only**
+- General `API_TOKEN` **never accepted** on these routes
+- `SUBMIT_ENABLED=False` kill-switch still gates `/submit` (403) regardless of auth
+
 ## 5. Testing
 
 The suite was last fully verified 2026-10-01 at 291 passed, 1 skipped

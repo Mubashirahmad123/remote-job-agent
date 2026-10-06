@@ -2,11 +2,11 @@
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials
 
 from api import cache
-from api.deps import _bearer, require_apply_token, require_token
+from api.deps import _bearer, apply_access_ok, require_token
 from api.mappers import to_tracker_entry
 from api.schemas import TrackerCreate, TrackerEntry, TrackerUpdate, VALID_TRACKER_STATUSES
 
@@ -38,6 +38,7 @@ def create_tracker_entry(
 @router.patch("/api/tracker/{job_fingerprint}", response_model=TrackerEntry)
 def patch_tracker(
     job_fingerprint: str,
+    request: Request,
     body: TrackerUpdate,
     _: None = Depends(require_token),
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
@@ -53,7 +54,8 @@ def patch_tracker(
 
     claim_status = apply_state.get_claim_status(job_fingerprint)
     if claim_status == "submit_unverified" or body.reconcile_submit_failure:
-        require_apply_token(creds)
+        if not apply_access_ok(request, creds):
+            raise HTTPException(status_code=401, detail="Unauthorized")
         if body.reconcile_submit_failure and claim_status != "submit_unverified":
             raise HTTPException(status_code=409, detail="No submit_unverified claim to reconcile")
     try:

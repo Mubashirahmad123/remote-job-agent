@@ -113,14 +113,11 @@ curl -H "Authorization: Bearer <API_TOKEN>" http://localhost/api/health
 # -> {"status":"ok","sheets_configured":true,"data_source":"sheets"}
 ```
 
-Open the dashboard **once** with the token in the URL:
-
-```
-http://<VM_PUBLIC_IP>/?token=<API_TOKEN>
-```
-
-`frontend/js/auth-bootstrap.js` stores it in `localStorage` and strips it from
-the address bar, so subsequent visits to `http://<VM_PUBLIC_IP>/` just work.
+Open the dashboard at `http://<VM_PUBLIC_IP>/` — you'll reach the login
+page. Create the first user with `python create_user.py <username> [password]`
+(run inside the container: `docker compose exec api python create_user.py ...`).
+The `API_TOKEN` is server-side only (never in URLs, localStorage, JS, or
+responses); browser users authenticate via the session cookie.
 
 ## 8. A hostname + HTTPS (optional, still free)
 
@@ -130,7 +127,7 @@ the address bar, so subsequent visits to `http://<VM_PUBLIC_IP>/` just work.
 3. `docker compose up -d` (recreates Caddy; it fetches a Let's Encrypt cert
    automatically over port 80/443).
 
-Then use `https://yourname.duckdns.org/?token=<API_TOKEN>`.
+Then use `https://yourname.duckdns.org/` — the login page appears first.
 
 > DuckDNS pre-fills your *current* (home/office) IP when you add a domain —
 > replace it with the **VM's public IP**. To keep it in sync, run the update
@@ -197,7 +194,7 @@ docker compose down -v            # also drops Caddy's cert volume
 |---|---|
 | Browser hangs / connection refused | VCN ingress for 80/443 not added (§2), or ufw not enabled |
 | `Refusing non-local bind without API_TOKEN` | Set `API_TOKEN` in `.env`, then `docker compose up -d api` |
-| `401 Unauthorized` in the UI | Reopen `/?token=<API_TOKEN>` to refresh localStorage |
+| `401 Unauthorized` / redirect to `/login.html` | Open `/` and log in, or create the first user with `docker compose exec api python create_user.py ...` |
 | `data_source: snapshot` | Sheets unreachable — check `keys.json` and that the sheet is shared with the service account email |
 | Caddy can't get a cert | `SITE_ADDRESS` must be a real hostname resolving to the VM, and 80/443 open |
 | Build killed on ARM | Use the 4 OCPU / 24 GB shape; ensure swap or retry |

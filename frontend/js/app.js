@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize Global Navigation & Shell
   if (JobAgent.navigation) JobAgent.navigation.init();
 
+  // Initialize session identity chip + sign-out (cookie-based, no tokens in JS)
+  if (JobAgent.auth) JobAgent.auth.init();
+
   // Initialize Dashboard Overview Widgets
   if (JobAgent.dashboard) JobAgent.dashboard.init();
 

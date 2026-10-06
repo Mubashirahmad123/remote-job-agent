@@ -235,6 +235,43 @@ contained change rather than a refactor.
 5. No secrets committed; no generated artifacts committed (`apply_packages/`,
    `cover_letters/`, `resumes/`, `screenshots/`, `cache/`).
 
+## 5. Scenario A — Multi-Operator Attribution (in progress)
+
+**Scope:** Shared data, multiple trusted human operators, actions attributed to whoever did them. **Explicitly NOT Scenario B** (no per-user CV, no per-user Sheet/data isolation, no per-user dedup — that's a deliberately deferred future redesign).
+
+**Status:** Audit complete (see Step 1 findings below). Implementation not started.
+
+### Step 1 Audit Findings (2026-10-06)
+
+| Aspect | Current State |
+|---|---|
+| Session identity | `session_user(request)` returns `{"user_id", "username", "expires_at"}` — username **is available** |
+| Apply-gated auth | Checks session cookie **OR** `APPLY_API_TOKEN` (never general `API_TOKEN`). `apply_access_ok()` returns `bool` only — **discards identity** |
+| Actor columns in DB | **None** — `apply_claims`, `apply_intents`, `apply_review_artifacts`, tracker entries (Sheets) all lack actor/created_by |
+| Token auth identity | No username — needs sentinel value (`"automation"` or `"api-token"`) |
+| Precedence (session vs token) | Session checked first in `apply_access_ok()` — **accidental**, not documented |
+
+### Implementation Plan
+
+1. **Add `actor` column** to: `apply_claims`, `apply_intents`, `apply_review_artifacts` (SQLite); tracker entries get `created_by` in Sheets APPLIED tab
+2. **Thread identity through deps**: new `require_actor(request)` returning `str` (username or `"automation"`)
+3. **Populate on write**: every claim, intent, artifact, tracker create/update records actor
+4. **Document precedence rule** in BACKEND.md §4 and ARCHITECTURE.md: human session → username; service token → `"automation"`; both present → session wins (explicit)
+5. **Add `GET /api/activity?limit=N`** — merged time-ordered actor-attributed actions (claims, tracker changes, apply triggers)
+6. **Add role flag to users table** (`admin` vs `operator`) via `create_user.py` / user model; gate future `/submit` to admin only (under kill-switch)
+7. **Tests**: both auth paths populate actor; unknown actor fails closed; role check enforced at route level (even though submit still 403s)
+
+### Explicitly Deferred — Scenario B (True Multi-Tenancy)
+
+| Scenario B Item | Status |
+|---|---|
+| Per-user CV / CV_DIR isolation | ⬜ Deferred — separate redesign |
+| Per-user Sheet/data partitioning | ⬜ Deferred — separate redesign |
+| Per-user deduplication (`seen_jobs.json`) | ⬜ Deferred — separate redesign |
+| Per-user cache/profile isolation | ⬜ Deferred — separate redesign |
+
+Same gating discipline as Docker/Celery/ML-classifier elsewhere in this doc — not built until explicitly scoped and approved.
+
 ## 2b Submit Specification
 
 ### 0. Preconditions (must land before any 2b code)
