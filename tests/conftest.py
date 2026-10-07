@@ -51,3 +51,39 @@ def _disarm_submit_env(monkeypatch):
 def _isolate_submit_artifacts(monkeypatch, tmp_path):
     """Keep submit/dry-run evidence dirs out of the repo during tests."""
     monkeypatch.setenv("SUBMIT_ARTIFACT_DIR", str(tmp_path / "submit_runs"))
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Clear login rate-limit buckets before AND after every test.
+
+    api.ratelimit is process-global by design (docker-compose runs the API with
+    --workers 1, so in-process is exact). Pytest runs the whole suite in one
+    process, and every TestClient presents the same peer address — without this
+    the per-IP budget would accumulate across unrelated test files and a later
+    login test would fail with a 429 that has nothing to do with what it is
+    testing. Reset on both sides so a test that deliberately exhausts the
+    budget cannot leak into the next one.
+    """
+    from api.ratelimit import reset_login_limiter
+
+    reset_login_limiter()
+    yield
+    reset_login_limiter()
+
+
+@pytest.fixture(autouse=True)
+def _forget_auth_schema_memo():
+    """Drop api.auth's per-process "schema already built" memo.
+
+    `connect()` now runs its DDL once per (process, db path) instead of on
+    every request. Each test gets a fresh tmp_path AUTH_DB_PATH, so the memo is
+    naturally keyed differently — but clearing it keeps an accidental
+    cross-test path collision from silently skipping table creation, which
+    would surface as a confusing "no such table" rather than a real failure.
+    """
+    from api.auth import forget_initialized
+
+    forget_initialized()
+    yield
+    forget_initialized()

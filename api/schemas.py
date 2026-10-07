@@ -211,10 +211,17 @@ class TrackerUpdate(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """POST /api/auth/login body — username + password (never logged)."""
+    """POST /api/auth/login body — username + password (never logged).
 
-    username: str = Field(min_length=1)
-    password: str = Field(min_length=1)
+    The ceilings are resource controls, not just validation. `/api/auth/login`
+    is unauthenticated, so an unbounded `password` lets one small JSON body buy
+    a full Argon2id verify on arbitrary-length input. 128 characters is far
+    beyond any real passphrase; `api.auth._password_max_length()` enforces the
+    same bound for non-HTTP callers so the two can never disagree silently.
+    """
+
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=128)
 
 
 VALID_TRACKER_STATUSES = frozenset(

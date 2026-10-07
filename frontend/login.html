@@ -142,9 +142,46 @@
       var pass = document.getElementById('loginPassword');
       var errorEl = document.getElementById('loginError');
       var btn = form.querySelector('button[type="submit"]');
+      var cooldownTimer = null;
+
+      function enable() { btn.disabled = false; }
+
+      function humanWait(seconds) {
+        if (seconds < 60) return seconds + 's';
+        var m = Math.ceil(seconds / 60);
+        return m + (m === 1 ? ' minute' : ' minutes');
+      }
+
+      // 429 = the server's brute-force limiter (api/ratelimit.py) tripped.
+      // Retry-After is authoritative, so count down against it rather than
+      // guessing: submitting again early just burns another rejected request.
+      function startCooldown(retryAfter) {
+        var left = parseInt(retryAfter, 10);
+        if (!isFinite(left) || left <= 0) left = 60;
+        btn.disabled = true;
+        pass.value = '';
+        if (cooldownTimer) clearInterval(cooldownTimer);
+        var paint = function () {
+          errorEl.textContent = 'Too many sign-in attempts. Try again in ' + humanWait(left) + '.';
+        };
+        paint();
+        cooldownTimer = setInterval(function () {
+          left -= 1;
+          if (left <= 0) {
+            clearInterval(cooldownTimer);
+            cooldownTimer = null;
+            errorEl.textContent = '';
+            enable();
+            user.focus();
+            return;
+          }
+          paint();
+        }, 1000);
+      }
 
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
+        if (cooldownTimer) return;           // still counting down
         errorEl.textContent = '';
         btn.disabled = true;
         try {
@@ -154,11 +191,15 @@
             credentials: 'same-origin',
             body: JSON.stringify({ username: user.value.trim(), password: pass.value }),
           });
+          if (res.status === 429) {
+            startCooldown(res.headers.get('Retry-After'));
+            return;                          // button stays disabled until then
+          }
           if (res.status === 401) {
             errorEl.textContent = 'Invalid username or password.';
             pass.value = '';
             pass.focus();
-            btn.disabled = false;
+            enable();
             return;
           }
           if (!res.ok) {
@@ -168,13 +209,13 @@
               if (body && body.detail) detail = String(body.detail);
             } catch (_) { /* keep generic message */ }
             errorEl.textContent = detail;
-            btn.disabled = false;
+            enable();
             return;
           }
           window.location.replace('/');
         } catch (_) {
           errorEl.textContent = 'Cannot reach the server — is it running?';
-          btn.disabled = false;
+          enable();
         }
       });
     })();

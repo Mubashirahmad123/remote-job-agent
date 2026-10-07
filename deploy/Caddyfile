@@ -17,7 +17,15 @@
 		}
 	}
 
-	# Basic hardening headers (the app has no session cookies to protect).
+	# Hardening headers. Cookie-related notes: the app DOES now use a session
+	# cookie (`rja_session`, HttpOnly/SameSite=Lax), so X-Frame-Options matters
+	# for clickjacking and HSTS matters for cookie confidentiality on the wire.
+	# The cookie's `Secure` flag is set by the app itself via
+	# SESSION_COOKIE_SECURE=true (docker-compose) because Caddy terminates TLS
+	# and the api container only ever sees plain HTTP.
+	# No Content-Security-Policy here either: the dashboard uses inline
+	# <script>/<style> blocks, so a strict CSP would break it until those are
+	# extracted into files.
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"

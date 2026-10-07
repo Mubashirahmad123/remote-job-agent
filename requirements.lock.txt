@@ -37,6 +37,10 @@ appdirs==1.4.4
     #   crewai-core
 apscheduler==3.10.4
     # via -r requirements.txt
+argon2-cffi==25.1.0
+    # via -r requirements.txt
+argon2-cffi-bindings==26.1.0
+    # via argon2-cffi
 attrs==26.1.0
     # via
     #   aiohttp
@@ -63,7 +67,9 @@ certifi==2026.7.22
     #   kubernetes
     #   requests
 cffi==2.1.1
-    # via cryptography
+    # via
+    #   argon2-cffi-bindings
+    #   cryptography
 chardet==7.6.0
     # via reportlab
 charset-normalizer==3.5.1

@@ -59,7 +59,26 @@ services:
     build: .
     container_name: job-agent-api
     restart: unless-stopped
-    command: ["python", "-m", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    command: [
+      "python", "-m", "uvicorn", "api.app:app",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      # MUST stay at 1: api/ratelimit.py is per-process, so N workers would
+      # give an attacker N x the login budget. Move the limiter to a shared
+      # store (Redis) before scaling this up.
+      "--workers", "1",
+      # Caddy terminates TLS and forwards X-Forwarded-{For,Proto}. Without
+      # these, request.client.host is always Caddy's container IP (so login
+      # rate limiting would key on one shared bucket for every user) and
+      # request.url.scheme is always http (so the session cookie's Secure flag
+      # would silently depend on SESSION_COOKIE_SECURE=true below).
+      # Trusting "*" is safe ONLY because api:8000 is reachable from the docker
+      # network (Caddy) and 127.0.0.1 on the host — never from the public
+      # internet directly. If you ever publish this port, narrow it to Caddy's
+      # container IP.
+      "--proxy-headers",
+      "--forwarded-allow-ips", "*",
+    ]
     env_file:
       - .env
     environment:

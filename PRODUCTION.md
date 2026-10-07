@@ -126,7 +126,16 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
 | `API_PORT` | `8000` | — |
 | `API_TOKEN` | empty | **Server-side only.** When set, non-local binds are allowed and `Authorization: Bearer <API_TOKEN>` authorizes server-to-server `/api/*` calls (scheduler/CI). Browser users log in with username/password (HttpOnly session cookie). Never exposed to the browser. |
 | `APPLY_API_TOKEN` | empty | Dedicated elevated token for `POST /api/apply/{fp}/intent` + `/submit` + tracker reconcile. These routes accept EITHER a valid dashboard login session (human-in-the-loop) OR `Bearer <APPLY_API_TOKEN>` (server-to-server). The general `API_TOKEN` is never accepted on them. Set before any submit unlock; unset fails closed with 401. |
-| `API_CORS_ORIGINS` | localhost:3000/5173/8000/8080 | Comma-separated override; `file://` (`null` origin) is never allowed — serve the UI from the API |
+| `API_CORS_ORIGINS` | localhost:3000/5173/8000/8080 | Comma-separated override; `file://` (`null` origin) is never allowed — serve the UI from the API. `allow_credentials=True` (auth is a cookie), so a wildcard is never accepted |
+| `AUTH_DB_PATH` | `APPLY_STATE_DB_PATH` → `data/apply_submit.db` | Optional dedicated SQLite file for the `users`/`sessions` tables. Default reuses the apply-state DB — no new infrastructure |
+| `SESSION_TTL_HOURS` | `168` | Session lifetime (7 days), clamped to 1–2160 |
+| `SESSION_COOKIE_SECURE` | empty = auto | Empty sets `Secure` only when the request arrives as https. **Set `true` behind a TLS-terminating proxy** (docker-compose does) — the API container only ever sees plain HTTP from Caddy |
+| `LOGIN_RATE_LIMIT` | `12` | Brute-force budget per client IP per window. Exceeding it → `429` + `Retry-After`, checked before any Argon2 work |
+| `LOGIN_USER_RATE_LIMIT` | `6` | Brute-force budget per username per window. Cleared on a successful login; the per-IP budget is not |
+| `LOGIN_RATE_WINDOW` | `600` | Sliding window in seconds, shared by both budgets |
+| `PASSWORD_MAX_LENGTH` | `128` | Resource control, not just validation — `/api/auth/login` is unauthenticated, so an unbounded field buys a full Argon2id verify on arbitrary-length input |
+| `TRUST_PROXY_HEADERS` | empty | Honour `X-Forwarded-For` for rate-limit keying. Leave empty when uvicorn runs with `--proxy-headers` (it already rewrites the client IP); trusting a client-supplied header would let an attacker mint a fresh bucket per request |
+| `API_DOCS_ENABLED` | empty | Publish `/docs` + `/openapi.json` with no session. Default **gated**: anonymous → 401, logged-in browser → Swagger. Only enable on a trusted network |
 | `API_CACHE_TTL` | `90` | Seconds, clamped to 60–120 |
 | `SITE_ADDRESS` | `:80` | Caddy site address (compose `caddy` service). A real hostname — free: DuckDNS — enables automatic Let's Encrypt HTTPS + HTTP→HTTPS redirect; bare IP stays plain HTTP |
 | `CV_PATH` | `my_cv.pdf` | Primary CV (matching fallback, profile-cache anchor) |

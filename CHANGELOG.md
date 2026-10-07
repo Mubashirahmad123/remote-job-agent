@@ -1,5 +1,114 @@
 # CHANGELOG.md
 
+## 2026-10-07 — auth hardening: login is now safe to expose publicly
+
+The username/password login (Argon2id + server-side sessions in SQLite,
+HttpOnly cookie) was already cryptographically sound — 24/24 `/api/*` routes
+gated, only SHA-256 of the token persisted, fail-closed on DB errors. Probing
+the running app found the *abuse* and *deployment* paths were not. All seven
+probes below were reproduced first, then fixed, then re-verified.
+
+- **New `api/ratelimit.py`** — sliding-window limiter for
+  `POST /api/auth/login`, the only unauthenticated write on the API. Two
+  independent budgets are checked *before any Argon2 work*: per client IP
+  (`LOGIN_RATE_LIMIT`, 12) and per username (`LOGIN_USER_RATE_LIMIT`, 6) over
+  `LOGIN_RATE_WINDOW` (600s), answering `429` + `Retry-After`. Both are needed
+  — per-IP alone lets one attacker lock out a NAT'd office, per-username alone
+  lets an attacker spray one password across accounts from rotating IPs. A
+  successful login clears the *username* budget only (one valid credential does
+  not prove the address is benign). Memory is bounded: per-key history is
+  trimmed to the window and the key set is capped, so rotating IPs cannot grow
+  it without bound. Deliberately per-process, which is exact under the deployed
+  `--workers 1`; scaling out needs a shared store first.
+- **`/api/auth/login` is now `async def`** and awaits its failure penalty. The
+  previous sync `def` + `time.sleep(0.5)` held a Starlette threadpool worker
+  for the whole penalty, so ~40 concurrent bad passwords saturated the default
+  40-thread pool and stalled every other sync route: measured **5.64s wall →
+  1.40s**, with 34/40 answered `429` and zero hashing. Remaining blocking work
+  (SQLite + Argon2) is dispatched via `run_in_threadpool` so the event loop is
+  never held by a slow hash.
+- **`purge_expired_sessions()` moved to the success path** — a failed attempt
+  no longer earns an unauthenticated database write.
+- **Bind guard now reads uvicorn's `--host` flag**, not just `API_HOST`. The
+  documented `uvicorn api.app:app --host 0.0.0.0` bound on every interface with
+  `API_HOST` unset and no `API_TOKEN`, which combined with `open_access()`
+  (no users) meant a fully public API. Both are now checked.
+- **Auth is attached at the router level** via
+  `include_router(dependencies=[Depends(require_token)])`, in addition to the
+  existing per-route dependency. Per-route auth fails OPEN — one forgotten
+  `Depends` on a new endpoint ships it public. Note this **cannot** be done by
+  appending to `router.dependencies`: this FastAPI version resolves included
+  routers lazily (`_IncludedRouter`) and post-construction mutation is a silent
+  no-op, which a test now pins in both directions.
+- **New `_GateMiddleware`** covers what no router dependency can reach:
+  `/docs` + `/openapi.json` were public (`401` now; a logged-in browser still
+  gets Swagger, `API_DOCS_ENABLED=true` to publish), and `/index.html` was
+  served straight from the `StaticFiles` mount, bypassing the `GET /` login
+  redirect (`302` now). It also sets `X-Content-Type-Options`,
+  `X-Frame-Options` and `Referrer-Policy` on every response so a bare-uvicorn
+  deploy is not silently unprotected without Caddy. No CSP yet — the dashboard
+  relies on inline `<script>`/`<style>` blocks, so a strict policy would break
+  it rather than half-protect it.
+- **A password reset now revokes every session for that user.** Previously a
+  stolen `rja_session` cookie kept working for the rest of its 7-day TTL no
+  matter how often the password was rotated, which defeated the point of
+  resetting. `revoke_user_sessions()` is targeted — resetting one user does not
+  sign out anyone else. `create_user.py` says so when it resets.
+- **`LoginRequest` bounds `username` (≤64) and `password` (≤128)**, enforced in
+  `api.auth.verify_login` too so non-HTTP callers cannot bypass it. A 200 KB
+  password previously reached Argon2 (`422` now).
+- **SQLite: schema DDL runs once per (process, db path)**, not on every
+  authenticated request — `require_token` reads the sessions table per call and
+  was rebuilding the schema each time (~3.6 ms/request, 50 connections for 50
+  requests → 0 rebuilds). `journal_mode=WAL` is set at init so the per-request
+  read is not blocked by a concurrent login/logout write. Added
+  `idx_sessions_user` for the new revoke-by-user path, and `users.last_login_at`
+  as an audit signal (with an idempotent `ALTER` so existing DBs upgrade in
+  place).
+- **CORS `allow_credentials=True`** — auth is a cookie now, so a cross-origin
+  dashboard configured via `API_CORS_ORIGINS` could never have authenticated.
+  Safe because `cors_origins()` always returns an explicit list, never `*`.
+- **`open_access()` is announced at startup** with `warnings.warn`. "No users
+  and no `API_TOKEN`" serves the entire API unauthenticated; it stays a
+  deliberate localhost convenience, but a forgotten `create_user.py` on a
+  public host is now shouted about in the log instead of failing silently.
+- **`docker-compose.yml`**: uvicorn now runs `--proxy-headers
+  --forwarded-allow-ips *` so `request.client.host` is the real client (rate
+  limiting keyed on Caddy's container IP would have put every user in one
+  shared bucket) and `request.url.scheme` is correct. `--workers 1` is now
+  documented as a *requirement* of the in-process limiter.
+- **`deploy/setup-vm.sh` no longer instructs the removed `?token=` flow.** Step
+  4 told deployers to open `http://<VM_PUBLIC_IP>/?token=<API_TOKEN>` and let
+  it persist to `localStorage` — that path was deleted and `api.js` now
+  actively removes any legacy `rja_api_token` key. Replaced with the real flow
+  (`docker compose exec api python create_user.py <username>`).
+- **`requirements.lock.txt` regenerated for auth**: `argon2-cffi` was in
+  `requirements.txt` but absent from the lock, so the pinned install was not
+  reproducible. Added `argon2-cffi==25.1.0` + `argon2-cffi-bindings==26.1.0`
+  and attributed the existing `cffi` to them.
+- Docs synced: BACKEND.md §4 rewritten (its "`API_TOKEN` empty → open" bullet
+  was false once a user exists), PRODUCTION.md §4 config table gained the seven
+  new variables, `.env.example` documents each with its threat rationale,
+  `deploy/Caddyfile` comment no longer claims "the app has no session cookies to
+  protect".
+- **New `tests/test_api_auth_hardening.py`** (31 tests), one per defect above,
+  plus `tests/conftest.py` fixtures that reset the process-global limiter and
+  the schema memo between tests. Full API suite: **304 passed, 1 skipped**.
+
+### Still open (deliberately not in this change)
+
+- **`require_actor` / multi-operator attribution is documented but not
+  implemented.** BACKEND.md §4 and ARCHITECTURE.md §7 both specify
+  `api.deps.require_actor(request, creds) -> str`, an `"automation"` sentinel,
+  and an `actor`/`created_by` field on every write. None of it exists — the
+  session `username` is available and currently discarded. Left out because it
+  touches every write path and is a feature, not a security fix; bundling it
+  would make this change hard to review and easy to revert.
+- No Content-Security-Policy (needs every inline block extracted first).
+- No account lockout or 2FA — acceptable for a single-operator tool, but the
+  rate limiter is the only brute-force control.
+- The rate limiter is per-process; a multi-worker deploy needs Redis/SQLite.
+
 ## 2026-10-03 — live-submit recon: Greenhouse Democorp demo board blocked pre-flight
 
 - Ran the read-only Playwright recon against Greenhouse's public Democorp

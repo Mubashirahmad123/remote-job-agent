@@ -20,6 +20,7 @@ Env
   AUTH_DB_PATH           optional dedicated auth DB file.
   SESSION_TTL_HOURS      session lifetime (default 168 = 7 days).
   SESSION_COOKIE_SECURE  empty = Secure only on https (auto); true/false override.
+  PASSWORD_MAX_LENGTH    upper bound on accepted passwords (default 128).
 
 All access is lazy (inside functions) so importing this module never touches
 the filesystem or network beyond argon2 import.
@@ -29,7 +30,6 @@ import hashlib
 import os
 import secrets
 import sqlite3
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -52,6 +52,32 @@ SESSION_COOKIE = "rja_session"
 
 _TTL_MIN_HOURS = 1
 _TTL_MAX_HOURS = 24 * 90  # 90 days
+
+# Password length bounds. The floor is a policy choice; the CEILING is a
+# resource-control choice: Argon2id cost is dominated by its memory/time
+# parameters, but hashing is still linear in input length, so an unbounded
+# `password` field turns one small JSON body into avoidable CPU work. 128
+# characters is far beyond any real passphrase and rejects the abuse cheaply.
+_PASSWORD_MIN_LENGTH = 8
+_DEFAULT_PASSWORD_MAX_LENGTH = 128
+
+
+def _password_max_length() -> int:
+    try:
+        value = int(float(os.getenv("PASSWORD_MAX_LENGTH", "") or _DEFAULT_PASSWORD_MAX_LENGTH))
+    except (TypeError, ValueError):
+        return _DEFAULT_PASSWORD_MAX_LENGTH
+    # Never below the minimum, never absurdly high.
+    return max(_PASSWORD_MIN_LENGTH, min(4096, value))
+
+
+def _check_password(password: str) -> None:
+    """Raise ValueError unless the password is within the length policy."""
+    if not password or len(password) < _PASSWORD_MIN_LENGTH:
+        raise ValueError(f"Password must be at least {_PASSWORD_MIN_LENGTH} characters")
+    ceiling = _password_max_length()
+    if len(password) > ceiling:
+        raise ValueError(f"Password must be at most {ceiling} characters")
 
 
 def _resolve_ttl_hours() -> int:
@@ -93,25 +119,69 @@ def verify_password(password_hash: str, password: str) -> bool:
 
 # --- Store --------------------------------------------------------------------
 
+# Paths whose schema has already been created in THIS process. `connect()` is
+# called on every authenticated request (require_token -> get_session), and
+# running 2x CREATE TABLE + CREATE INDEX each time measured ~3.6 ms per request
+# of pure auth overhead. DDL is idempotent, so doing it once per (process, db
+# path) is equivalent — and the key is the path, not a bare flag, so a test that
+# monkeypatches AUTH_DB_PATH between calls still gets its schema built.
+_initialized_paths: set = set()
+
+
 def connect() -> sqlite3.Connection:
     path = db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path, timeout=10)
     connection.row_factory = sqlite3.Row
-    initialize_auth_store(connection)
+    key = str(path)
+    if key not in _initialized_paths:
+        initialize_auth_store(connection)
+        _initialized_paths.add(key)
     return connection
+
+
+def forget_initialized(path: Optional[str] = None) -> None:
+    """Drop the "schema already built" memo for one path, or for all paths.
+
+    Exists for tests and for the rare case where the DB file is deleted under a
+    running process (the next `connect()` then rebuilds the schema).
+    """
+    if path is None:
+        _initialized_paths.clear()
+    else:
+        _initialized_paths.discard(str(path))
 
 
 def initialize_auth_store(connection: sqlite3.Connection) -> None:
     """Create users + sessions tables (idempotent, safe to call every time)."""
+    # WAL lets readers proceed while a login/logout writes. Without it the
+    # default rollback journal blocks every concurrent reader for the duration
+    # of the write — and `require_token` reads the sessions table on every
+    # single request. journal_mode is persisted in the DB header, so setting it
+    # here (once per process, at schema-build time) is enough.
+    # Best-effort: some filesystems (network mounts) refuse WAL, and the store
+    # must keep working in the default journal mode rather than fail to start.
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.Error:
+        pass
     connection.execute(
         """CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE COLLATE NOCASE,
             password_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            last_login_at TEXT
         )"""
     )
+    # `last_login_at` was added after the table shipped. ALTER is a no-op guard
+    # for databases created by an earlier version (SQLite has no ADD COLUMN IF
+    # NOT EXISTS), so an existing deployment upgrades in place instead of
+    # failing on "duplicate column name".
+    try:
+        connection.execute("ALTER TABLE users ADD COLUMN last_login_at TEXT")
+    except sqlite3.Error:
+        pass
     connection.execute(
         """CREATE TABLE IF NOT EXISTS sessions (
             token_hash TEXT PRIMARY KEY,
@@ -123,6 +193,10 @@ def initialize_auth_store(connection: sqlite3.Connection) -> None:
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)"
     )
+    # Sessions are looked up by user on revoke; without this it is a scan.
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)"
+    )
     connection.commit()
 
 
@@ -131,13 +205,12 @@ def initialize_auth_store(connection: sqlite3.Connection) -> None:
 def create_user(username: str, password: str) -> int:
     """Create one user with an Argon2id password hash. Returns the user id.
 
-    Raises ValueError on a duplicate username or a too-short password.
+    Raises ValueError on a duplicate username or an out-of-policy password.
     """
     name = (username or "").strip()
     if not (3 <= len(name) <= 64):
         raise ValueError("Username must be 3-64 characters")
-    if not password or len(password) < 8:
-        raise ValueError("Password must be at least 8 characters")
+    _check_password(password)
     connection = connect()
     try:
         cursor = connection.execute(
@@ -152,11 +225,35 @@ def create_user(username: str, password: str) -> int:
         connection.close()
 
 
+def revoke_user_sessions(user_id: int) -> int:
+    """Delete every session belonging to one user. Returns rows removed.
+
+    Used on password change: a credential reset must invalidate sessions
+    minted under the OLD credential, otherwise a stolen `rja_session` cookie
+    keeps working for the rest of its TTL no matter how often the password is
+    rotated. This is the single most important property of a password reset,
+    and it is why the reset cannot just be an UPDATE.
+    """
+    connection = connect()
+    try:
+        cursor = connection.execute(
+            "DELETE FROM sessions WHERE user_id = ?", (int(user_id),)
+        )
+        connection.commit()
+        return cursor.rowcount
+    finally:
+        connection.close()
+
+
 def update_password(username: str, password: str) -> bool:
-    """Reset one user's password (Argon2id). False when the user is unknown."""
+    """Reset one user's password (Argon2id) AND revoke all their sessions.
+
+    False when the user is unknown. Revoking is unconditional — it happens in
+    the same operation as the hash update so there is no window where the old
+    password is gone but old sessions still work.
+    """
     name = (username or "").strip()
-    if not password or len(password) < 8:
-        raise ValueError("Password must be at least 8 characters")
+    _check_password(password)
     connection = connect()
     try:
         cursor = connection.execute(
@@ -164,7 +261,17 @@ def update_password(username: str, password: str) -> bool:
             (hash_password(password), name),
         )
         connection.commit()
-        return cursor.rowcount > 0
+        changed = cursor.rowcount > 0
+        if changed:
+            row = connection.execute(
+                "SELECT id FROM users WHERE username = ?", (name,)
+            ).fetchone()
+            if row is not None:
+                connection.execute(
+                    "DELETE FROM sessions WHERE user_id = ?", (int(row["id"]),)
+                )
+                connection.commit()
+        return changed
     finally:
         connection.close()
 
@@ -186,9 +293,11 @@ def verify_login(username: str, password: str) -> Optional[Dict[str, Any]]:
     """{id, username} when username+password match; None otherwise.
 
     Case-insensitive username (NOCASE column); constant-time Argon2id verify.
+    The password ceiling is enforced here too (not only in the HTTP schema) so
+    no caller can push an oversized blob into Argon2.
     """
     name = (username or "").strip()
-    if not name or not password:
+    if not name or not password or len(password) > _password_max_length():
         return None
     try:
         connection = connect()
@@ -205,7 +314,24 @@ def verify_login(username: str, password: str) -> Optional[Dict[str, Any]]:
         return None
     if not verify_password(row["password_hash"], password):
         return None
+    _touch_last_login(int(row["id"]))
     return {"id": int(row["id"]), "username": row["username"]}
+
+
+def _touch_last_login(user_id: int) -> None:
+    """Stamp `last_login_at` (audit signal). Never fails a good login."""
+    try:
+        connection = connect()
+        try:
+            connection.execute(
+                "UPDATE users SET last_login_at = ? WHERE id = ?",
+                (_iso(_now()), user_id),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+    except Exception:
+        pass
 
 
 # --- Sessions (server-side, survive uvicorn restarts via SQLite) --------------

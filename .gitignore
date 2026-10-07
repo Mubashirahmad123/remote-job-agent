@@ -35,6 +35,7 @@ cv_embeddings.pkl
 
 # Python
 venv/
+.venv/
 .env/
 __pycache__/
 *.pyc

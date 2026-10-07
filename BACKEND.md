@@ -233,14 +233,73 @@ no submit path by design.
 - **Schemas:** `""` → `null`; numeric strings → float; bool-ish strings → bool
   (`computed/done` count as true) — Sheets stores everything as strings.
 
-## 4. Auth & CORS (`deps.py`, `app.py`)
+## 4. Auth & CORS (`deps.py`, `app.py`, `auth.py`, `ratelimit.py`)
 
-- `API_TOKEN` empty → open (local-dev default). Set → exact-match Bearer required
-  on **every** `/api/*`, reads included.
-- Non-local bind refuses at import time inside `create_app()` (covers the
-  documented `uvicorn api.app:app` path, not just `python api/app.py`).
+- **Three accepted credentials, checked in this order** (single predicate:
+  `deps.credentials_ok`, shared by every gate so they cannot drift apart):
+  1. valid `rja_session` HttpOnly cookie → allow;
+  2. `Authorization: Bearer <API_TOKEN>` exact match → allow (a *wrong* Bearer
+     is a 401, never a fallthrough);
+  3. `open_access()` — `API_TOKEN` unset **and** zero users → allow.
+  A DB read failure counts as "users may exist", so step 3 **fails closed**.
+- `open_access()` is a fresh-clone localhost convenience only, and it is
+  announced with a `warnings.warn` at every startup. It is *not* the same as
+  "`API_TOKEN` empty → open": once `create_user.py` has run, an empty
+  `API_TOKEN` means every `/api/*` route returns 401.
+- Non-local bind refuses at import time inside `create_app()`, checked against
+  **both** `API_HOST` and uvicorn's own `--host` flag. Reading only the env var
+  let the documented `uvicorn api.app:app --host 0.0.0.0` bind publicly with
+  `API_HOST` unset — which, combined with `open_access()`, meant a fully
+  public API.
+- **Auth is attached at the router level** (`_include_gated` →
+  `include_router(dependencies=[Depends(require_token)])`) *and* per route.
+  Per-route alone fails OPEN: one forgotten `Depends` on a new endpoint ships
+  it public. Router-level makes the safe behaviour the default. `auth.py` is
+  the only exempt router — `/api/auth/login` has to be reachable logged out.
+  This must be done via `include_router(dependencies=...)`, **not** by
+  appending to `router.dependencies`: this FastAPI version resolves included
+  routers lazily (`_IncludedRouter`) and post-construction mutation is a
+  silent no-op. `tests/test_api_auth_hardening.py` pins that trap.
+- `_GateMiddleware` covers the three things no router dependency can reach:
+  `/docs` + `/openapi.json` (FastAPI serves them itself — gated by default,
+  `API_DOCS_ENABLED=true` to publish) and `/index.html` (the `StaticFiles`
+  mount would otherwise hand out the dashboard shell past the `GET /`
+  redirect). It also sets `X-Content-Type-Options`, `X-Frame-Options` and
+  `Referrer-Policy` on every response, so a bare uvicorn deploy is not
+  silently unprotected without Caddy. No CSP: the dashboard relies on inline
+  `<script>`/`<style>` blocks and a strict policy would break it.
+- **Login abuse resistance** (`ratelimit.py`): two sliding-window budgets —
+  per client IP (`LOGIN_RATE_LIMIT`, default 12) and per username
+  (`LOGIN_USER_RATE_LIMIT`, default 6) over `LOGIN_RATE_WINDOW` (default 600s)
+  — are checked **before any Argon2 work** and answer `429` + `Retry-After`.
+  Both are needed: per-IP alone lets one attacker lock out a NAT'd office,
+  per-username alone lets an attacker spray one password from rotating IPs. A
+  successful login clears the *username* budget only. The handler is
+  `async def` and awaits its failure penalty — the previous sync `def` +
+  `time.sleep(0.5)` held a threadpool worker per attempt, so ~40 concurrent
+  bad passwords saturated the 40-thread pool and stalled every other sync
+  route (measured 5.6s wall → 1.4s, with 34/40 answered 429 and no hashing).
+- The limiter is **per-process**, which is exact under the deployed
+  `--workers 1`. Scaling out multiplies the budget by the worker count — move
+  it to a shared store first.
+- `LoginRequest` bounds `username` (≤64) and `password` (≤128). The ceiling is
+  a resource control: `/api/auth/login` is unauthenticated, so an unbounded
+  field lets one small JSON body buy a full Argon2id verify on 200 KB of
+  input. `api.auth.verify_login` enforces the same bound for non-HTTP callers.
+- **A password reset revokes every session for that user** (`update_password`
+  deletes them in the same operation). Otherwise a stolen cookie survives the
+  rotation for the rest of its 7-day TTL — which defeats the purpose of
+  resetting.
+- SQLite: schema DDL runs **once per (process, db path)**, not per request
+  (`require_token` reads the sessions table on every call, and rebuilding the
+  schema each time measured ~3.6 ms/request). `journal_mode=WAL` is set at
+  init so the per-request session read is not blocked by a concurrent
+  login/logout write.
 - CORS: localhost `:3000/:5173/:8000/:8080` by default, override via
   `API_CORS_ORIGINS`. `allow_methods = GET, POST, PUT, PATCH, OPTIONS`.
+  `allow_credentials=True` — auth is a cookie now, so a cross-origin dashboard
+  configured via `API_CORS_ORIGINS` cannot authenticate without it. Safe
+  because `cors_origins()` always returns an explicit list, never `*`.
 - Static UI mount is **last** so `/api/*` and `/docs` always win.
 
 ### Session vs Token Precedence (Scenario A — Multi-Operator Attribution)

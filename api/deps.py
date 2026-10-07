@@ -33,13 +33,55 @@ def cors_origins() -> list:
 _bearer = HTTPBearer(auto_error=False)
 
 
+def credentials_ok(request: Request, creds: HTTPAuthorizationCredentials | None = None) -> bool:
+    """True when this caller is authenticated by ANY accepted mechanism.
+
+    Single source of truth for "may this request through", shared by
+    `require_token` (the /api/* dependency) and the middleware that guards
+    /docs + /openapi.json. Keeping one predicate means the two can never drift
+    apart — a docs gate that is laxer than the API gate would still leak the
+    full route inventory.
+
+    Order matters: a valid session wins before any Bearer inspection, so a
+    logged-in operator who is ALSO sending a stale/wrong token is not locked
+    out (and a wrong Bearer alone is never a pass).
+    """
+    from api.auth import open_access, session_user
+
+    if session_user(request) is not None:
+        return True
+    expected = (os.getenv("API_TOKEN") or "").strip()
+    if expected:
+        provided = (creds.credentials or "").strip() if creds else ""
+        return provided == expected
+    return open_access()
+
+
+def bearer_from_request(request: Request) -> HTTPAuthorizationCredentials | None:
+    """Parse an `Authorization: Bearer <token>` header without FastAPI DI.
+
+    Needed by middleware, which cannot use `Depends`. Returns None for any
+    other scheme or a malformed header (never raises).
+    """
+    raw = ""
+    try:
+        raw = request.headers.get("authorization") or ""
+    except Exception:
+        return None
+    parts = raw.split(None, 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+    token = parts[1].strip()
+    return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token) if token else None
+
+
 def require_token(
     request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> None:
     """Authenticate every /api/* call: session cookie OR server-side Bearer.
 
-    Order of checks:
+    Order of checks (see `credentials_ok`):
       1. Valid HttpOnly session cookie (browser login flow) -> allow.
       2. Authorization: Bearer <API_TOKEN> exact match (server-to-server:
          scheduler/CI; the token never appears in the browser) -> allow.
@@ -48,19 +90,10 @@ def require_token(
          allow, preserving today's open-localhost behavior until the first
          user is created or API_TOKEN is set. DB errors fail closed (401).
     """
-    from api.auth import open_access, session_user
+    if not credentials_ok(request, creds):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return None
 
-    if session_user(request) is not None:
-        return None
-    expected = (os.getenv("API_TOKEN") or "").strip()
-    if expected:
-        provided = (creds.credentials or "").strip() if creds else ""
-        if provided != expected:
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        return None
-    if open_access():
-        return None
-    raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 def apply_access_ok(

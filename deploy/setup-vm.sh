@@ -114,12 +114,21 @@ Next steps
 
    docker compose up -d --build
 
-4. Health check:
+4. Health check (server-to-server, uses the API_TOKEN directly):
 
    curl -H "Authorization: Bearer <API_TOKEN>" http://localhost/api/health
 
-   Dashboard: open http://<VM_PUBLIC_IP>/?token=<API_TOKEN> once — the token is
-   saved to localStorage and stripped from the URL.
+5. Create the dashboard login, THEN sign in from a browser:
+
+   docker compose exec api python create_user.py <username>
+
+   Open http://<VM_PUBLIC_IP>/ — you'll land on the login page. Sign in with
+   the username/password you just created; the session is an HttpOnly cookie
+   that lasts 7 days (SESSION_TTL_HOURS in .env).
+
+   The API_TOKEN is SERVER-SIDE ONLY. Never put it in a URL: the old
+   `/?token=<API_TOKEN>` flow was removed, and the dashboard now deletes any
+   legacy `rja_api_token` key it finds in localStorage.
 EOF
 
 if [[ ${#missing[@]} -gt 0 ]]; then
