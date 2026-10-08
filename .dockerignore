@@ -11,6 +11,14 @@ __pycache__/
 .env
 keys.json
 my_cv.pdf
+# The CV embedding cache. It is derived from my_cv.pdf, which the line above
+# already excludes, so shipping the cache would defeat that exclusion — and it is
+# plain JSON now, readable straight out of an image layer with no tooling. The
+# *.pkl pattern covers an operator who still has the pre-JSON cache in the build
+# context.
+cv_embeddings.json
+cv_embeddings.pkl
+*.pkl
 data/*.db
 logs/
 scraped_jobs.json

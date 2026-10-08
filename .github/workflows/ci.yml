@@ -216,6 +216,11 @@ jobs:
           # explicitly because the generic pattern above does not convey that
           # this particular file holds credentials.
           check "apply_submit.db (users + sessions by default)" '(^|/)data/apply_submit\.db$'
+          # Derived from my_cv.pdf, which is excluded on purpose: shipping the
+          # cache would defeat that exclusion, and it is plain JSON now, so it is
+          # readable straight out of an image layer.
+          check "cv_embeddings.json (CV data derived from my_cv.pdf)" '(^|/)cv_embeddings\.json$'
+          check "any pickle (*.pkl) in the build context"             '(^|/)[^/]+\.pkl$'
           check ".venv/ (developer virtualenv)"        '(^|/)\.venv/'
           check "node_modules/ (e2e test dependencies)" '(^|/)node_modules/'
 

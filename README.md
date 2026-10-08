@@ -13,7 +13,7 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | CV-based job matching | ✅ | Parses your PDF/DOCX CV via LLM fallback chain, local keyword scoring (no API calls per job) |
 | **Multi-CV matching** | 🟡 Partial | `CV_DIR=cvs/` — auto-picks the best CV per job (keyword-based); pick recorded as `selected_cv`/`selected_cv_path` per job and used for scoring, resume + cover-letter generation. Semantic scoring still uses the primary CV only |
 | **ATS 1-page resume + cover letter** | ✅ | Multi-pass shrink engine guarantees exactly 1 page; slate/navy styled header, section rules, hanging-indent bullets (verified with pdfplumber) |
-| **Semantic job matching** | ✅ | Optional FAISS + sentence-transformers for cosine-similarity scoring (catches synonyms) — `pip install sentence-transformers faiss-cpu`, then build the index with `python -m tools.embedding_matcher` (required — without `cv_embeddings.pkl` scoring silently stays keyword-only) |
+| **Semantic job matching** | ✅ | Optional FAISS + sentence-transformers for cosine-similarity scoring (catches synonyms) — `pip install sentence-transformers faiss-cpu`, then build the index with `python -m tools.embedding_matcher` (required — without `cv_embeddings.json` scoring silently stays keyword-only) |
 | Duplicate detection | ✅ | MD5 fingerprinting prevents duplicate entries across runs |
 | Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS — with colored score bands, hyperlinks, frozen headers |
 | **AI cover letters with role detection** | ✅ | Detects backend/frontend/fullstack/mobile role from job title and tailors tone, skills, and experience accordingly |
@@ -273,7 +273,7 @@ APPLICANT_GITHUB=https://github.com/yourprofile
 
 # Embedding Matcher (optional — install sentence-transformers + faiss-cpu)
 EMBEDDING_MODEL=all-MiniLM-L6-v2
-CV_EMBEDDINGS_PATH=cv_embeddings.pkl
+CV_EMBEDDINGS_PATH=cv_embeddings.json
 
 # API + dashboard (compose binds 0.0.0.0 inside the container → API_TOKEN required)
 API_HOST=127.0.0.1  # non-local bind refuses to start without API_TOKEN

@@ -9,7 +9,6 @@ Usage:
 
 import os
 import json
-import pickle
 from pathlib import Path
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
@@ -35,7 +34,23 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 
-_cv_emb_path = os.getenv("CV_EMBEDDINGS_PATH", "cv_embeddings.pkl")
+# JSON, not pickle. The cache is `{section name: [float, ...]}` — pure data, so
+# a pickle bought nothing except the ability to execute arbitrary code on load:
+# `pickle.load` runs whatever `__reduce__` the file names, with the privileges of
+# whoever reads it. The path came from `CV_EMBEDDINGS_PATH` in `.env` and
+# defaulted to the repo root, i.e. a writable location, so anyone able to put a
+# file there (a shared volume, a restored backup, a different vulnerability, a
+# planted artifact) got code execution the next time curation scored a job. It
+# was the ONLY pickle/eval/exec sink in the repo; tests/test_embedding_cache.py
+# now scans for any of them coming back.
+#
+# The format change is silent-by-default in the wrong direction — a missing or
+# unreadable cache degrades to keyword-only scoring — so a legacy pickle is
+# reported rather than quietly ignored. See _legacy_pickle_notice.
+_CV_EMBEDDINGS_DEFAULT = "cv_embeddings.json"
+_LEGACY_PICKLE_NAME = "cv_embeddings.pkl"
+
+_cv_emb_path = os.getenv("CV_EMBEDDINGS_PATH", _CV_EMBEDDINGS_DEFAULT)
 CV_EMBEDDINGS_PATH = Path(_cv_emb_path)
 if not CV_EMBEDDINGS_PATH.is_absolute():
     CV_EMBEDDINGS_PATH = BASE_DIR / CV_EMBEDDINGS_PATH
@@ -70,25 +85,75 @@ def embed_text(text: str) -> Optional[list]:
     return model.encode(text).tolist()
 
 
-def load_cv_embeddings(path: Optional[Path] = None) -> Optional[dict]:
+def _legacy_pickle_notice(path: Path) -> None:
+    """Say so when a pre-JSON cache is being ignored, instead of degrading quietly.
+
+    Without this, an operator who upgrades with a working `cv_embeddings.pkl`
+    gets keyword-only scoring and no signal at all — the exact failure README
+    warns about, now caused by our own format change.
     """
-    Load pre-computed CV embeddings from disk.
+    candidates = [path if path.suffix.lower() == ".pkl" else None, BASE_DIR / _LEGACY_PICKLE_NAME]
+    for candidate in candidates:
+        if candidate is not None and candidate.exists():
+            print(
+                f"⚠️ Ignoring legacy pickle cache {candidate}. Embeddings are JSON now "
+                f"(the pickle format could execute code on load). Rebuild with: "
+                f"python -m tools.embedding_matcher"
+            )
+            return
+
+
+def _is_pickle_shaped(path: Path) -> bool:
+    """Protocol 2+ pickles start with \x80; older ones with '(' or '}'."""
+    try:
+        with open(path, "rb") as handle:
+            return handle.read(1) in (b"\x80", b"(", b"}")
+    except OSError:
+        return False
+
+
+def load_cv_embeddings(path: Optional[Path] = None) -> Optional[dict]:
+    """Load pre-computed CV embeddings from disk as JSON.
+
+    Returns None when there is no usable cache, which callers treat as
+    "semantic matching unavailable, score by keyword". Never raises and never
+    deserializes anything that can run code.
     """
     path = path or CV_EMBEDDINGS_PATH
     if not path.exists():
         return None
+    if path.suffix.lower() == ".pkl" or _is_pickle_shaped(path):
+        _legacy_pickle_notice(path)
+        return None
     try:
-        with open(path, "rb") as f:
-            return pickle.load(f)
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
     except Exception:
         return None
+    # Shape it or reject it: score_semantic() iterates the values as vectors, so
+    # a JSON list or a dict of strings would fail deep inside the scorer with an
+    # error that does not mention this file.
+    if not isinstance(data, dict):
+        return None
+    for key, vector in data.items():
+        if not isinstance(key, str) or not isinstance(vector, list):
+            return None
+        if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in vector):
+            return None
+    return data
 
 
 def save_cv_embeddings(embeddings: dict, path: Optional[Path] = None):
-    """Save CV embeddings to disk."""
+    """Save CV embeddings to disk as JSON.
+
+    Round-trips exactly: Python's json encoder writes floats with repr(), which
+    is the shortest string that parses back to the same double, so a saved
+    embedding reloads bit-for-bit.
+    """
     path = path or CV_EMBEDDINGS_PATH
-    with open(path, "wb") as f:
-        pickle.dump(embeddings, f)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(embeddings, handle)
 
 
 def compute_cv_embeddings(cv_text: str) -> Optional[dict]:
