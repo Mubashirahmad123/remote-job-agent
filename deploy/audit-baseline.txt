@@ -1,0 +1,67 @@
+# Known-vulnerability baseline for `deploy/dependency_audit.py`.
+#
+# Format: one `<name>==<version> <ADVISORY-ID>` per line. Blank lines and `#`
+# comments are ignored. Keep it sorted; the writer does, and an unsorted file
+# makes a diff unreadable.
+#
+# This is NOT a list of advisories judged harmless. It is the state of the
+# dependency tree on the date below, recorded so that CI fails on NEW findings
+# instead of on all of them at once — a job red from day one is a job that gets
+# switched off. Read the reasoning and the per-package remediation cost in the
+# docstring of deploy/dependency_audit.py.
+#
+# Remove an entry once the package is upgraded past it. The audit reports
+# entries that no longer reproduce as FIXED precisely so they get pruned, and a
+# pruned entry can never come back silently.
+#
+# Regenerate wholesale with:
+#     python deploy/dependency_audit.py --update-baseline
+#
+# Recorded: 2026-10-08
+
+chromadb==1.1.1 PYSEC-2026-311
+chromadb==1.1.1 PYSEC-2026-3813
+chromadb==1.1.1 PYSEC-2026-3814
+chromadb==1.1.1 PYSEC-2026-3815
+crawl4ai==0.3.74 PYSEC-2026-1281
+crawl4ai==0.3.74 PYSEC-2026-2138
+crawl4ai==0.3.74 PYSEC-2026-2139
+crawl4ai==0.3.74 PYSEC-2026-2140
+crawl4ai==0.3.74 PYSEC-2026-228
+crawl4ai==0.3.74 PYSEC-2026-229
+crawl4ai==0.3.74 PYSEC-2026-230
+crawl4ai==0.3.74 PYSEC-2026-239
+crawl4ai==0.3.74 PYSEC-2026-319
+crawl4ai==0.3.74 PYSEC-2026-33
+crawl4ai==0.3.74 PYSEC-2026-34
+crawl4ai==0.3.74 PYSEC-2026-3443
+crawl4ai==0.3.74 PYSEC-2026-3448
+crawl4ai==0.3.74 PYSEC-2026-3449
+crawl4ai==0.3.74 PYSEC-2026-587
+crawl4ai==0.3.74 PYSEC-2026-588
+crawl4ai==0.3.74 PYSEC-2026-596
+crawl4ai==0.3.74 PYSEC-2026-798
+json-repair==0.25.3 GHSA-xf7x-x43h-rpqh
+lxml==5.4.0 PYSEC-2026-87
+mcp==1.26.0 PYSEC-2026-3481
+mcp==1.26.0 PYSEC-2026-3482
+mcp==1.26.0 PYSEC-2026-3483
+pdfminer-six==20231228 PYSEC-2026-1761
+pdfminer-six==20231228 PYSEC-2026-1762
+pillow==10.4.0 PYSEC-2026-165
+pillow==10.4.0 PYSEC-2026-2249
+pillow==10.4.0 PYSEC-2026-2250
+pillow==10.4.0 PYSEC-2026-2252
+pillow==10.4.0 PYSEC-2026-2253
+pillow==10.4.0 PYSEC-2026-2254
+pillow==10.4.0 PYSEC-2026-2255
+pillow==10.4.0 PYSEC-2026-2256
+pillow==10.4.0 PYSEC-2026-2257
+pillow==10.4.0 PYSEC-2026-2874
+pillow==10.4.0 PYSEC-2026-3451
+pillow==10.4.0 PYSEC-2026-3453
+pillow==10.4.0 PYSEC-2026-3454
+pillow==10.4.0 PYSEC-2026-3493
+pillow==10.4.0 PYSEC-2026-3494
+pillow==10.4.0 PYSEC-2026-3495
+pillow==10.4.0 PYSEC-2026-3496

@@ -507,7 +507,7 @@ regex==2026.1.15
     #   tiktoken
 reportlab==4.1.0
     # via -r requirements.txt
-requests==2.32.3
+requests==2.33.0
     # via
     #   -r requirements.txt
     #   crawl4ai

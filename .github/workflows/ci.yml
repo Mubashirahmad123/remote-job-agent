@@ -224,3 +224,36 @@ jobs:
             echo "OK: no secrets, databases or local virtualenvs in the image"
           fi
           exit $((leaks > 0))
+
+  # Separate job rather than a step in api-tests: it needs network access to the
+  # PyPI advisory API, which none of the other jobs need, and a new upstream
+  # advisory must not be able to mask (or be masked by) a test failure.
+  dependency-audit:
+    name: Dependency vulnerabilities (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip pip-audit
+
+      # Audits requirements.lock.txt — the full transitive resolution, which is
+      # where every finding actually lives — and compares against
+      # deploy/audit-baseline.txt. Fails only on findings NEW since the baseline
+      # was recorded, because the first run found 48 advisories and a job that is
+      # red from day one is a job that gets switched off. Findings that have been
+      # fixed upstream-or-here are reported as FIXED so the baseline gets pruned,
+      # and a pruned entry can never come back silently.
+      #
+      # On failure there are exactly two honest options, and both are a commit:
+      # upgrade the package past the advisory, or add the line to the baseline
+      # with `python deploy/dependency_audit.py --update-baseline` and own the
+      # decision in review. The rationale and the per-package remediation cost
+      # are in the docstring of deploy/dependency_audit.py.
+      - name: Audit the dependency tree against the recorded baseline
+        run: python deploy/dependency_audit.py

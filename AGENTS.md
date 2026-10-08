@@ -37,9 +37,10 @@ docker compose run --rm runner python -m pytest tests/      # run test suite in 
 Copy `.env.example` to `.env` and fill in secrets before running. See README for per-mode CLI flags (`apply`, `resume`, `test`).
 
 `.github/workflows/ci.yml` runs all of the above on every push and PR: the pytest
-suite, the lock-file drift check, the Node e2e suite, and a `docker build` plus an
+suite, the lock-file drift check, the Node e2e suite, a `docker build` plus an
 assertion that no `.env`, `keys.json`, `*.db`, `.venv/` or `node_modules/` is baked
-into the image. Nothing in it is allowed to fail.
+into the image, and a `pip-audit` vulnerability scan. Nothing in it is allowed to
+fail.
 
 **After changing `requirements.txt`, regenerate the lock and commit both:**
 
@@ -51,6 +52,38 @@ uv pip compile requirements.txt -o requirements.lock.txt --universal
 only, which produces an unmarked `pywin32` line that cannot install on the Linux
 deployment VM and drops `uvloop`. CI fails if a package or an exact pin in
 `requirements.txt` disagrees with the lock.
+
+**Every pin needs an upper bound.** `==` is exact; `>=1.0.0,<2` and `~=2.26` are
+bounded; a bare `pytest` or a lone `>=1.0.0` is not, and lets an upstream major
+release break the build on a commit that changed nothing here.
+`tests/test_dependency_hygiene.py` fails on an unbounded or malformed specifier.
+
+**Vulnerability scanning** runs in the `dependency-audit` CI job:
+
+```bash
+python -m pip install pip-audit
+python deploy/dependency_audit.py                    # what CI runs
+python deploy/dependency_audit.py --update-baseline  # record the current state
+```
+
+It audits `requirements.lock.txt` — the full transitive resolution, which is
+where every real finding lives — and compares against `deploy/audit-baseline.txt`,
+failing only on findings **new** since the baseline was recorded. The first run
+found 48 distinct advisories across 8 packages, and clearing them is not a bump:
+`crawl4ai` fixes start at 0.8.0 (five minors on, and it drives the JS-rendered
+scraper), `pillow` fixes start at 12.1.1 (two majors on), and `chromadb` has no
+fixed version published at all. A job red from day one is a job that gets
+switched off, so this one ratchets instead. On a failure there are two honest
+options and both are a commit: upgrade past it, or add the line to the baseline
+and own the decision in review. Fixed advisories are reported as FIXED so the
+baseline gets pruned, and a pruned entry cannot come back silently.
+
+One gap worth knowing about: **nothing currently installs from the lock** — the
+`Dockerfile` installs `requirements.txt`, so transitive versions float between
+builds and the audit is checking the best available *record* of what ships rather
+than a byte-exact manifest. Switching the image to install from the lock is the
+real fix; it has to be verified on the ARM deployment VM, which CI does not run,
+so it was not done as a drive-by.
 
 ## Coding Style & Naming Conventions
 

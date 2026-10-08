@@ -170,6 +170,16 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
   credentials besides the login trio. It returns exactly `{"status":"ok"}` and
   is excluded from the OpenAPI schema, so orchestrator probes work while
   build/config/state stay behind the login.
+- Dependencies are pinned with an upper bound and scanned for known
+  vulnerabilities on every push (`dependency-audit` CI job,
+  `deploy/dependency_audit.py`). It fails on findings **new** since
+  `deploy/audit-baseline.txt` was recorded, not on the 48 that were already
+  there — clearing those is a porting project (`crawl4ai` fixes start five
+  minors on, `pillow` two majors on, `chromadb` has no fix published), and a job
+  red from day one gets switched off. On a new finding: upgrade past it, or add
+  the line to the baseline and own the decision. Caveat: the `Dockerfile`
+  installs `requirements.txt`, not the lock, so transitive versions can drift
+  between builds and the audit checks the best available record of what ships.
 - Login does not reveal which usernames exist. Both failures return the same
   401 body, both are audited, and both now cost one Argon2id verify — a missing
   username is checked against a decoy hash so the response times are
