@@ -3,12 +3,13 @@
 ## Project Structure & Module Organization
 
 - `agents/` — pipeline modules: `scrapper.py` (45+ job-board scrapers), `curator.py` (dedup, CV matching, ranking), `gemini_tools.py` (LLM cover letters with fallback), `auto_applier.py` (auto-apply).
-- `api/` — FastAPI backend (reads + actions): `app.py` (thin factory), `deps.py` (auth/CORS), `cache.py` (Sheets TTL cache + snapshot fallback + CV profile/variants), `schemas.py`, `mappers.py`, `materials.py` + `runs.py` (registries), `routers/` (one file per group: health, jobs, stats, tracker, system, runs, materials, cv, apply).
+- `api/` — FastAPI backend (reads + actions): `app.py` (thin factory + `_GateMiddleware`), `deps.py` (auth/CORS + `resolve_actor`/`require_actor`), `auth.py` (Argon2id users + sessions in SQLite), `ratelimit.py` (login throttling), `activity.py` (audit feed), `cache.py` (Sheets TTL cache + snapshot fallback + CV profile/variants), `schemas.py`, `mappers.py`, `materials.py` + `runs.py` (registries), `routers/` (one file per group: auth, liveness, health, jobs, stats, tracker, system, runs, materials, cv, apply, activity).
 - `frontend/` — vanilla-JS dashboard, no build step: `js/api.js` (one fn per endpoint group), `js/store.js` (state + normalization + mock fallback), `js/components/` (dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply).
 - `tests/` — pytest suites mirroring the modules they test (e.g., `test_auto_applier.py`, `test_api_phase1.py` — faked Sheets, no network).
-- `tools/` — reusable utilities: `cv_parser.py`, `cv_matcher.py`, `deduplicator.py`, `sheet_writer.py`, `resume_generator.py`, and scraper helpers.
+- `tools/` — reusable utilities: `cv_parser.py`, `cv_matcher.py`, `deduplicator.py`, `sheet_writer.py`, `resume_generator.py`, `application_tracker.py` (Sheets APPLIED tab), `glm_client.py` (Zhipu GLM over HTTP), and scraper helpers.
 - `deploy/` — free-cloud deployment: `DEPLOY_ORACLE.md` (Oracle Always Free $0 walkthrough), `setup-vm.sh` (VM bootstrap), `Caddyfile` (compose `caddy` reverse proxy).
-- LLM fallback chain (shared by `gemini_tools.py`, `resume_generator.py`, `cv_parser.py`): Gemini → Groq → Mistral → GLM → Ollama Cloud. Mistral/Groq use OpenAI-compatible endpoints via `requests` (no extra SDK deps); GLM needs `GLM_API_KEY` + `zhipuai` package (model via `GLM_MODEL`, default `glm-4`); Ollama sends `Authorization: Bearer` only when `OLLAMA_API_KEY` is set (empty = local server).
+- LLM fallback chain (shared by `gemini_tools.py`, `resume_generator.py`, `cv_parser.py`): Gemini → Groq → Mistral → GLM → Ollama Cloud. Mistral, Groq **and GLM** all use OpenAI-compatible endpoints via `requests`, so none of them needs an extra SDK. GLM needs `GLM_API_KEY` (model via `GLM_MODEL`, default `glm-4`) and is implemented in `tools/glm_client.py`; Ollama sends `Authorization: Bearer` only when `OLLAMA_API_KEY` is set (empty = local server).
+  - **Do not add `zhipuai` back.** It pins `pyjwt>=2.8.0,<2.9.0` while `crewai` pins `pyjwt>=2.13.0,<3`; the ranges do not intersect, so the dependency set becomes unsatisfiable and `docker build` fails with `ResolutionImpossible` (the original log is `docker-build-error.txt`). `tools/glm_client.py` reproduces the SDK's HS256 key signing byte-for-byte and is pinned by golden vectors in `tests/test_glm_client.py`.
 - Top-level entry points: `main.py` (CrewAI pipeline), `Run.py` (setup/run), `scheduler.py` (cron), `track.py` (application tracker), `clean_jobs.py` and `format_jobs_xlsx.py` (Excel tooling).
 - Generated artifacts (`apply_packages/`, `cover_letters/`, `resumes/`, `screenshots/`, `cache/`) are gitignored — never commit them.
 
@@ -16,12 +17,15 @@
 
 ```bash
 # Local development
-python -m venv venv && uv pip install -r requirements.txt   # install deps
+python -m venv venv && uv pip install -r requirements.txt   # install deps (.venv/ also works)
 python Run.py --setup                                       # first-time setup (Chromium, Crawl4AI)
 python Run.py                                               # run pipeline (CrewAI)
 python main.py simple                                       # direct scrape → Sheets, no LLM
 python scheduler.py                                         # scheduled scraping
-python -m pytest tests/                                     # run all tests
+python -m pytest tests/                                     # run all tests (514, all offline)
+
+# Dashboard e2e (boots a real uvicorn; needs Node 20+ and a venv the harness can find)
+cd tests/e2e && npm ci && node --test smoke.test.mjs        # or: ./tests/e2e/run.sh
 
 # Docker workflow
 docker compose up -d --build                                 # full stack: api + scheduler + caddy (needs API_TOKEN)
@@ -31,6 +35,22 @@ docker compose run --rm runner python -m pytest tests/      # run test suite in 
 ```
 
 Copy `.env.example` to `.env` and fill in secrets before running. See README for per-mode CLI flags (`apply`, `resume`, `test`).
+
+`.github/workflows/ci.yml` runs all of the above on every push and PR: the pytest
+suite, the lock-file drift check, the Node e2e suite, and a `docker build` plus an
+assertion that no `.env`, `keys.json`, `*.db`, `.venv/` or `node_modules/` is baked
+into the image. Nothing in it is allowed to fail.
+
+**After changing `requirements.txt`, regenerate the lock and commit both:**
+
+```bash
+uv pip compile requirements.txt -o requirements.lock.txt --universal
+```
+
+`--universal` is required, not cosmetic: without it uv resolves for the host OS
+only, which produces an unmarked `pywin32` line that cannot install on the Linux
+deployment VM and drops `uvloop`. CI fails if a package or an exact pin in
+`requirements.txt` disagrees with the lock.
 
 ## Coding Style & Naming Conventions
 

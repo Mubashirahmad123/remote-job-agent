@@ -235,31 +235,44 @@ contained change rather than a refactor.
 5. No secrets committed; no generated artifacts committed (`apply_packages/`,
    `cover_letters/`, `resumes/`, `screenshots/`, `cache/`).
 
-## 5. Scenario A — Multi-Operator Attribution (in progress)
+## 5. Scenario A — Multi-Operator Attribution (IMPLEMENTED 2026-10-07)
 
 **Scope:** Shared data, multiple trusted human operators, actions attributed to whoever did them. **Explicitly NOT Scenario B** (no per-user CV, no per-user Sheet/data isolation, no per-user dedup — that's a deliberately deferred future redesign).
 
-**Status:** Audit complete (see Step 1 findings below). Implementation not started.
+**Status:** **Shipped.** All 7 planned steps are implemented and covered by
+`tests/test_api_actor_attribution.py` (35 tests). The Step 1 audit table below is
+kept as the *before* picture — read it as history, not as current state.
 
-### Step 1 Audit Findings (2026-10-06)
+### Step 1 Audit Findings (2026-10-06) — superseded, kept for provenance
 
-| Aspect | Current State |
-|---|---|
-| Session identity | `session_user(request)` returns `{"user_id", "username", "expires_at"}` — username **is available** |
-| Apply-gated auth | Checks session cookie **OR** `APPLY_API_TOKEN` (never general `API_TOKEN`). `apply_access_ok()` returns `bool` only — **discards identity** |
-| Actor columns in DB | **None** — `apply_claims`, `apply_intents`, `apply_review_artifacts`, tracker entries (Sheets) all lack actor/created_by |
-| Token auth identity | No username — needs sentinel value (`"automation"` or `"api-token"`) |
-| Precedence (session vs token) | Session checked first in `apply_access_ok()` — **accidental**, not documented |
+| Aspect | State at audit time | State now |
+|---|---|---|
+| Session identity | `session_user(request)` returns `{"user_id", "username", "expires_at"}` — username **is available** | unchanged; `resolve_actor()` consumes it |
+| Apply-gated auth | Checks session cookie **OR** `APPLY_API_TOKEN` (never general `API_TOKEN`). `apply_access_ok()` returns `bool` only — **discards identity** | `require_actor()` / `require_submit_actor()` return the actor string alongside the auth decision |
+| Actor columns in DB | **None** — `apply_claims`, `apply_intents`, `apply_review_artifacts`, tracker entries (Sheets) all lack actor/created_by | `actor TEXT` on all three SQLite tables (in-place ALTER, existing history preserved); `created_by` column 13 on the Sheets APPLIED tab |
+| Token auth identity | No username — needs sentinel value (`"automation"` or `"api-token"`) | `AUTOMATION_ACTOR = "automation"` for a presented service token; `OPEN_ACCESS_ACTOR = "local-dev"` for open-access mode |
+| Precedence (session vs token) | Session checked first in `apply_access_ok()` — **accidental**, not documented | documented and tested: **session wins**, in both `resolve_actor()` and `require_submit_actor()` |
 
-### Implementation Plan
+### Implementation Plan — outcome
 
-1. **Add `actor` column** to: `apply_claims`, `apply_intents`, `apply_review_artifacts` (SQLite); tracker entries get `created_by` in Sheets APPLIED tab
-2. **Thread identity through deps**: new `require_actor(request)` returning `str` (username or `"automation"`)
-3. **Populate on write**: every claim, intent, artifact, tracker create/update records actor
-4. **Document precedence rule** in BACKEND.md §4 and ARCHITECTURE.md: human session → username; service token → `"automation"`; both present → session wins (explicit)
-5. **Add `GET /api/activity?limit=N`** — merged time-ordered actor-attributed actions (claims, tracker changes, apply triggers)
-6. **Add role flag to users table** (`admin` vs `operator`) via `create_user.py` / user model; gate future `/submit` to admin only (under kill-switch)
-7. **Tests**: both auth paths populate actor; unknown actor fails closed; role check enforced at route level (even though submit still 403s)
+1. ✅ **`actor` column** added to `apply_claims`, `apply_intents`, `apply_review_artifacts` (SQLite) and `created_by` on the Sheets APPLIED tab. All three SQLite tables upgrade **in place** via `_add_column_if_missing` (`PRAGMA table_info` → conditional `ALTER`); SQLite has no `ADD COLUMN IF NOT EXISTS` and existing deployments hold real apply history that must not be recreated. Tested from the oldest schema.
+2. ✅ **`require_actor(request)`** in `api/deps.py`, backed by `resolve_actor()`. Returns `str`.
+3. ✅ **Populated on write** at every claim, intent, artifact and tracker create. Service-layer defaults are `AUTOMATION_ACTOR` (the only non-HTTP callers are the CLI and scheduler); **HTTP routes always pass the actor explicitly** so a default can never silently mask a missing identity.
+4. ✅ **Precedence documented** in BACKEND.md §4 and ARCHITECTURE.md §4: human session → `username`; service token → `"automation"`; both present → **session wins**.
+5. ✅ **`GET /api/activity?limit=N`** — merged, time-ordered, actor-attributed feed.
+6. ✅ **Role flag** (`admin` / `operator`) on the users table, settable via `create_user.py --role`. **First user is admin, later users default to operator** — chosen so a mistake in role bootstrapping cannot lock the only operator out of the admin-only submit path.
+7. ✅ **Tests**: both auth paths populate an actor; unknown/unauthenticated actor fails closed; the role check is enforced at route level even while the kill-switch still 403s the submit itself.
+
+### Deviations from the plan (all deliberate, all tested)
+
+| Plan said | Built instead | Why |
+|---|---|---|
+| Gate `/submit` to `admin` via one dependency | **`require_submit_actor`**, not `require_admin_actor` | A service Bearer token has **no role**, so demanding `admin` broke the documented server-to-server submit path with a 403. Rule now: if a session is present it must be admin (**the session wins for authorization too**, matching the attribution precedence); if there is no session, `APPLY_API_TOKEN` yields `"automation"`. Kept separate from the kill-switch dependency so `safety.submit_enabled()` → 403 is still evaluated first. |
+| Actor = username or `"automation"` | plus **`OPEN_ACCESS_ACTOR = "local-dev"`** | With no auth configured, `require_token` admits a fresh clone but `require_actor` resolved to `""` and 401'd every write. Checked **last** in `resolve_actor`, and distinct from `"automation"` — the latter means a real service token was presented. |
+| Step 5: feed includes tracker changes | **Sheets tracker changes are excluded** | The APPLIED tab stores `created_by` but keeps **no change history**, so "who flipped this row to rejected, and when" is unrecoverable. Recording `created_by` on create is honest; implying the feed shows status changes would not be. |
+| — | **`/api/activity` login events are admin-only**, decided from the caller's role (not a query param) | They carry client IPs. `includes_login_events` in the response says why sign-in history is absent for a non-admin. |
+| — | Added **`GET /api/health/live`** (unauthenticated, `{"status":"ok"}`, `include_in_schema=False`) | Not in the original plan. Gating `/api/health` for login broke container/orchestrator probes that have no session. A separate router in `_OPEN_ROUTERS` — un-gating the whole health router would leak build/config/state to anonymous callers. |
+| Step 1 implied per-operator visibility | **Per-operator daily caps remain impossible** | `daily_apply_caps` is keyed on `cap_date` alone: one **global** budget shared by every operator. There is also a second, per-browser cap in `localStorage['rja_daily_usage']` (`frontend/js/store.js`). Attribution is for **forensics, not enforcement** — recorded in the `claim_first` docstring. Per-operator caps are Scenario B work. |
 
 ### Explicitly Deferred — Scenario B (True Multi-Tenancy)
 
@@ -269,6 +282,7 @@ contained change rather than a refactor.
 | Per-user Sheet/data partitioning | ⬜ Deferred — separate redesign |
 | Per-user deduplication (`seen_jobs.json`) | ⬜ Deferred — separate redesign |
 | Per-user cache/profile isolation | ⬜ Deferred — separate redesign |
+| Per-operator daily apply caps | ⬜ Deferred — needs `daily_apply_caps` re-keyed on `(cap_date, actor)` **and** the browser-local cap removed, or one operator can still exhaust another's budget |
 
 Same gating discipline as Docker/Celery/ML-classifier elsewhere in this doc — not built until explicitly scoped and approved.
 

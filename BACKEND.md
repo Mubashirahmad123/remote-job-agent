@@ -15,8 +15,18 @@ Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest 
 
 ```
 api/
-  app.py            thin factory: CORS → include_router ×9 → static UI mount (LAST)
+  app.py            thin factory: CORS → _GateMiddleware → include_router ×13
+                    (11 gated + `auth`/`liveness` open) → static UI mount (LAST)
   deps.py           cors_origins() + require_token() (Bearer <API_TOKEN> when set)
+                    + resolve_actor() / require_actor() / require_submit_actor()
+                    (Scenario A attribution — see §4)
+  auth.py           Argon2id users, server-side sessions, roles, login-event
+                    audit, in SQLite. db_path() resolves the env on EVERY call
+  ratelimit.py      sliding-window login limiter (per-IP + per-username budgets)
+  activity.py       merged actor-attributed audit feed
+  apply_state.py    apply artifacts/claims/intents persistence. DB_PATH resolves
+                    ONCE at import — unlike auth.db_path() — so tests must patch
+                    the attribute (see tests/conftest.py)
   cache.py          sheet reads, TTL cache, curated enrichment, snapshot fallback,
                     CV profile cache + variant discovery
   schemas.py        JobOut, TrackerEntry, TrackerUpdate, HealthOut (+ VALID_TRACKER_STATUSES),
@@ -25,6 +35,10 @@ api/
   materials.py      resume/cover-letter generation registry (fp-mapped files only)
   runs.py           background scrape-run registry (single active run)
   routers/
+    auth.py         POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
+                    (OPEN — the login page has to work before a session exists)
+    liveness.py     GET /api/health/live (OPEN, exactly {"status":"ok"}, hidden
+                    from the schema; for container/orchestrator probes)
     health.py       GET /api/health
     jobs.py         GET /api/jobs, GET /api/jobs/{job_fingerprint}
     stats.py        GET /api/stats
@@ -37,11 +51,15 @@ api/
     cv.py           GET /api/cv/profile (cached parse, 501 when uncached),
                     PUT /api/cv/profile (Studio edits → on-disk cache, 501 when uncached),
                     GET /api/cv/variants (CVLibrary discovery w/ cvs/ fallback; missing dir → [])
+    activity.py     GET /api/activity (merged audit feed; login events admin-only)
     apply.py        POST /api/apply/{fp} creates a local review package only
             (service: api/apply.py, gate: api/safety.py; no ATS browser or submit)
 ```
 
 To debug: comment out one `include_router` line in `app.py` to isolate a group.
+Routers are split into `_GATED_ROUTERS` (auth attached at the router level) and
+`_OPEN_ROUTERS` (`auth`, `liveness`); add new routers to the gated tuple, since
+per-route `Depends` alone fails **open** if one is forgotten.
 
 ## 2. Endpoints
 
@@ -304,23 +322,77 @@ no submit path by design.
 
 ### Session vs Token Precedence (Scenario A — Multi-Operator Attribution)
 
+**Implemented** in `api/deps.py`: `resolve_actor()` (pure resolution),
+`require_actor()` (401 if nothing resolves) and `require_submit_actor()`
+(attribution **plus** the admin gate for `/submit`).
+
 **Rule (explicit, not accidental):**
 
 | Credential Present | Actor Recorded |
 |---|---|
 | Valid session cookie only | `username` (from `session_user(request)`) |
-| Valid `APPLY_API_TOKEN` Bearer only | `"automation"` (fixed sentinel) |
-| **Both** valid session **and** valid `APPLY_API_TOKEN` | **Session wins** → `username` |
+| Valid `APPLY_API_TOKEN` **or** `API_TOKEN` Bearer only | `"automation"` (fixed sentinel, `AUTOMATION_ACTOR`) |
+| **Both** valid session **and** a valid Bearer token | **Session wins** → `username` |
+| No credentials, but auth is not enforced at all (`open_access()` — fresh clone: no users, no `API_TOKEN`) | `"local-dev"` (`OPEN_ACCESS_ACTOR`), checked **last** |
+| No credentials and auth **is** enforced | `""` → `require_actor` raises **401** |
 
-This precedence is **intentional**: a human operator logged into the dashboard should always be attributed by their username, even if an automation token is also present in the request (e.g., from a reverse proxy or test harness). The session check runs first in `apply_access_ok()` and `require_apply_token()`.
+This precedence is **intentional**: a human operator logged into the dashboard is
+always attributed by username, even if an automation token is also present in the
+request (a reverse proxy that injects the service token, or a test harness).
+Recording `"automation"` there would blame the machine for a human's decision.
 
-**Implementation:** `api.deps.require_actor(request, creds) -> str` returns the attributed actor string for use in write paths. Never returns empty/`None` — fails closed (401) if no identifiable actor.
+Two ordering rules that are easy to get wrong, both tested:
+
+- `OPEN_ACCESS_ACTOR` is resolved **last**. `require_token` admits a fresh clone
+  with no users configured, so failing closed on attribution would break every
+  write on a first-run install — but the sentinel must never mask a real
+  identity, so an authenticated username always wins.
+- `"local-dev"` is deliberately **distinct** from `"automation"`. A row reading
+  `local-dev` means "written while auth was off", not "written by a service
+  token", and the difference is the whole point of an audit trail.
+
+Note that `resolve_actor` accepts either Bearer secret **for attribution only**.
+Authorization on the apply routes is unchanged and stricter — see below.
+
+**Where the actor is written:** `actor TEXT` on `apply_claims`, `apply_intents`
+and `apply_review_artifacts`, and `created_by` (column 13) on the Sheets APPLIED
+tab. All three SQLite tables are upgraded **in place** with
+`_add_column_if_missing` (`PRAGMA table_info` → conditional `ALTER`), because
+SQLite has no `ADD COLUMN IF NOT EXISTS` and existing deployments hold real apply
+history that must not be recreated. The Sheets column is **best-effort**: if the
+header cannot be secured, attribution is dropped rather than the application row.
+HTTP routes always pass the actor explicitly; only the CLI/scheduler rely on the
+`AUTOMATION_ACTOR` service-layer default.
+
+**Roles:** users carry `role` = `admin` or `operator` (`create_user.py --role`).
+`require_submit_actor` enforces: if a session is present it **must** be admin —
+the session wins for authorization too, matching the attribution precedence; if
+there is no session, `APPLY_API_TOKEN` is accepted and attributed `"automation"`.
+A service Bearer has **no role** (it is not a person), so it can never satisfy an
+admin-only gate by itself. The first user created is admin and later users default
+to operator, so a bootstrapping mistake cannot lock the only operator out.
+
+**What attribution does *not* do:** it is forensics, not enforcement. The daily
+apply budget (`daily_apply_caps`) is keyed on `cap_date` alone — one **global**
+pool shared by every operator, with a second per-browser cap in `localStorage` —
+so per-operator caps remain impossible (Scenario B, `PM.md` §5). Sheets status
+changes are also unattributed: the APPLIED tab keeps no change history, so
+`created_by` records who *added* a row and nothing more.
+
+`GET /api/activity?limit=N` serves the merged, time-ordered feed. Its login
+events carry client IPs and are therefore **admin-only**, decided from the
+caller's role rather than a query parameter; `includes_login_events` in the
+response explains why sign-in history is absent for a non-admin.
 
 ### Apply-Gated Routes Auth (unchanged, documented for clarity)
 
 - `POST /api/apply/{fp}/intent` + `/submit` + tracker reconcile: **session OR `APPLY_API_TOKEN` only**
+- `/submit` additionally requires, when the caller uses a session, that the
+  session's role is `admin` (`require_submit_actor`)
 - General `API_TOKEN` **never accepted** on these routes
-- `SUBMIT_ENABLED=False` kill-switch still gates `/submit` (403) regardless of auth
+- `SUBMIT_ENABLED=False` kill-switch still gates `/submit` (403) regardless of
+  auth, and is evaluated **before** the actor dependency so the 403 ordering is
+  preserved
 
 ## 5. Testing
 
