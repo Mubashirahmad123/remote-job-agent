@@ -30,6 +30,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+from tools.url_guard import assert_navigable_url
+
 # Fields the existing Greenhouse filler knows how to populate. Anything
 # required and outside this set is an unhandled required question.
 KNOWN_FIELDS = {
@@ -98,6 +100,10 @@ def inspect_posting(page, url: str) -> Dict[str, Any]:
     from agents.auto_applier import _greenhouse_confirmation_data
 
     report: Dict[str, Any] = {"url": url}
+    # URLs here come from argv or a --file list, so they are operator-supplied
+    # rather than scraped — but this is still a browser sink pointed at an
+    # arbitrary string, and run() already records a rejected URL as an error.
+    assert_navigable_url(url, resolve=True)
     page.goto(url, wait_until="domcontentloaded", timeout=45000)
     try:
         page.wait_for_timeout(2500)  # let client-rendered forms settle

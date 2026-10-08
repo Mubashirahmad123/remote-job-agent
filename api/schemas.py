@@ -202,6 +202,30 @@ class TrackerCreate(BaseModel):
     def _normalize_text(cls, v: Any) -> Any:
         return _empty_to_none(v)
 
+    @field_validator("apply_url", mode="after")
+    @classmethod
+    def _apply_url_must_be_navigable(cls, v: str) -> str:
+        """Reject an apply_url the server must never aim a browser at.
+
+        `min_length=1` was the only check here, so `file:///etc/passwd` and
+        `javascript:alert(1)` both passed validation (confirmed by probe — they
+        failed later on an unrelated Sheets error). The auto-applier hands this
+        value to `page.goto()` in a container running as root with .env and
+        keys.json mounted, and api/apply.py serves a screenshot of whatever
+        rendered back to any authenticated caller.
+
+        `resolve=False` on purpose: this is the request path, and doing DNS per
+        request would add latency and hand the caller a DNS primitive. The
+        navigation sites re-check with resolve=True, which is where a public
+        hostname pointing at 169.254.169.254 gets caught.
+        """
+        from tools.url_guard import check_navigable_url
+
+        reason = check_navigable_url(v)
+        if reason:
+            raise ValueError(f"apply_url {reason}")
+        return v
+
 
 class TrackerUpdate(BaseModel):
     """PATCH /api/tracker/{fp} body. Status whitelist mirrors update_status()."""
