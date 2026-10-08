@@ -13,20 +13,28 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from api import apply as apply_service
 from api import safety
-from api.deps import require_apply_token, require_token
+from api.deps import require_actor, require_apply_token, require_submit_actor, require_token
 from api.schemas import ApplyIntentOut, ApplyIntentRequest, ApplyRequest, ApplySubmitOut, ApplySubmitRequest
 
 router = APIRouter(tags=["apply"])
 
 
 @router.post("/api/apply/{job_fingerprint}")
-def apply_review(job_fingerprint: str, body: ApplyRequest | None = None, _: None = Depends(require_token)) -> dict:
+def apply_review(
+    job_fingerprint: str,
+    body: ApplyRequest | None = None,
+    _: None = Depends(require_token),
+    actor: str = Depends(require_actor),
+) -> dict:
     raw = body.mode if (body is not None and body.mode is not None) else "review"
     mode = raw.strip().lower()
     if mode != "review":
         raise HTTPException(status_code=400, detail="Only mode='review' is supported (fill-only)")
     try:
-        return apply_service.fill_review(job_fingerprint)
+        # `actor` is threaded to the artifact row so a review package records
+        # who generated it — the service default ("automation") is only correct
+        # for the CLI/scheduler, never for a dashboard click.
+        return apply_service.fill_review(job_fingerprint, actor=actor)
     except LookupError:
         raise HTTPException(status_code=404, detail="Job not found")
     except apply_service.DreamTierForbidden as e:
@@ -40,6 +48,7 @@ def apply_intent(
     job_fingerprint: str,
     body: ApplyIntentRequest | None = None,
     _: None = Depends(require_apply_token),
+    actor: str = Depends(require_actor),
 ) -> dict:
     raw_mode = body.mode if body is not None else "review"
     if raw_mode.strip().lower() != "review":
@@ -47,7 +56,7 @@ def apply_intent(
     if not safety.submit_enabled():
         raise HTTPException(status_code=403, detail="Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
     try:
-        return apply_service.create_greenhouse_intent(job_fingerprint)
+        return apply_service.create_greenhouse_intent(job_fingerprint, actor=actor)
     except LookupError:
         raise HTTPException(status_code=404, detail="Job not found")
     except apply_service.SubmitUnavailable as error:
@@ -68,6 +77,7 @@ def apply_submit(
     job_fingerprint: str,
     body: ApplySubmitRequest | None = None,
     _: None = Depends(require_apply_token),
+    actor: str = Depends(require_submit_actor),
 ) -> dict:
     if not safety.submit_enabled():
         raise HTTPException(status_code=403, detail="Submit is disabled by kill-switch (SUBMIT_ENABLED=False)")
@@ -78,6 +88,7 @@ def apply_submit(
             body_fingerprint=body.job_fingerprint if body is not None else None,
             intent_token=body.intent_token if body is not None else None,
             typed_title=body.typed_title if body is not None else None,
+            actor=actor,
         )
         if outcome.get("status") == "dry_run":
             # Returned as a raw response so the full rehearsal report survives

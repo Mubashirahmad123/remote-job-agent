@@ -27,11 +27,12 @@ from fastapi.concurrency import run_in_threadpool
 
 from api.auth import (
     SESSION_COOKIE,
-    _cookie_secure,
+    cookie_secure,
     clear_session_cookie,
     create_session,
     delete_session,
     purge_expired_sessions,
+    record_login_event,
     session_user,
     set_session_cookie,
     verify_login,
@@ -60,6 +61,7 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
         # Deliberately vague: do not reveal which budget tripped or whether the
         # username exists. Retry-After lets an honest client back off properly.
         logger.warning("login rate-limited ip=%s user=%s", ip, username or "-")
+        await run_in_threadpool(record_login_event, username, "rate_limited", ip, None)
         raise HTTPException(
             status_code=429,
             detail="Too many sign-in attempts. Try again later.",
@@ -70,6 +72,7 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
     user = await run_in_threadpool(verify_login, username, body.password)
     if user is None:
         logger.warning("login failed ip=%s user=%s", ip, username or "-")
+        await run_in_threadpool(record_login_event, username, "failed", ip, None)
         await asyncio.sleep(FAILURE_DELAY_SECONDS)  # non-blocking penalty
         # Same message for unknown-user and wrong-password: no enumeration.
         raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -81,11 +84,18 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
     # mistyped twice is not punished later. The per-IP budget stays: one valid
     # credential does not prove the address is benign.
     login_limiter.clear_success(ip, username)
-    set_session_cookie(response, token, secure=_cookie_secure(request))
-    logger.info("login ok ip=%s user=%s", ip, user["username"])
+    await run_in_threadpool(
+        record_login_event, user["username"], "ok", ip, user["id"]
+    )
+    set_session_cookie(response, token, secure=cookie_secure(request))
+    logger.info("login ok ip=%s user=%s role=%s", ip, user["username"], user.get("role"))
     return {
         "authenticated": True,
         "username": user["username"],
+        # Exposed so the UI can gate admin-only affordances without a second
+        # round-trip. A role is not a secret — it is the user's own role, and
+        # the server re-checks it on every gated route regardless.
+        "role": user.get("role"),
         "expires_at": expires_at,
         "rate_limit_remaining": decision.remaining,
     }
@@ -96,7 +106,7 @@ async def logout(request: Request, response: Response) -> dict:
     """Invalidate the session server-side + clear the cookie (idempotent)."""
     token = request.cookies.get(SESSION_COOKIE) or ""
     deleted = await run_in_threadpool(delete_session, token) if token else False
-    clear_session_cookie(response, secure=_cookie_secure(request))
+    clear_session_cookie(response, secure=cookie_secure(request))
     return {"ok": True, "deleted": bool(deleted)}
 
 
@@ -108,6 +118,7 @@ async def me(request: Request) -> dict:
         return {
             "authenticated": True,
             "username": user["username"],
+            "role": user.get("role"),
             "expires_at": user["expires_at"],
         }
     from api.auth import open_access

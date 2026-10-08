@@ -33,6 +33,34 @@ def _isolate_auth_db(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_apply_state_db(tmp_path, monkeypatch):
+    """Point the apply-state store at a per-test SQLite file.
+
+    `api.apply_state.DB_PATH` is resolved ONCE, at import time, from
+    APPLY_STATE_DB_PATH — unlike `api.auth.db_path()`, which reads the env on
+    every call. So setting the env var alone does nothing here: the module
+    attribute has to be patched, or any test reaching `apply_state.connect()`
+    writes to the developer's real `data/apply_submit.db`. Run the suite on a
+    production host and that means creating — and potentially populating — the
+    live claims/intents/review-artifact tables. Verified: without this fixture a
+    full `pytest tests/` recreates data/apply_submit.db.
+
+    Every consumer imports the module or its functions (`from api import
+    apply_state`, `from api.apply_state import connect`), never `DB_PATH` by
+    value, so patching the attribute is seen everywhere.
+
+    The value must be a `Path`, not a `str`: `connect()` calls
+    `DB_PATH.parent.mkdir()`, and a str raises AttributeError.
+    """
+    from api import apply_state
+
+    target = tmp_path / "apply_state_test.db"
+    # Env too, so anything spawned as a subprocess inherits the same isolation.
+    monkeypatch.setenv("APPLY_STATE_DB_PATH", str(target))
+    monkeypatch.setattr(apply_state, "DB_PATH", target)
+
+
+@pytest.fixture(autouse=True)
 def _disarm_submit_env(monkeypatch):
     """Never inherit an armed submit switch from the developer's shell/.env.
 

@@ -34,7 +34,8 @@ def connect() -> sqlite3.Connection:
             resume_path TEXT,
             cover_letter_text TEXT,
             field_verification TEXT,
-            profile_fields_verified TEXT
+            profile_fields_verified TEXT,
+            actor TEXT
         )"""
     )
     columns = {
@@ -62,6 +63,10 @@ def connect() -> sqlite3.Connection:
         connection.execute(
             "ALTER TABLE apply_review_artifacts ADD COLUMN profile_fields_verified TEXT"
         )
+    # `actor` was added after the table shipped — same in-place upgrade path as
+    # the columns above, so existing apply history is preserved.
+    if "actor" not in columns:
+        connection.execute("ALTER TABLE apply_review_artifacts ADD COLUMN actor TEXT")
     connection.commit()
     return connection
 
@@ -85,8 +90,8 @@ def save_review_artifact(artifact: dict[str, Any]) -> None:
             (job_fingerprint, platform, job_title, apply_url, package_path,
              screenshot_path, confirmation_path, confirmation_message,
              match_ratio, fill_status, created_at, resume_path, cover_letter_text,
-             field_verification, profile_fields_verified)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             field_verification, profile_fields_verified, actor)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(job_fingerprint) DO UPDATE SET
               platform=excluded.platform,
               job_title=excluded.job_title,
@@ -101,7 +106,8 @@ def save_review_artifact(artifact: dict[str, Any]) -> None:
               resume_path=excluded.resume_path,
               cover_letter_text=excluded.cover_letter_text,
               field_verification=excluded.field_verification,
-              profile_fields_verified=excluded.profile_fields_verified""",
+              profile_fields_verified=excluded.profile_fields_verified,
+              actor=excluded.actor""",
             (
                 artifact["job_fingerprint"],
                 artifact["platform"],
@@ -118,6 +124,7 @@ def save_review_artifact(artifact: dict[str, Any]) -> None:
                 artifact.get("cover_letter_text"),
                 artifact.get("field_verification"),
                 profile_json,
+                (artifact.get("actor") or "").strip() or None,
             ),
         )
         connection.commit()

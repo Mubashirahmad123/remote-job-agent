@@ -29,6 +29,8 @@ Router layout (one file per group for easy debugging):
    api/deps.py            — CORS origins + session/Bearer auth
    api/ratelimit.py       — sliding-window limiter for /api/auth/login
    api/routers/auth.py    — POST /api/auth/login, POST logout, GET /api/auth/me
+   api/routers/liveness.py— GET /api/health/live (unauthenticated probe)
+   api/activity.py + api/routers/activity.py — GET /api/activity (actor feed)
    api/mappers.py         — row -> schema converters
    api/routers/health.py  — GET /api/health
    api/routers/jobs.py    — GET /api/jobs, GET /api/jobs/{fp}
@@ -56,7 +58,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.deps import bearer_from_request, cors_origins, credentials_ok, require_token
-from api.routers import auth, health, jobs, cv, materials, runs, skills, stats, system, tracker, apply
+from api.routers import activity, auth, health, jobs, cv, liveness, materials, runs, skills, stats, system, tracker, apply
 
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
@@ -172,8 +174,15 @@ def _include_gated(app: FastAPI, module) -> None:
     app.include_router(module.router, dependencies=[Depends(require_token)])
 
 
-# `auth` is deliberately absent: /api/auth/login must stay reachable logged out.
-_GATED_ROUTERS = (health, jobs, stats, skills, tracker, system, runs, materials, cv, apply)
+# `auth` and `liveness` are deliberately absent: /api/auth/login must stay
+# reachable logged out, and an unauthenticated probe needs /api/health/live to
+# tell "up but not signed in" apart from "down".
+_GATED_ROUTERS = (
+    health, jobs, stats, skills, tracker, system, runs, materials, cv, apply, activity
+)
+
+# Included with NO router-level auth dependency.
+_OPEN_ROUTERS = (auth, liveness)
 
 
 @asynccontextmanager
@@ -243,7 +252,8 @@ def create_app() -> FastAPI:
 
     # One include per group — comment out a single line to isolate a bug.
     # `auth` is included ungated: /api/auth/login must stay reachable logged out.
-    app.include_router(auth.router)
+    for module in _OPEN_ROUTERS:
+        app.include_router(module.router)
     for module in _GATED_ROUTERS:
         _include_gated(app, module)
 

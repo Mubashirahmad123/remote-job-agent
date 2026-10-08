@@ -217,8 +217,13 @@ class TestTracker:
     def test_create_manual_application(self, client, monkeypatch):
         captured = {}
 
-        def fake_add(entry):
+        # `created_by` is a separate keyword, not a key inside `entry`, so the
+        # server-supplied actor can never be confused with (or overwritten by)
+        # client-supplied row data. This test runs in open-access mode (no user,
+        # no API_TOKEN), where the attributed actor is the sentinel.
+        def fake_add(entry, created_by=""):
             captured.update(entry)
+            captured["created_by"] = created_by
             return {
                 **entry,
                 "applied_date": "2026-09-22 12:00",
@@ -241,6 +246,9 @@ class TestTracker:
         assert body["job_title"] == "Manual Role"
         assert body["status"] == "applied"
         assert captured["notes"] == "referral"
+        # Attribution reached the write path (see tests/test_api_actor_attribution.py
+        # for the session/Bearer/precedence cases).
+        assert captured["created_by"] == "local-dev"
 
     def test_patch_bad_status(self, client):
         r = client.patch(f"/api/tracker/{FP1}", json={"status": "hired"})

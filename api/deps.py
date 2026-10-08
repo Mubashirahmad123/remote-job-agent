@@ -96,6 +96,137 @@ def require_token(
 
 
 
+# --- Actor attribution (Scenario A — multi-operator) --------------------------
+#
+# Auth answers "may this request through?". Attribution answers "who did it?".
+# Before this, `apply_access_ok()` returned a bool and threw the identity away,
+# so every claim, intent, artifact and tracker row was recorded with no author.
+#
+# Precedence (BACKEND.md §4, PM.md §5) — explicit, not accidental:
+#   valid session only            -> the username
+#   valid service Bearer only     -> AUTOMATION_ACTOR
+#   BOTH                          -> session wins (the username)
+#   neither                       -> no actor (caller decides: 401 or a default)
+#
+# "Session wins" matters because a request can legitimately carry both — a
+# reverse proxy that injects the service token, or a test harness. Recording
+# "automation" there would blame the machine for a human's decision.
+
+AUTOMATION_ACTOR = "automation"
+
+# Actor recorded when auth is not being enforced at all (fresh clone: no users,
+# no API_TOKEN — see api.auth.open_access). `require_token` deliberately allows
+# those requests, so `require_actor` must attribute them rather than 401:
+# failing closed here would break every write on a fresh install, which is the
+# documented first-run experience. Kept distinct from AUTOMATION_ACTOR so a row
+# reading "local-dev" is unambiguous — it means "written while auth was off",
+# not "written by a service token".
+OPEN_ACCESS_ACTOR = "local-dev"
+
+
+def _bearer_matches(creds, env_var: str) -> bool:
+    """Constant-time compare of a Bearer credential against one env secret."""
+    import hmac
+
+    expected = (os.getenv(env_var) or "").strip()
+    provided = (creds.credentials or "").strip() if creds else ""
+    return bool(expected) and bool(provided) and hmac.compare_digest(provided, expected)
+
+
+def resolve_actor(request: Request, creds: HTTPAuthorizationCredentials | None = None) -> str:
+    """The attributed actor for this request, or "" when there is none.
+
+    Session first, then the service tokens. Returns "" (never None) so callers
+    can treat it as a plain string and branch on truthiness.
+    """
+    from api.auth import open_access, session_user
+
+    user = session_user(request)
+    if user is not None:
+        return user.get("username") or AUTOMATION_ACTOR
+    if _bearer_matches(creds, "APPLY_API_TOKEN") or _bearer_matches(creds, "API_TOKEN"):
+        return AUTOMATION_ACTOR
+    # Last, not first: an authenticated identity always beats the "auth is off"
+    # sentinel, so a real username is never masked by open-access mode.
+    if open_access():
+        return OPEN_ACCESS_ACTOR
+    return ""
+
+
+def resolve_session_role(request: Request) -> str:
+    """Role of the session user, or "" when the caller is not a logged-in human.
+
+    A service Bearer has no role: it is not a person, so it can never satisfy an
+    admin-only gate. That is deliberate — an admin-only route must require an
+    actual admin session, not a shared secret.
+    """
+    from api.auth import ROLE_OPERATOR, session_user
+
+    user = session_user(request)
+    if user is None:
+        return ""
+    return user.get("role") or ROLE_OPERATOR
+
+
+def require_actor(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str:
+    """FastAPI dependency returning the actor string for a write path.
+
+    Fails closed: 401 when no identifiable actor exists. Never returns "" —
+    an unattributed write is exactly the bug this dependency exists to prevent.
+    """
+    actor = resolve_actor(request, creds)
+    if not actor:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return actor
+
+
+def require_submit_actor(
+    request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str:
+    """Attribution + authorization for POST /api/apply/{fp}/submit.
+
+    Two ways to be allowed, matching the two credential classes the apply gate
+    already accepts:
+      1. A logged-in **admin** session -> attributed by username.
+      2. `Authorization: Bearer <APPLY_API_TOKEN>` with NO session -> attributed
+         as "automation". This is the documented server-to-server path; killing
+         it would contradict why APPLY_API_TOKEN exists at all.
+
+    Precedence follows the attribution rule — **the session wins**. If a session
+    is present, that human is the actor and must be an admin; a service token
+    riding along in the same request does not upgrade an operator. That is
+    deliberate: otherwise an operator-role user could reach submit by having a
+    proxy attach the token, and the role gate would be decorative.
+
+    A service Bearer is intentionally NOT treated as an admin — it is a shared
+    secret, not a person, so it has no role (see `resolve_session_role`).
+
+    Status codes: 401 when nothing identifies the caller (so an anonymous probe
+    learns nothing about the route), 403 when the caller is identified but not
+    permitted. The SUBMIT_ENABLED kill-switch still answers 403 independently of
+    this gate, and runs after it in the route.
+    """
+    from api.auth import ROLE_ADMIN, open_access, session_user
+
+    if session_user(request) is not None:
+        actor = require_actor(request, creds)
+        if resolve_session_role(request) != ROLE_ADMIN:
+            raise HTTPException(
+                status_code=403,
+                detail="Administrator session required to submit an application",
+            )
+        return actor
+    if _bearer_matches(creds, "APPLY_API_TOKEN"):
+        return AUTOMATION_ACTOR
+    if open_access():
+        return OPEN_ACCESS_ACTOR
+    raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 def apply_access_ok(
     request: Request,
     creds: HTTPAuthorizationCredentials | None = None,

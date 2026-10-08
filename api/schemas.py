@@ -163,6 +163,12 @@ class TrackerEntry(BaseModel):
     match_reason: Optional[str] = None
     scraped_at: Optional[str] = None
     job_fingerprint: Optional[str] = None
+    # Who wrote this row (username, or "automation" for a service-token call).
+    # Optional and nullable: rows written before attribution existed — and rows
+    # on the sheet_writer APPLIED_COLUMNS fork, which has no such column — read
+    # back as None rather than a fabricated value. `to_tracker_entry` is
+    # model-field-driven, so this flows through with no mapper change.
+    created_by: Optional[str] = None
 
     @field_validator(*_TRACKER_TEXT_FIELDS, mode="before", check_fields=False)
     @classmethod
@@ -216,7 +222,7 @@ class LoginRequest(BaseModel):
     The ceilings are resource controls, not just validation. `/api/auth/login`
     is unauthenticated, so an unbounded `password` lets one small JSON body buy
     a full Argon2id verify on arbitrary-length input. 128 characters is far
-    beyond any real passphrase; `api.auth._password_max_length()` enforces the
+    beyond any real passphrase; `api.auth.password_max_length()` enforces the
     same bound for non-HTTP callers so the two can never disagree silently.
     """
 

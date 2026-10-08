@@ -236,10 +236,10 @@ def test_verify_login_refuses_oversized_password_even_off_the_http_path(monkeypa
 
 
 def test_create_user_rejects_an_over_long_password():
-    from api.auth import _password_max_length
+    from api.auth import password_max_length
 
     with pytest.raises(ValueError):
-        create_user("alice", "z" * (_password_max_length() + 1))
+        create_user("alice", "z" * (password_max_length() + 1))
 
 
 # --- password reset revokes sessions -----------------------------------------
@@ -457,7 +457,15 @@ def test_every_api_route_is_gated_except_the_auth_endpoints(client):
     /api paths and pass vacuously.
     """
     create_user("alice", PASSWORD)
-    exempt = {"/api/auth/login", "/api/auth/logout", "/api/auth/me"}
+    # The only intentionally public API paths: the login flow itself, and the
+    # liveness probe (an uptime monitor has no session, so it must be able to
+    # tell "up but not signed in" from "down"). Everything else is gated.
+    exempt = {
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/api/auth/me",
+        "/api/health/live",
+    }
 
     def walk(routes):
         for route in routes:
@@ -549,3 +557,20 @@ def test_cors_allows_credentials_now_that_auth_is_a_cookie():
             assert "*" not in origins, "wildcard origin + credentials is invalid"
             return
     pytest.fail("CORSMiddleware not found")
+
+
+def test_liveness_probe_is_public_and_reveals_nothing(client):
+    """An uptime monitor / LB healthcheck has no session cookie.
+
+    Without this route it receives a 401 from /api/health and cannot tell "the
+    server is up but I am not signed in" from "the server is dead" — both look
+    like an outage. The response must carry no deployment state either, since
+    an unauthenticated endpoint is a disclosure surface.
+    """
+    create_user("alice", PASSWORD)  # auth fully enforced
+
+    response = client.get("/api/health/live")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    # Still gated: the informative endpoint must not leak just because live is open.
+    assert client.get("/api/health").status_code == 401

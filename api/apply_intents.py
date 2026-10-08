@@ -29,9 +29,14 @@ def initialize_intent_store(connection: sqlite3.Connection) -> None:
             job_fingerprint TEXT PRIMARY KEY,
             token_hash TEXT UNIQUE NOT NULL,
             expires_at TEXT NOT NULL,
-            consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1))
+            consumed INTEGER NOT NULL DEFAULT 0 CHECK (consumed IN (0, 1)),
+            actor TEXT
         )"""
     )
+    # `actor` was added after the table shipped. See apply_claims._add_column_if_missing.
+    from api.apply_claims import _add_column_if_missing
+
+    _add_column_if_missing(connection, "apply_intents", "actor", "TEXT")
     connection.commit()
 
 
@@ -47,6 +52,7 @@ def create_intent(
     intent_token: str,
     expires_at: datetime,
     now: datetime | None = None,
+    actor: str = "",
 ) -> dict:
     """Create or replace an expired intent under a serialized write lock."""
     timestamp = _as_utc(now or datetime.now(timezone.utc))
@@ -76,12 +82,14 @@ def create_intent(
                 )
                 raise ActiveIntentConflict(retry_after)
 
+        actor_text = (actor or "").strip() or None
         connection.execute(
             "INSERT INTO apply_intents "
-            "(job_fingerprint, token_hash, expires_at, consumed) "
-            "VALUES (?, ?, ?, 0) ON CONFLICT(job_fingerprint) DO UPDATE SET "
-            "token_hash = excluded.token_hash, expires_at = excluded.expires_at, consumed = 0",
-            (job_fingerprint, token_hash, expiration.isoformat()),
+            "(job_fingerprint, token_hash, expires_at, consumed, actor) "
+            "VALUES (?, ?, ?, 0, ?) ON CONFLICT(job_fingerprint) DO UPDATE SET "
+            "token_hash = excluded.token_hash, expires_at = excluded.expires_at, "
+            "consumed = 0, actor = excluded.actor",
+            (job_fingerprint, token_hash, expiration.isoformat(), actor_text),
         )
         connection.commit()
     except Exception:
@@ -93,6 +101,7 @@ def create_intent(
         "token_hash": token_hash,
         "expires_at": expiration.isoformat(),
         "consumed": False,
+        "actor": actor_text,
     }
 
 

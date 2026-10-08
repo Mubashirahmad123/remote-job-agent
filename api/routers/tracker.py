@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials
 
 from api import cache
-from api.deps import _bearer, apply_access_ok, require_token
+from api.deps import _bearer, apply_access_ok, require_actor, require_token
 from api.mappers import to_tracker_entry
 from api.schemas import TrackerCreate, TrackerEntry, TrackerUpdate, VALID_TRACKER_STATUSES
 
@@ -25,9 +25,10 @@ def list_tracker(
 def create_tracker_entry(
     body: TrackerCreate,
     _: None = Depends(require_token),
+    actor: str = Depends(require_actor),
 ) -> TrackerEntry:
     try:
-        row = cache.add_tracker_entry(body.model_dump())
+        row = cache.add_tracker_entry(body.model_dump(), created_by=actor)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
