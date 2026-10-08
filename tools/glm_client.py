@@ -7,8 +7,8 @@ WHY THIS FILE EXISTS — read before "simplifying" it back to the zhipuai SDK
 `zhipuai` pins `pyjwt>=2.8.0,<2.9.0`. `crewai` pins `pyjwt>=2.13.0,<3`. Those
 two ranges do not intersect, so listing both in requirements.txt makes the
 dependency set UNSATISFIABLE: `pip install -r requirements.txt` dies with
-`ResolutionImpossible` and `docker build` fails at Dockerfile:25. The recorded
-failure is in `docker-build-error.txt`. zhipuai's last release was 2025-08-25
+`ResolutionImpossible` and `docker build` fails at Dockerfile:25. The error is
+quoted in CHANGELOG.md (2026-10-08). zhipuai's last release was 2025-08-25
 and every 2.1.x release has the same pin, so waiting for an upstream fix is not
 a strategy.
 

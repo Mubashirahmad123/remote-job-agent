@@ -11,7 +11,7 @@ google-genai>=1.0.0
 # deliberately, not by accident: it pins pyjwt>=2.8.0,<2.9.0 while crewai pins
 # pyjwt>=2.13.0,<3, so the two can never be installed together. The result was
 # `pip install -r requirements.txt` -> ResolutionImpossible and `docker build`
-# failing at Dockerfile:25 (the full log is in docker-build-error.txt). Every
+# failing at Dockerfile:25 (the error is quoted in CHANGELOG.md, 2026-10-08). Every
 # zhipuai 2.1.x release has the same pin and the last one shipped 2025-08-25,
 # so waiting for upstream is not a fix. GLM is now reached over its
 # OpenAI-compatible HTTP endpoint by tools/glm_client.py using `requests`,

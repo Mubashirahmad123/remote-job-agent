@@ -11,8 +11,9 @@ Guards two things that are easy to break silently:
 
 2. ``zhipuai`` must not come back into requirements.txt. It pins
    ``pyjwt>=2.8.0,<2.9.0``; crewai pins ``pyjwt>=2.13.0,<3``. Both present makes
-   the dependency set unsatisfiable and ``docker build`` fail (the original log
-   is docker-build-error.txt). The tests at the bottom fail the build locally
+   the dependency set unsatisfiable and ``docker build`` fail (the error is
+   quoted in CHANGELOG.md, 2026-10-08). The tests at the bottom fail the build
+   locally
    rather than waiting for CI or for a broken image.
 """
 

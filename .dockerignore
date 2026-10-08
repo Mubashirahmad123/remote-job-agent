@@ -32,7 +32,10 @@ scrape_bg.log
 scrape_bg_err.log
 test_scrape_output.txt
 fresh_scrape.json
-# 143 KB UTF-16 log of a dependency conflict that has since been fixed (see the
-# removal note where `zhipuai` used to be in requirements.txt). Kept in git as
-# the record, but it has no business shipping inside a production image layer.
+# Build logs. No such file is committed any more — the 143 KB UTF-16 log of the
+# zhipuai/crewai pyjwt conflict was deleted once the conflict was fixed — but the
+# pattern stays: `docker compose build 2>&1 | tee <log>` is exactly how that one
+# got committed, and a captured build log never belongs in an image layer.
 docker-build-error.txt
+*-build-error.txt
+build-*.log

@@ -88,8 +88,12 @@ nothing running them, and because PR #25 merged documentation for
 - **`zhipuai` removed.** It pins `pyjwt>=2.8.0,<2.9.0`; `crewai==1.14.7` pins
   `pyjwt>=2.13.0,<3`. The ranges do not intersect, so `pip install -r
   requirements.txt` died with `ResolutionImpossible` and `docker build` failed at
-  the install step — on every commit, with nothing reporting it. The original
-  log is `docker-build-error.txt`. Every `zhipuai` 2.1.x release carries the same
+  the install step — on every commit, with nothing reporting it. The 143 KB
+  UTF-16 build log that recorded it had been committed in PR #25 as
+  `docker-build-error.txt`; it is deleted by this change, and the error is quoted
+  here instead — a binary-encoded log cannot be diffed or reviewed, `git clone`
+  put it on every production VM, and the failure is now prevented structurally by
+  CI rather than merely documented. Every `zhipuai` 2.1.x release carries the same
   pin and the last shipped 2025-08-25, so waiting for upstream was not a fix.
 - **New `tools/glm_client.py`** replaces the SDK for GLM (fallback rung 3),
   calling Zhipu's OpenAI-compatible endpoint over `requests` — already a
@@ -114,8 +118,10 @@ nothing running them, and because PR #25 merged documentation for
   Verified installable on Linux with a dry-run resolve.
 - **`.dockerignore` was missing `.venv/` and `node_modules/`** — it excluded only
   `venv/`. Since the Dockerfile ends in `COPY . .`, a developer's virtualenv and
-  the e2e `jsdom` tree would have been baked into the production image. Also
-  excludes the 143 KB `docker-build-error.txt` log.
+  the e2e `jsdom` tree would have been baked into the production image. The
+  `docker-build-error.txt` entry stays even though that file is now deleted: it
+  is kept as a pattern, because `docker compose build 2>&1 | tee <log>` is
+  precisely how a build log got committed in the first place.
 
 ### Test harness and e2e
 
