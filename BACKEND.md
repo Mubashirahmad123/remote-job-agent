@@ -297,6 +297,20 @@ no submit path by design.
   `time.sleep(0.5)` held a threadpool worker per attempt, so ~40 concurrent
   bad passwords saturated the 40-thread pool and stalled every other sync
   route (measured 5.6s wall → 1.4s, with 34/40 answered 429 and no hashing).
+- **A missing username costs the same as a wrong password** (`auth.py`,
+  `_DECOY_PASSWORD_HASH`): `verify_login` used to return on `row is None`
+  without touching Argon2, so an existing username cost one Argon2id verify
+  (~97-107 ms at m=65536,t=3,p=4) and a non-existent one cost none. Measured
+  over the real endpoint, 601-799 ms vs 507-508 ms — disjoint ranges, so a
+  handful of requests sorted any candidate list into real accounts and not. The
+  response body and the audit trail were already identical; wall-clock time was
+  the only remaining channel. The no-such-user path now verifies against a decoy
+  hash of a discarded random secret and throws the answer away, which puts both
+  paths at 500 ms of failure penalty plus one verify. Deliberately **not**
+  equalised: requests rejected on their own shape (empty or oversized password)
+  skip the verify, because that branch depends on what the caller sent rather
+  than on whether the account exists, and paying for a decoy verify there would
+  re-open the unbounded-Argon2 hole `PASSWORD_MAX_LENGTH` closes.
 - The limiters are **per-process**, which is exact under the deployed
   `--workers 1`. Scaling out multiplies every budget by the worker count — move
   them to a shared store first.

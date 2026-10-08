@@ -169,6 +169,11 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
   credentials besides the login trio. It returns exactly `{"status":"ok"}` and
   is excluded from the OpenAPI schema, so orchestrator probes work while
   build/config/state stay behind the login.
+- Login does not reveal which usernames exist. Both failures return the same
+  401 body, both are audited, and both now cost one Argon2id verify — a missing
+  username is checked against a decoy hash so the response times are
+  indistinguishable (see `BACKEND.md` §4). Before that, an existing username
+  measured 601-799 ms against 507-508 ms for one that did not exist.
 - Every write is attributed: `require_actor` resolves session → username,
   service token → `"automation"`, open-access → `"local-dev"`, and 401s rather
   than writing an unattributed row. Precedence and the role model are in

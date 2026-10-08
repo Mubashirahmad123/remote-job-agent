@@ -150,6 +150,20 @@ def _iso(dt: datetime) -> str:
 # cannot silently weaken stored hashes.
 _hasher = PasswordHasher(type=Type.ID)
 
+# Argon2id hash of a throwaway secret, generated once with
+# `secrets.token_urlsafe(32)` and then DISCARDED — the plaintext was never
+# printed, stored or committed. It is a valid hash of a password nobody knows,
+# and its only job is to be verified against on the "no such user" path so that
+# path costs the same as the "wrong password" path. See `verify_login`.
+#
+# The parameters must match what `hash_password` produces (m=65536,t=3,p=4) or
+# the two paths take visibly different time and the whole point is lost;
+# tests/test_login_timing.py pins that.
+_DECOY_PASSWORD_HASH = (
+    "$argon2id$v=19$m=65536,t=3,p=4$ZAe+TaQIKCjsj95dlE1+Yw$"
+    "V63cfWFDLSjC0kFbXzQE2xid6O3PUz+ixvi/W3GDhVk"
+)
+
 
 def hash_password(password: str) -> str:
     """Argon2id hash of a plaintext password (self-contained, salted)."""
@@ -418,6 +432,14 @@ def verify_login(username: str, password: str) -> Optional[Dict[str, Any]]:
     Case-insensitive username (NOCASE column); constant-time Argon2id verify.
     The password ceiling is enforced here too (not only in the HTTP schema) so
     no caller can push an oversized blob into Argon2.
+
+    Exactly one Argon2id verification happens per attempt that gets this far,
+    whether or not the username exists, so the two failures are not separable by
+    timing. Requests rejected on their own shape (empty or oversized password)
+    deliberately skip the verification: that branch is decided by what the CALLER
+    sent, not by whether the account exists, so it leaks nothing about usernames
+    and paying for a decoy verify there would only re-open the unbounded-Argon2
+    hole the ceiling exists to close.
     """
     name = (username or "").strip()
     if not name or not password or len(password) > password_max_length():
@@ -434,6 +456,25 @@ def verify_login(username: str, password: str) -> Optional[Dict[str, Any]]:
     except Exception:
         return None
     if row is None:
+        # No such user. Verify anyway, against the decoy, and throw the answer
+        # away. Without this the two failures are trivially distinguishable by
+        # how long they take: an existing user costs one Argon2id verify (~107 ms
+        # at these parameters) and a non-existent one cost none at all. Measured
+        # before the fix, over the real HTTP endpoint: 601-799 ms for a username
+        # that existed against 507-508 ms for one that did not — distributions
+        # that did not overlap, so a handful of requests sorted any candidate
+        # list into "real account" and "not a real account". That is a
+        # prerequisite for every other attack on this endpoint: a password spray
+        # aimed only at usernames known to exist, and a targeted phishing list
+        # of confirmed employees.
+        #
+        # The response body was already identical (401, same JSON) and the audit
+        # trail already records the attempt either way, so time was the only
+        # remaining channel. It is not perfectly closed — the two paths still
+        # differ by one indexed SQLite lookup and Python overhead — but the
+        # ~107 ms Argon2 gap dwarfed those by two orders of magnitude, and what
+        # is left is under the noise floor of a network round trip.
+        verify_password(_DECOY_PASSWORD_HASH, password)
         return None
     if not verify_password(row["password_hash"], password):
         return None
