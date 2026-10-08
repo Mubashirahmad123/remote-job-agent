@@ -418,3 +418,108 @@ describe('login flow — auth enforced', () => {
     assert.equal(body.role, 'admin', 'the first user on a fresh store bootstraps as admin');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Header layout contract.
+//
+// The sign-out button used to be pushed off-screen: .quick-search-wrapper had a
+// fixed `width: 420px`, .header-left and .header-center had no rule at all, and
+// .header-right declared no flex behaviour. The header row's intrinsic minimum
+// was therefore ~1350px, while .app-main only offers (viewport - the 256px
+// fixed sidebar) — so it overflowed below roughly a 1610px window, i.e. on
+// nearly every laptop. The buttons are `white-space: nowrap` and cannot shrink,
+// so the last flex item (#btnSignOut) was the casualty.
+//
+// jsdom does no layout, so overflow cannot be asserted directly. What CAN be
+// pinned is the contract that makes overflow impossible, which is what a future
+// edit would most plausibly break.
+// ---------------------------------------------------------------------------
+describe('header layout contract', () => {
+  const read = (rel) => readFileSync(resolve(REPO, 'frontend', rel), 'utf8');
+  const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  /** All declaration blocks for a selector, concatenated (media queries included). */
+  function declarations(css, selector) {
+    const clean = stripComments(css);
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, 'g');
+    const out = [];
+    let m;
+    while ((m = re.exec(clean)) !== null) out.push(m[1]);
+    return out.join('\n');
+  }
+
+  test('.header-right can never be squeezed', () => {
+    const d = declarations(read('css/layout.css'), '.header-right');
+    assert.match(
+      d,
+      /flex:\s*0 0 auto/,
+      '.header-right holds the session controls and must not shrink; without flex: 0 0 auto the row overflow pushes #btnSignOut off-screen',
+    );
+  });
+
+  test('.header-center absorbs the shrink instead', () => {
+    const d = declarations(read('css/layout.css'), '.header-center');
+    assert.match(d, /flex:\s*1 1 auto/, 'the search is the only compressible header region');
+    assert.match(d, /min-width:\s*0/, 'a flex child defaults to min-width: auto and refuses to shrink below its content');
+  });
+
+  test('.header-left shrinks to an ellipsis rather than widening the row', () => {
+    const css = read('css/layout.css');
+    assert.match(declarations(css, '.header-left'), /min-width:\s*0/);
+    const bc = declarations(css, '.breadcrumb-current');
+    assert.match(bc, /text-overflow:\s*ellipsis/);
+    assert.match(bc, /overflow:\s*hidden/);
+  });
+
+  test('the search wrapper has no fixed pixel width', () => {
+    const d = declarations(read('css/layout.css'), '.quick-search-wrapper');
+    assert.doesNotMatch(
+      d,
+      /(^|[^-])width:\s*\d+px/,
+      'a fixed px width here is exactly what set the header minimum and pushed #btnSignOut off-screen',
+    );
+    assert.match(d, /max-width:\s*420px/, 'keep the 420px cap, just not as a floor');
+    assert.match(d, /min-width:\s*0/);
+  });
+
+  test('#btnSignOut still has an icon and an accessible name at every tier', () => {
+    const html = read('index.html');
+    const btn = html.match(/<button[^>]*id="btnSignOut"[\s\S]*?<\/button>/);
+    assert.ok(btn, 'no #btnSignOut button in index.html');
+    assert.match(btn[0], /<svg/, 'the <=900px tier hides the label and shows the icon only; without an <svg> the button would render empty');
+    assert.match(btn[0], /<span>Sign out<\/span>/, 'the visible label must exist at wide tiers');
+    assert.match(btn[0], /aria-label="[^"]+"/, 'title= is not a reliable accessible name once the <span> is display:none');
+  });
+
+  test('every header button the tiers reduce is still named for assistive tech', () => {
+    const html = read('index.html');
+    for (const id of ['btnSyncSheets', 'btnScrapeNow', 'btnThemeToggle', 'btnSignOut']) {
+      const tag = html.match(new RegExp(`<button[^>]*id="${id}"[^>]*>`));
+      assert.ok(tag, `no #${id} in index.html`);
+      assert.match(tag[0], /aria-label="[^"]+"/, `#${id} loses its accessible name when a tier hides its label`);
+    }
+  });
+
+  test('#btnSignOut is the last item in .header-right', () => {
+    // Documented because it is the reason this button was the one that vanished:
+    // overflow ejects the LAST flex item first. Reordering the region changes
+    // which control gets sacrificed, so the order is part of the contract.
+    const html = read('index.html');
+    const region = html.match(/<div class="header-right">([\s\S]*?)<\/header>/);
+    assert.ok(region, 'no .header-right region before </header>');
+    const ids = [...region[1].matchAll(/id="(btn[A-Za-z]+|sessionChip)"/g)].map((m) => m[1]);
+    assert.ok(ids.length >= 4, `expected the full control set, found: ${ids.join(', ')}`);
+    assert.equal(ids[ids.length - 1], 'btnSignOut', `order is: ${ids.join(', ')}`);
+  });
+
+  test('the responsive ladder is present and descending', () => {
+    const css = stripComments(read('css/layout.css'));
+    const widths = [...css.matchAll(/@media \(max-width:\s*(\d+)px\)/g)].map((m) => Number(m[1]));
+    assert.ok(widths.length >= 6, `expected the graded ladder, found only: ${widths.join(', ')}`);
+    for (let i = 1; i < widths.length; i += 1) {
+      assert.ok(widths[i] < widths[i - 1], `breakpoints out of order: ${widths.join(', ')}`);
+    }
+    assert.ok(widths.includes(768), 'the sidebar-hiding 768px breakpoint must survive');
+  });
+});
