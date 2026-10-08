@@ -2,6 +2,8 @@
 .github
 .vscode
 venv/
+.venv/
+node_modules/
 __pycache__/
 *.pyc
 *.pyo
@@ -23,8 +25,14 @@ resumes/
 screenshots/
 cache/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 install.log
 scrape_bg.log
 scrape_bg_err.log
 test_scrape_output.txt
 fresh_scrape.json
+# 143 KB UTF-16 log of a dependency conflict that has since been fixed (see the
+# removal note where `zhipuai` used to be in requirements.txt). Kept in git as
+# the record, but it has no business shipping inside a production image layer.
+docker-build-error.txt

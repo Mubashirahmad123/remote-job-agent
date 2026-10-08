@@ -7,7 +7,17 @@ feedparser==6.0.11
 # AI / CrewAI
 crewai==1.14.7
 google-genai>=1.0.0
-zhipuai>=2.1.0  # required for the GLM fallback step (Fallback 3)
+# `zhipuai` used to live here for the GLM fallback (Fallback 3). It was REMOVED
+# deliberately, not by accident: it pins pyjwt>=2.8.0,<2.9.0 while crewai pins
+# pyjwt>=2.13.0,<3, so the two can never be installed together. The result was
+# `pip install -r requirements.txt` -> ResolutionImpossible and `docker build`
+# failing at Dockerfile:25 (the full log is in docker-build-error.txt). Every
+# zhipuai 2.1.x release has the same pin and the last one shipped 2025-08-25,
+# so waiting for upstream is not a fix. GLM is now reached over its
+# OpenAI-compatible HTTP endpoint by tools/glm_client.py using `requests`,
+# which is already a dependency and already how the Groq and Mistral rungs work.
+# Do NOT add zhipuai back without dropping crewai, or the image stops building.
+
 # Job scraping
 python-jobspy==1.1.4
 playwright==1.47.0

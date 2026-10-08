@@ -47,11 +47,19 @@ except ImportError:
     except ImportError:
         GEMINI_AVAILABLE = False
 
+# GLM (fallback 3) is plain HTTP against Zhipu's OpenAI-compatible endpoint.
+# The zhipuai SDK is NOT used: it pins pyjwt<2.9.0 while crewai pins
+# pyjwt>=2.13.0, and having both makes requirements.txt unsatisfiable.
+# See the module docstring of tools/glm_client.py before reintroducing it.
 try:
-    from zhipuai import ZhipuAI
-    GLM_AVAILABLE = bool(GLM_API_KEY)
+    from tools import glm_client as _glm
+    GLM_AVAILABLE = _glm.is_available(GLM_API_KEY)
 except ImportError:
-    GLM_AVAILABLE = False
+    try:
+        import glm_client as _glm  # direct script run: tools/ is sys.path[0]
+        GLM_AVAILABLE = _glm.is_available(GLM_API_KEY)
+    except ImportError:
+        GLM_AVAILABLE = False
 
 try:
     import requests
@@ -77,16 +85,10 @@ def _call_gemini(prompt: str) -> str:
 
 
 def _call_glm(prompt: str) -> str:
+    """Call GLM over its OpenAI-compatible HTTP endpoint (no zhipuai SDK)."""
     if not GLM_AVAILABLE:
         raise Exception("GLM not available")
-    client = ZhipuAI(api_key=GLM_API_KEY)
-    response = client.chat.completions.create(
-        model=GLM_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    if response and response.choices:
-        return response.choices[0].message.content.strip()
-    raise Exception("Empty response")
+    return _glm.call_glm(prompt, api_key=GLM_API_KEY, model=GLM_MODEL)
 
 
 def _call_mistral(prompt: str) -> str:
