@@ -163,6 +163,53 @@ class TestNoLeakedStateBetweenTests:
         assert count == 0
 
 
+class TestSuiteImportHygiene:
+    """`tests` must resolve to THIS directory, never to site-packages.
+
+    `crawl4ai` and `playwright-stealth` both install a top-level `tests` package
+    with an `__init__.py`. If `tests/__init__.py` is missing here, `tests` is
+    only a namespace portion, the finder keeps scanning sys.path, and their
+    regular package wins — so `from tests.test_api_apply import ...` in
+    test_submit_dryrun.py raises ModuleNotFoundError and pytest exits 2 during
+    collection. It only reproduces with the full requirements.txt installed,
+    which is why CI caught it and a minimal dev venv did not.
+    """
+
+    def test_tests_is_a_regular_package_inside_the_repo(self):
+        import tests
+
+        assert tests.__file__ is not None, (
+            "tests/ is a namespace package again — restore tests/__init__.py"
+        )
+        assert Path(tests.__file__).resolve().parent == REPO_ROOT / "tests"
+        assert "site-packages" not in Path(tests.__file__).resolve().parts
+
+    def test_a_sibling_test_module_imports_by_its_qualified_name(self):
+        # This is the exact import that broke collection in CI.
+        import importlib
+
+        module = importlib.import_module("tests.test_api_apply")
+        assert Path(module.__file__).resolve().parent == REPO_ROOT / "tests"
+
+    def test_the_shadowing_dependencies_do_not_win_when_installed(self):
+        import importlib.util
+
+        import tests
+
+        installed = [
+            name
+            for name in ("crawl4ai", "playwright_stealth")
+            if importlib.util.find_spec(name) is not None
+        ]
+        if not installed:
+            pytest.skip("neither crawl4ai nor playwright-stealth is installed")
+        # They ship their own top-level `tests`; the repo's must still win.
+        for name in installed:
+            spec = importlib.util.find_spec(name)
+            assert spec is not None and spec.origin, name
+        assert Path(tests.__file__).resolve().parent == REPO_ROOT / "tests"
+
+
 class TestRepoDataDirIsNotABuildArtifact:
     def test_data_directory_is_gitignored(self):
         # If this ever stops being true, a test run could stage a database
