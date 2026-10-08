@@ -219,8 +219,17 @@ jobs:
           # Derived from my_cv.pdf, which is excluded on purpose: shipping the
           # cache would defeat that exclusion, and it is plain JSON now, so it is
           # readable straight out of an image layer.
-          check "cv_embeddings.json (CV data derived from my_cv.pdf)" '(^|/)cv_embeddings\.json$'
-          check "any pickle (*.pkl) in the build context"             '(^|/)[^/]+\.pkl$'
+          #
+          # Both of these are scoped to /app, which is where COPY puts the build
+          # context. The first version of the pickle check was `(^|/)[^/]+\.pkl$`
+          # and matched ANY .pkl in the exported filesystem — including data files
+          # that pip installed inside site-packages, which are not a leak from the
+          # developer's working tree at all. It failed the build on the commit that
+          # added it. `tar -t` lists the whole container, so an unscoped extension
+          # pattern is a false-positive generator; tests/test_image_leak_check.py
+          # now pins both directions for every pattern below.
+          check "cv_embeddings.json (CV data derived from my_cv.pdf)" '(^|/)app/.*cv_embeddings\.json$'
+          check "any pickle (*.pkl) under /app"                       '(^|/)app/.*\.pkl$'
           check ".venv/ (developer virtualenv)"        '(^|/)\.venv/'
           check "node_modules/ (e2e test dependencies)" '(^|/)node_modules/'
 
