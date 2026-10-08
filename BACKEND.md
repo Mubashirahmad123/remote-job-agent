@@ -316,8 +316,19 @@ no submit path by design.
 - CORS: localhost `:3000/:5173/:8000/:8080` by default, override via
   `API_CORS_ORIGINS`. `allow_methods = GET, POST, PUT, PATCH, OPTIONS`.
   `allow_credentials=True` — auth is a cookie now, so a cross-origin dashboard
-  configured via `API_CORS_ORIGINS` cannot authenticate without it. Safe
-  because `cors_origins()` always returns an explicit list, never `*`.
+  configured via `API_CORS_ORIGINS` cannot authenticate without it.
+  `cors_origins()` **filters** the override rather than passing it through:
+  `*`, the `null` origin, non-http(s) schemes, and anything carrying a path,
+  query or trailing slash are dropped with a `RuntimeWarning`, because
+  Starlette matches these strings verbatim against the Origin header and dead
+  entries look like they grant access. `*` is the important one — this text used
+  to say `cors_origins()` "always returns an explicit list, never `*`" while
+  nothing enforced it, and with `allow_credentials=True` Starlette *reflects*
+  the caller's origin for a wildcard rather than rejecting it. Verified live:
+  `Origin: https://evil.example` was echoed with
+  `Access-Control-Allow-Credentials: true` and read `/api/jobs` using the
+  operator's cookie. If every entry is rejected the localhost defaults apply,
+  which is stricter than what was asked for and so fails safe.
 - Static UI mount is **last** so `/api/*` and `/docs` always win.
 
 ### Session vs Token Precedence (Scenario A — Multi-Operator Attribution)

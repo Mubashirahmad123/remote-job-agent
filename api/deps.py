@@ -5,6 +5,8 @@ debuggable. No pipeline imports here (lazy-import rule still holds).
 """
 
 import os
+import warnings
+from urllib.parse import urlparse
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -23,11 +25,90 @@ DEFAULT_CORS_ORIGINS = [
 ]
 
 
+def _origin_problem(origin: str) -> str:
+    """Why `origin` cannot be used as a CORS allow-list entry, or '' if it can.
+
+    Starlette matches these strings verbatim against the request's Origin
+    header, so anything that is not exactly `scheme://host[:port]` is dead
+    config: it looks like it grants access and never matches anything.
+    """
+    if "*" in origin:
+        return (
+            "a wildcard. With allow_credentials=True Starlette does NOT reject "
+            "it — preflight_explicit_allow_origin is `not allow_all_origins or "
+            "allow_credentials`, so `*` plus credentials makes it REFLECT the "
+            "caller's Origin and answer Access-Control-Allow-Credentials: true. "
+            "That lets any website read authenticated responses. Name the origin."
+        )
+    if origin == "null":
+        return "the `null` origin (file:// and sandboxed frames); serve the UI from the API"
+    parsed = urlparse(origin)
+    if parsed.scheme not in ("http", "https"):
+        return f"scheme {parsed.scheme or '(none)'!r} is not http/https"
+    if not parsed.hostname:
+        return "has no host"
+    if parsed.path not in ("", "/"):
+        return f"carries a path ({parsed.path!r}); an Origin header never does, so it would never match"
+    if origin.endswith("/"):
+        return "has a trailing slash; an Origin header never does, so it would never match"
+    if parsed.query or parsed.fragment:
+        return "carries a query or fragment, which an Origin header never does"
+    return ""
+
+
 def cors_origins() -> list:
+    """Allowed cross-origin dashboard origins.
+
+    API_CORS_ORIGINS is FILTERED, not trusted. Three separate places used to
+    claim a wildcard "is never accepted" (here, api/app.py, PRODUCTION.md,
+    .env.example) while nothing in the code enforced it — and it was
+    demonstrably false: with API_CORS_ORIGINS=* a request from
+    `Origin: https://evil.example` came back with
+
+        Access-Control-Allow-Origin: https://evil.example
+        Access-Control-Allow-Credentials: true
+
+    and GET /api/jobs returned 200 carrying the operator's session cookie, so
+    any website could read the jobs, tracker, CV profile and audit feed of a
+    logged-in operator.
+
+    Rejected entries are dropped with a warning rather than raising: refusing to
+    boot over a CORS typo would take the whole agent down, and dropping to the
+    localhost defaults is strictly more restrictive than what was asked for, so
+    this fails safe in the right direction.
+    """
     raw = os.getenv("API_CORS_ORIGINS", "").strip()
     if not raw:
         return list(DEFAULT_CORS_ORIGINS)
-    return [o.strip() for o in raw.split(",") if o.strip()]
+
+    allowed: list = []
+    rejected: list = []
+    for entry in raw.split(","):
+        origin = entry.strip()
+        if not origin:
+            continue
+        problem = _origin_problem(origin)
+        if problem:
+            rejected.append((origin, problem))
+        elif origin not in allowed:
+            allowed.append(origin)
+
+    for origin, problem in rejected:
+        warnings.warn(
+            f"[api] API_CORS_ORIGINS entry {origin!r} ignored: {problem}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    if not allowed:
+        warnings.warn(
+            "[api] API_CORS_ORIGINS contained no usable origin, so cross-origin "
+            "access falls back to the localhost defaults. The dashboard is served "
+            "same-origin by this API, which needs no CORS entry at all.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return list(DEFAULT_CORS_ORIGINS)
+    return allowed
 
 
 _bearer = HTTPBearer(auto_error=False)

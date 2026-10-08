@@ -548,7 +548,15 @@ def test_session_cookie_flags_are_unchanged(client):
 
 def test_cors_allows_credentials_now_that_auth_is_a_cookie():
     """With allow_credentials=False a cross-origin dashboard configured via
-    API_CORS_ORIGINS could never send the session cookie at all."""
+    API_CORS_ORIGINS could never send the session cookie at all.
+
+    The `"*" not in origins` assertion below is true but WEAK: it only ever ran
+    against the default configuration, where API_CORS_ORIGINS is unset and
+    `cors_origins()` returns the localhost list no matter what the code does with
+    the override. That is why it passed for the whole time the wildcard hole was
+    open. tests/test_cors_origins.py covers the override path, including the
+    end-to-end reflection exploit; this stays as the credentials assertion.
+    """
     app = create_app()
     for middleware in app.user_middleware:
         if middleware.cls.__name__ == "CORSMiddleware":

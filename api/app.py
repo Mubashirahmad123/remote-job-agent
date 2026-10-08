@@ -241,10 +241,19 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=cors_origins(),
         # Auth is an HttpOnly COOKIE now, so credentials must be allowed for a
-        # cross-origin dashboard to authenticate at all. Safe here because
-        # `cors_origins()` always returns an explicit list, never "*" — and
-        # Starlette rejects "*" combined with credentials anyway. The default
-        # stays localhost-only; API_CORS_ORIGINS widens it deliberately.
+        # cross-origin dashboard to authenticate at all. That is only safe
+        # because the origin list is explicit — and the second half of that
+        # sentence used to be a lie. This comment claimed "Starlette rejects '*'
+        # combined with credentials anyway". It does not. Starlette computes
+        # `preflight_explicit_allow_origin = not allow_all_origins or
+        # allow_credentials`, so "*" WITH credentials makes it REFLECT the
+        # caller's Origin and send Access-Control-Allow-Credentials: true.
+        # Verified live: with API_CORS_ORIGINS=*, a request from
+        # `Origin: https://evil.example` got that origin echoed back and read
+        # /api/jobs with the operator's cookie attached.
+        # `cors_origins()` now filters "*" out, which is what makes the
+        # invariant here true rather than merely asserted. The default stays
+        # localhost-only; API_CORS_ORIGINS widens it to named origins only.
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
