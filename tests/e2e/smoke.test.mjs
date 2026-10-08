@@ -39,6 +39,11 @@ describe('asset integrity', () => {
   test('no script references a JobAgent global that is never assigned', async () => {
     const files = [
       'js/api.js', 'js/store.js', 'js/escape.js', 'js/app.js',
+      // js/auth.js assigns JobAgent.auth, which js/app.js calls. It was missing
+      // from this list when login shipped, so the suite reported "auth
+      // referenced but never defined" — a real failure, caused by adding a file
+      // here without adding it to the inventory this test scans.
+      'js/auth.js',
       'js/components/toast.js', 'js/components/navigation.js',
       'js/components/scrapeMonitor.js', 'js/components/dashboard.js',
       'js/components/jobDesk.js', 'js/components/jobDrawer.js',
@@ -249,5 +254,167 @@ describe('failure path — API unreachable', () => {
     const body = ctx.window.document.body.textContent;
     assert.ok(!/\b(147|24|1,?247)\b/.test(body),
       'legacy hardcoded demo figures must not reappear when live data is missing');
+  });
+});
+
+
+// --- login flow (real API with auth enforced) --------------------------------
+//
+// Everything above runs against an OPEN api (no users), which is how the suite
+// predates login. This block boots a second API with a real user in a throwaway
+// store, because the sign-in path is the one flow the dashboard cannot work
+// without and it had zero end-to-end coverage: grep for login/auth/cookie/401
+// across this file previously returned nothing.
+
+describe('login flow — auth enforced', () => {
+  let authed;
+
+  before(async () => { authed = await startApi({ port: 8741, auth: true }); }, { timeout: 60000 });
+  after(async () => { await stopApi(authed); });
+
+  test('the login page is reachable with no session', async () => {
+    const r = await fetch(`${authed.base}/login.html`);
+    assert.equal(r.status, 200);
+  });
+
+  test('the dashboard shell is NOT reachable with no session', async () => {
+    // Both entry points: the `GET /` gate and the StaticFiles path that used to
+    // bypass it by naming the file directly.
+    for (const path of ['/', '/index.html']) {
+      const r = await fetch(`${authed.base}${path}`, { redirect: 'manual' });
+      assert.equal(r.status, 302, `${path} should redirect to the login page`);
+      assert.match(r.headers.get('location') || '', /login\.html/);
+    }
+  });
+
+  test('/api/health is gated but /api/health/live is not', async () => {
+    assert.equal((await fetch(`${authed.base}/api/health`)).status, 401);
+    assert.equal((await fetch(`${authed.base}/api/health/live`)).status, 200);
+  });
+
+  test('a wrong password renders an error and keeps the visitor on the page', async () => {
+    const ctx = await loadDashboard(authed.base, { page: 'login.html' });
+    const doc = ctx.window.document;
+    doc.getElementById('loginUsername').value = authed.credentials.username;
+    doc.getElementById('loginPassword').value = 'definitely-not-the-password';
+    doc.getElementById('loginForm').dispatchEvent(
+      new ctx.window.Event('submit', { bubbles: true, cancelable: true }),
+    );
+
+    const err = await waitFor(() => {
+      const el = doc.getElementById('loginError');
+      return el && el.textContent.trim() ? el : null;
+    }, { label: 'login error message' });
+    assert.match(err.textContent, /Invalid username or password/i);
+    assert.equal(ctx.navigations.length, 0, 'must not navigate away on failure');
+    assert.ok(
+      ctx.requests.some((u) => u.endsWith('/api/auth/login')),
+      'the form must actually POST to /api/auth/login',
+    );
+    assert.equal(doc.getElementById('loginPassword').value, '', 'password field must be cleared');
+    assert.equal(doc.querySelector('button[type="submit"]').disabled, false, 'must re-enable to retry');
+    assert.deepEqual(ctx.errors, [], `same-origin script errors: ${ctx.errors.join('; ')}`);
+  });
+
+  test('correct credentials set the cookie and navigate to the dashboard', async () => {
+    const ctx = await loadDashboard(authed.base, { page: 'login.html' });
+    const doc = ctx.window.document;
+    doc.getElementById('loginUsername').value = authed.credentials.username;
+    doc.getElementById('loginPassword').value = authed.credentials.password;
+    doc.getElementById('loginForm').dispatchEvent(
+      new ctx.window.Event('submit', { bubbles: true, cancelable: true }),
+    );
+
+    await waitFor(() => (ctx.navigations.length ? ctx.navigations : null),
+      { label: 'post-login navigation' });
+    // The target URL is not observable (jsdom cannot navigate and location is
+    // non-configurable), so assert the attempt plus the call that caused it:
+    // login.html has exactly one navigation site, `replace('/')` after a 200.
+    assert.equal(ctx.navigations.length, 1, 'exactly one navigation on success');
+    assert.ok(ctx.requests.some((u) => u.endsWith('/api/auth/login')));
+    assert.equal(doc.getElementById('loginError').textContent.trim(), '',
+      'no error should be rendered on a successful sign-in');
+    assert.deepEqual(ctx.errors, [], `same-origin script errors: ${ctx.errors.join('; ')}`);
+  });
+
+  test('the session cookie the page receives is HttpOnly and SameSite=Lax', async () => {
+    const cookie = await authed.login();
+    assert.match(cookie, /^rja_session=/);
+    // Re-fetch through HTTP to inspect the flags the browser would have stored.
+    const r = await fetch(`${authed.base}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(authed.credentials),
+    });
+    const raw = (r.headers.getSetCookie?.() ?? []).join('\n').toLowerCase();
+    assert.match(raw, /httponly/);
+    assert.match(raw, /samesite=lax/);
+    assert.match(raw, /path=\//);
+  });
+
+  test('an authenticated dashboard reveals the session chip with the username', async () => {
+    const cookie = await authed.login();
+    const ctx = await loadDashboard(authed.base, { cookie });
+
+    const chip = await waitFor(() => {
+      const el = ctx.window.document.getElementById('sessionChip');
+      return el && !el.classList.contains('hidden') ? el : null;
+    }, { label: 'session chip' });
+    assert.equal(ctx.window.document.getElementById('sessionUsername').textContent,
+      authed.credentials.username);
+    assert.equal(ctx.window.document.getElementById('sessionInitial').textContent, 'E2');
+    assert.ok(chip, 'chip must be revealed for a real session');
+  });
+
+  test('sign-out invalidates the session server-side, not just locally', async () => {
+    const cookie = await authed.login();
+
+    // The cookie must work before logout...
+    assert.equal((await fetch(`${authed.base}/api/health`, { headers: { Cookie: cookie } })).status, 200);
+
+    const ctx = await loadDashboard(authed.base, { cookie });
+    await waitFor(() => {
+      const el = ctx.window.document.getElementById('sessionChip');
+      return el && !el.classList.contains('hidden') ? el : null;
+    }, { label: 'session chip before sign-out' });
+
+    ctx.window.document.getElementById('btnSignOut').click();
+    await waitFor(() => (ctx.navigations.length ? ctx.navigations : null),
+      { label: 'post-signout navigation' });
+    assert.ok(
+      ctx.requests.some((u) => u.endsWith('/api/auth/logout')),
+      'sign-out must call the server, not just drop the cookie locally',
+    );
+
+    // ...and must be dead afterwards. This is the assertion that distinguishes a
+    // real server-side revocation from clearing a cookie in the browser.
+    await waitFor(async () => {
+      const r = await fetch(`${authed.base}/api/health`, { headers: { Cookie: cookie } });
+      return r.status === 401 ? true : null;
+    }, { label: 'session invalidated server-side' });
+  });
+
+  test('an unauthenticated dashboard load is bounced to the login page', async () => {
+    const ctx = await loadDashboard(authed.base);  // no cookie
+    await waitFor(() => (ctx.navigations.length ? ctx.navigations : null),
+      { label: '401 redirect' });
+    // api.js sends every 401 to `baseUrl() + '/login.html'` via location.replace.
+    assert.ok(ctx.navigations.length >= 1, 'a 401 must bounce the page to the login screen');
+    assert.ok(
+      ctx.requests.some((u) => u.includes('/api/')),
+      'the dashboard must have attempted an authenticated API call first',
+    );
+  });
+
+  test('the login response reports the role so the UI can gate admin affordances', async () => {
+    const r = await fetch(`${authed.base}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(authed.credentials),
+    });
+    const body = await r.json();
+    assert.equal(body.authenticated, true);
+    assert.equal(body.username, authed.credentials.username);
+    assert.equal(body.role, 'admin', 'the first user on a fresh store bootstraps as admin');
   });
 });
