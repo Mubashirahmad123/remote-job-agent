@@ -1,0 +1,226 @@
+name: CI
+
+# Runs on every push and PR. This workflow exists because the repo had 397
+# passing Python tests and 29 passing e2e tests with nothing running them: PR #25
+# merged documentation for a feature (`require_actor`) that had no implementation,
+# and nothing caught it. Worse, requirements.txt was unsatisfiable (zhipuai and
+# crewai both pin pyjwt, to ranges that do not intersect), so `docker build` was
+# broken on every commit and no signal said so. A suite nobody runs rots; a build
+# nobody runs rots the same way.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref. The api-tests job installs the full
+# dependency set (crewai, crawl4ai, playwright) and the docker job builds an
+# image, so a superseded run is minutes of pure waste.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-tests:
+    name: API + auth + attribution (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # Full requirements, not a subset: tests/test_source_naming.py and
+      # test_api_skills.py import tools.sheet_writer and agents.scrapper, which
+      # need gspread/requests. Installing less makes those files fail at
+      # COLLECTION, which reads like a code regression but is only a missing dep.
+      #
+      # This step is also the resolution guard: if anyone reintroduces a package
+      # whose pin cannot coexist with crewai's, pip fails here with
+      # ResolutionImpossible instead of the failure surfacing only in `docker
+      # build`. That is exactly how zhipuai broke the image for months.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify the lock file matches requirements.txt
+        run: |
+          # This lock drifted badly while nothing checked it: `fastapi`, `pytest`
+          # and `zhipuai` were absent entirely, and `uvicorn` was pinned to a
+          # version requirements.txt never asked for. Checking names only is not
+          # enough - exact pins must agree too, or the lock quietly installs
+          # something else and "reproducible" is a lie.
+          python - <<'PY'
+          import re, sys
+
+          def parse(path):
+              """Map normalised package name -> specifier for a requirements file."""
+              out = {}
+              for line in open(path, encoding="utf-8"):
+                  line = line.split("#", 1)[0].strip()
+                  if not line or line.startswith("-"):
+                      continue
+                  # drop environment markers: pkg==1.0 ; sys_platform == 'win32'
+                  line = line.split(";", 1)[0].strip()
+                  m = re.match(r"^([A-Za-z0-9_.\-]+)\s*(.*)$", line)
+                  if not m:
+                      continue
+                  name = m.group(1).lower().replace("_", "-")
+                  out.setdefault(name, m.group(2).strip())
+              return out
+
+          req = parse("requirements.txt")
+          lock = parse("requirements.lock.txt")
+
+          missing = sorted(set(req) - set(lock))
+          wrong = []
+          for name in sorted(set(req) & set(lock)):
+              m = re.fullmatch(r"==\s*([A-Za-z0-9_.\-+]+)", req[name])
+              if m and lock[name].lstrip("=") != m.group(1):
+                  wrong.append(f"  - {name}: requirements.txt pins =={m.group(1)}, lock has {lock[name]}")
+
+          if missing or wrong:
+              if missing:
+                  print("In requirements.txt but NOT in requirements.lock.txt:")
+                  for name in missing:
+                      print(f"  - {name}")
+              if wrong:
+                  print("Version pin disagrees between requirements.txt and the lock:")
+                  print("\n".join(wrong))
+              print()
+              print("Regenerate with:")
+              print("  uv pip compile requirements.txt -o requirements.lock.txt --universal")
+              print("Keep --universal: without it uv resolves for the host OS only and")
+              print("drops the markers that keep pywin32 off the Linux deployment VM.")
+              sys.exit(1)
+
+          print(f"lock covers all {len(req)} direct requirements; exact pins agree")
+          PY
+
+      - name: Run the full test suite
+        run: |
+          # No --ignore flags and no continue-on-error. Every test under tests/
+          # (except the Node e2e suite) is an offline unit test: none of them
+          # performs an HTTP call and none needs the Playwright browser binaries.
+          # 514 pass on a plain `pytest tests/` once requirements.txt is
+          # installed, so anything red here is a real regression, not flake.
+          python -m pytest tests/ -q --ignore=tests/e2e
+
+      # Split out so a failure elsewhere in the suite cannot hide an auth or
+      # attribution regression, and so that contract is legible in the log as a
+      # named step. test_glm_client.py rides along because it is the guard
+      # against the dependency conflict that made the image unbuildable: it
+      # asserts zhipuai stays out of requirements.txt and that the lock still
+      # matches it.
+      - name: Run the auth + attribution + dependency-hygiene suite explicitly
+        run: |
+          python -m pytest \
+            tests/test_api_auth.py \
+            tests/test_api_auth_hardening.py \
+            tests/test_api_actor_attribution.py \
+            tests/test_glm_client.py \
+            -v
+
+  frontend-e2e:
+    name: Dashboard e2e (real API in jsdom)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # The harness resolves venv/bin/python, then .venv/bin/python, then the
+      # ambient interpreter. Installing into .venv exercises the same resolution
+      # path a developer hits locally, and avoids installing the full dependency
+      # set (crewai, crawl4ai, playwright) twice per run.
+      - name: Create the venv the harness looks for
+        run: |
+          python -m pip install --upgrade pip
+          python -m venv .venv
+          ./.venv/bin/pip install --upgrade pip
+          ./.venv/bin/pip install -r requirements.txt
+
+      # `npm ci`, not `npm install`: tests/e2e/package-lock.json is committed, so
+      # CI must install exactly that tree and fail loudly if package.json has
+      # drifted from it. `npm install` would silently rewrite the lock instead.
+      - name: Install e2e deps
+        run: npm ci --prefix tests/e2e
+
+      - name: Run the dashboard e2e suite
+        run: node --test tests/e2e/smoke.test.mjs
+        env:
+          # The suite boots a real uvicorn; keep it off the developer's data.
+          CI: true
+
+  docker:
+    name: Image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build only, no push: this verifies the Dockerfile and .dockerignore still
+      # produce an image (argon2-cffi is a compiled dependency, so a bad pin or a
+      # missing build tool shows up here and nowhere else).
+      - name: Build the image
+        run: docker build -t remote-job-agent:ci .
+
+      - name: Verify no secret, database or local venv is baked into the image
+        run: |
+          # .dockerignore is the only thing standing between a developer's
+          # working tree and a published image layer: it excludes .env,
+          # keys.json, data/*.db, .venv/ and node_modules/. An Argon2 hash file
+          # or a Google service-account key inside an image is a credential leak
+          # that survives every later `docker rm`.
+          #
+          # The file list is captured ONCE. `docker export` streams the entire
+          # container filesystem, so the previous loop-over-patterns version
+          # re-streamed it once per pattern and was the slowest step in the job.
+          docker create --name ci-check remote-job-agent:ci >/dev/null
+          docker export ci-check | tar -t > /tmp/image-files.txt 2>/dev/null || true
+          docker rm ci-check >/dev/null
+
+          leaks=0
+          check() {  # $1 = human label, $2 = extended regex over tar -t paths
+            if grep -qE "$2" /tmp/image-files.txt; then
+              echo "LEAK: $1"
+              grep -E "$2" /tmp/image-files.txt | head -5 | sed 's/^/      /'
+              leaks=$((leaks + 1))
+            fi
+          }
+
+          check ".env (API keys, passwords, tokens)"   '(^|/)\.env$'
+          check "keys.json (Sheets service account)"   '(^|/)keys\.json$'
+          check "SQLite database under data/"          '(^|/)data/[^/]+\.db$'
+          # AUTH_DB_PATH is unset by default, so the users/sessions tables (and
+          # their Argon2id hashes) live inside data/apply_submit.db. Named
+          # explicitly because the generic pattern above does not convey that
+          # this particular file holds credentials.
+          check "apply_submit.db (users + sessions by default)" '(^|/)data/apply_submit\.db$'
+          check ".venv/ (developer virtualenv)"        '(^|/)\.venv/'
+          check "node_modules/ (e2e test dependencies)" '(^|/)node_modules/'
+
+          echo "image filesystem lists $(wc -l < /tmp/image-files.txt) entries"
+          if [ "$leaks" -eq 0 ]; then
+            echo "OK: no secrets, databases or local virtualenvs in the image"
+          fi
+          exit $((leaks > 0))
