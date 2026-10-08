@@ -342,8 +342,27 @@ no submit path by design.
   input. `api.auth.verify_login` enforces the same bound for non-HTTP callers.
 - **A password reset revokes every session for that user** (`update_password`
   deletes them in the same operation). Otherwise a stolen cookie survives the
-  rotation for the rest of its 7-day TTL — which defeats the purpose of
-  resetting.
+  rotation for the rest of its TTL — which defeats the purpose of resetting.
+- **Sessions have two ceilings, and both are enforced in `get_session`.**
+  `expires_at` is the absolute TTL (`SESSION_TTL_HOURS`, default 168): a session
+  dies that long after it was minted however actively it is used.
+  `last_seen_at` is the idle ceiling (`SESSION_IDLE_TIMEOUT_HOURS`, default 24,
+  clamped to the absolute TTL — an idle window longer than the TTL is
+  unreachable, so accepting it would mean accepting a knob that does nothing):
+  a session dies that long after its *last request*. The absolute TTL alone
+  meant a cookie copied from a laptop backup, a shared machine or a synced
+  browser profile stayed valid for the full seven days. The honest limit: an
+  attacker who *uses* a stolen cookie keeps sliding its own idle window, so this
+  closes steal-now-use-later and the absolute TTL is still what bounds active
+  theft. `last_seen_at` is nullable and rows written before it existed fall back
+  to `created_at` — treating NULL as "never seen" would sign everyone out on the
+  first request after the upgrade, and treating it as "seen now" would make
+  every pre-existing session immortal. The slide is throttled to one write per
+  session per `_SESSION_TOUCH_SECONDS` (60) because `get_session` runs on every
+  authenticated request and an unthrottled touch would turn every dashboard poll
+  into a write. `purge_expired_sessions` deletes on `COALESCE(last_seen_at,
+  created_at)` mirroring that fallback exactly, so idle-dead rows cannot
+  accumulate and push a LIVE session out through `MAX_SESSIONS_PER_USER`.
 - SQLite: schema DDL runs **once per (process, db path)**, not per request
   (`require_token` reads the sessions table on every call, and rebuilding the
   schema each time measured ~3.6 ms/request). `journal_mode=WAL` is set at

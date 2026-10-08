@@ -19,6 +19,10 @@ Security
 Env
   AUTH_DB_PATH           optional dedicated auth DB file.
   SESSION_TTL_HOURS      session lifetime (default 168 = 7 days).
+  SESSION_IDLE_TIMEOUT_HOURS  sliding idle ceiling (default 24), clamped to
+                         1..SESSION_TTL_HOURS. Signs a session out after this
+                         long without a request, even if its absolute TTL has
+                         not run out.
   SESSION_COOKIE_SECURE  empty = Secure only on https (auto); true/false override.
   PASSWORD_MAX_LENGTH    upper bound on accepted passwords (default 128).
 
@@ -52,6 +56,17 @@ SESSION_COOKIE = "rja_session"
 
 _TTL_MIN_HOURS = 1
 _TTL_MAX_HOURS = 24 * 90  # 90 days
+
+# Idle ceiling, in hours. See _resolve_idle_timeout_hours for why it is clamped
+# against the absolute TTL rather than against _TTL_MAX_HOURS.
+_IDLE_DEFAULT_HOURS = 24
+
+# A sliding session has to record that it is still being used, and `get_session`
+# runs on EVERY authenticated request. Writing on each one would turn every
+# dashboard poll into a write to the sessions table, so the touch is throttled
+# to this interval: at most one write per session per minute, and the idle
+# window is measured in hours, so a minute of slop is noise.
+_SESSION_TOUCH_SECONDS = 60
 
 # Roles. `admin` is the only role permitted to reach POST /api/apply/{fp}/submit
 # once the SUBMIT_ENABLED kill-switch is lifted; `operator` can do everything
@@ -133,6 +148,24 @@ def _resolve_ttl_hours() -> int:
     except (TypeError, ValueError):
         return 168
     return max(_TTL_MIN_HOURS, min(_TTL_MAX_HOURS, ttl))
+
+
+def _resolve_idle_timeout_hours() -> int:
+    """Hours of inactivity after which a session stops working.
+
+    Clamped to `1.._resolve_ttl_hours()` — the idle ceiling is bounded by the
+    ABSOLUTE lifetime, not by _TTL_MAX_HOURS, because an idle timeout longer
+    than the TTL would be unreachable: the session expires absolutely first and
+    the idle rule could never fire. Clamping to the TTL keeps the two knobs
+    consistent whatever an operator sets them to, including the pathological
+    `SESSION_TTL_HOURS=1` with `SESSION_IDLE_TIMEOUT_HOURS=999`.
+    """
+    default = _IDLE_DEFAULT_HOURS
+    try:
+        idle = int(float(os.getenv("SESSION_IDLE_TIMEOUT_HOURS", "") or default))
+    except (TypeError, ValueError):
+        idle = default
+    return max(1, min(_resolve_ttl_hours(), idle))
 
 
 def _now() -> datetime:
@@ -252,9 +285,23 @@ def initialize_auth_store(connection: sqlite3.Connection) -> None:
             token_hash TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             created_at TEXT NOT NULL,
-            expires_at TEXT NOT NULL
+            expires_at TEXT NOT NULL,
+            last_seen_at TEXT
         )"""
     )
+    # Columns added after the table shipped, same pattern as `users` above:
+    # SQLite has no ADD COLUMN IF NOT EXISTS, so an existing deployment upgrades
+    # in place instead of failing on "duplicate column name". `last_seen_at`
+    # backs the idle timeout; it is nullable precisely because rows written
+    # before it existed have no value, and get_session falls back to created_at
+    # for those rather than treating them as immortal or as instantly dead.
+    for column, declaration in (("last_seen_at", "TEXT"),):
+        try:
+            connection.execute(
+                f"ALTER TABLE sessions ADD COLUMN {column} {declaration}"
+            )
+        except sqlite3.Error:
+            pass
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)"
     )
@@ -614,8 +661,9 @@ def create_session(user_id: int) -> tuple:
         try:
             _evict_excess_sessions(connection, user_id)
             connection.execute(
-                "INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-                (_token_hash(token), user_id, _iso(now), _iso(expires)),
+                "INSERT INTO sessions (token_hash, user_id, created_at, expires_at, last_seen_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (_token_hash(token), user_id, _iso(now), _iso(expires), _iso(now)),
             )
             connection.commit()
         except Exception:
@@ -626,24 +674,72 @@ def create_session(user_id: int) -> tuple:
     return token, _iso(expires)
 
 
+def _session_column(row, name: str) -> Optional[str]:
+    """Read a column that may not exist on a row fetched before a migration."""
+    try:
+        return row[name]
+    except (IndexError, KeyError, TypeError):
+        return None
+
+
+def _touch_session(token_hash: str, now: datetime) -> None:
+    """Slide the idle window forward. Never fails a good session.
+
+    Throttled by the caller (see _SESSION_TOUCH_SECONDS), so this is at most one
+    write per session per minute rather than one per request. Best-effort by
+    design: a failed touch only means the window slides a little less, and
+    turning a working session into a 500 over a bookkeeping write would be a
+    worse trade.
+    """
+    try:
+        connection = connect()
+        try:
+            connection.execute(
+                "UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?",
+                (_iso(now), token_hash),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+    except Exception:
+        pass
+
+
 def get_session(token: str) -> Optional[Dict[str, Any]]:
     """{user_id, username, role, expires_at} for a valid, unexpired session.
 
     `role` is resolved on every read rather than cached in the session row, so
     a demotion via `set_user_role` takes effect on the next request instead of
     only when the operator happens to sign in again.
+
+    Two ceilings are enforced here, and both must hold:
+
+      * `expires_at` — the absolute TTL. A session dies this long after it was
+        minted no matter how actively it is used.
+      * `last_seen_at` — the idle ceiling. A session dies this long after its
+        last request even if its absolute TTL has not run out.
+
+    The absolute TTL alone meant a cookie stolen and NOT immediately used stayed
+    valid for the full seven days: from a laptop backup, a shared machine, an
+    old browser profile, a synced cookie store. Being honest about the limit of
+    this fix: an attacker who uses the cookie keeps sliding its own idle window,
+    so an idle timeout does not stop an active thief. It closes the
+    steal-now-use-later window, and the absolute TTL is what still bounds the
+    active one.
     """
     raw = (token or "").strip()
     if not raw:
         return None
+    token_hash = _token_hash(raw)
     try:
         connection = connect()
         try:
             row = connection.execute(
-                """SELECT s.expires_at, u.id AS user_id, u.username, u.role
+                """SELECT s.expires_at, s.last_seen_at, s.created_at,
+                          u.id AS user_id, u.username, u.role
                 FROM sessions s JOIN users u ON u.id = s.user_id
                 WHERE s.token_hash = ?""",
-                (_token_hash(raw),),
+                (token_hash,),
             ).fetchone()
         finally:
             connection.close()
@@ -651,12 +747,27 @@ def get_session(token: str) -> Optional[Dict[str, Any]]:
         return None
     if row is None:
         return None
+    now = _now()
     expires_at = row["expires_at"]
     try:
-        if _now() > datetime.fromisoformat(expires_at):
+        if now > datetime.fromisoformat(expires_at):
             return None
     except (TypeError, ValueError):
         return None
+    # A row written before `last_seen_at` existed reads back as NULL. Fall back
+    # to created_at: treating NULL as "never seen" would make an upgraded
+    # deployment sign everyone out on the first request after the deploy, and
+    # treating it as "seen now" would make every pre-existing session immortal.
+    seen_raw = _session_column(row, "last_seen_at") or _session_column(row, "created_at")
+    try:
+        last_seen = datetime.fromisoformat(seen_raw)
+    except (TypeError, ValueError):
+        return None
+    idle_for = now - last_seen
+    if idle_for > timedelta(hours=_resolve_idle_timeout_hours()):
+        return None
+    if idle_for.total_seconds() >= _SESSION_TOUCH_SECONDS:
+        _touch_session(token_hash, now)
     try:
         role = (row["role"] or ROLE_OPERATOR).strip().lower() or ROLE_OPERATOR
     except (IndexError, KeyError):
@@ -686,12 +797,25 @@ def delete_session(token: str) -> bool:
 
 
 def purge_expired_sessions() -> int:
-    """Delete expired sessions (called on login). Returns rows removed."""
-    cutoff = _iso(_now())
+    """Delete dead sessions (called on login). Returns rows removed.
+
+    Covers both ceilings, not just the absolute one. get_session already refuses
+    an idle-expired session, but leaving its row in the table means it counts
+    against MAX_SESSIONS_PER_USER forever — so a user who accumulates enough
+    dead sessions has a LIVE one evicted on their behalf at the next login.
+    COALESCE(last_seen_at, created_at) mirrors get_session's fallback exactly,
+    so the purge and the read path can never disagree about a legacy row.
+    """
+    now = _now()
+    cutoff = _iso(now)
+    idle_cutoff = _iso(now - timedelta(hours=_resolve_idle_timeout_hours()))
     connection = connect()
     try:
         cursor = connection.execute(
-            "DELETE FROM sessions WHERE expires_at <= ?", (cutoff,)
+            """DELETE FROM sessions
+            WHERE expires_at <= ?
+               OR COALESCE(last_seen_at, created_at) <= ?""",
+            (cutoff, idle_cutoff),
         )
         connection.commit()
         return cursor.rowcount
