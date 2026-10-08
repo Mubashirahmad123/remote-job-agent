@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 
 from api import materials
 from api.deps import action_budget, require_token
+from api.errors import failure
 
 router = APIRouter(tags=["materials"])
 
@@ -20,7 +21,7 @@ def create_resume(
     except LookupError:
         raise HTTPException(status_code=404, detail="Job not found")
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Resume generation failed: {e}")
+        raise failure("Resume generation", e)
 
 
 @router.get("/api/resume/{job_fingerprint}/download")
@@ -47,9 +48,7 @@ def create_cover_letter(
     except LookupError:
         raise HTTPException(status_code=404, detail="Job not found")
     except Exception as e:
-        raise HTTPException(
-            status_code=502, detail=f"Cover letter generation failed: {e}"
-        )
+        raise failure("Cover letter generation", e)
 
 
 @router.get("/api/cover-letter/{job_fingerprint}/download")

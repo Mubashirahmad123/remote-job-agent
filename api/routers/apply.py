@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from api import apply as apply_service
 from api import safety
 from api.deps import action_budget, require_actor, require_apply_token, require_submit_actor, require_token
+from api.errors import failure, missing
 from api.schemas import ApplyIntentOut, ApplyIntentRequest, ApplyRequest, ApplySubmitOut, ApplySubmitRequest
 
 router = APIRouter(tags=["apply"])
@@ -41,7 +42,7 @@ def apply_review(
     except apply_service.DreamTierForbidden as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Apply fill failed: {e}")
+        raise failure("Apply fill", e)
 
 
 @router.post("/api/apply/{job_fingerprint}/intent", response_model=ApplyIntentOut)
@@ -71,7 +72,7 @@ def apply_intent(
             )
         raise HTTPException(status_code=error.status_code, detail=error.detail)
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"Apply intent failed: {error}")
+        raise failure("Apply intent", error)
 
 
 @router.post("/api/apply/{job_fingerprint}/submit", response_model=ApplySubmitOut)
@@ -114,7 +115,7 @@ def apply_submit(
             )
         raise HTTPException(status_code=error.status_code, detail=error.detail)
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"Greenhouse submit failed: {error}")
+        raise failure("Greenhouse submit", error)
 
 
 _MEDIA_BY_SUFFIX = {
@@ -138,7 +139,9 @@ def apply_screenshot(job_fingerprint: str, _: None = Depends(require_token)):
         path = apply_service.get_review_screenshot_path(job_fingerprint)
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except FileNotFoundError:
+        # str(FileNotFoundError) IS the absolute path, so it would tell the
+        # caller exactly where artifacts live inside the container.
+        raise missing("Screenshot")
     media_type = _MEDIA_BY_SUFFIX.get(path.suffix.lower(), "application/octet-stream")
     return FileResponse(str(path), media_type=media_type, filename=path.name)

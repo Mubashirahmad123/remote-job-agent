@@ -20,6 +20,8 @@ api/
   deps.py           cors_origins() + require_token() (Bearer <API_TOKEN> when set)
                     + resolve_actor() / require_actor() / require_submit_actor()
                     (Scenario A attribution — see §4)
+  errors.py         failure()/missing(): traceback to the log, incident id to
+                    the caller, never exception text in a response
   auth.py           Argon2id users, server-side sessions, roles, login-event
                     audit, in SQLite. db_path() resolves the env on EVERY call
   ratelimit.py      sliding-window login limiter (per-IP + per-username budgets)
@@ -473,5 +475,13 @@ status codes, never hit live Sheets).
 1. Schema in `schemas.py` (nullable fields, `""→null` validators).
 2. Sheet/cache accessor in `cache.py` (lazy imports, never crash → `[]`/`None`).
 3. New file in `routers/` (or extend the matching group file) + `include_router`.
-4. Tests in `tests/test_api_<group>.py` following the Phase 1 fake pattern.
-5. Frontend fn in `js/api.js` + row in README endpoint table.
+4. **Errors**: a broad `except Exception` must `raise failure("<Action>", exc)`
+   from `api/errors.py` — never `detail=f"...: {e}"`. The traceback goes to the
+   server log under a short incident id and the caller gets the action name plus
+   that id, which is greppable in `docker compose logs api`. Messages you wrote
+   *for* the caller (`ValueError` from `cache.refresh`, the `DreamTierForbidden`
+   family) keep going out verbatim; making those opaque hides nothing and breaks
+   the dashboard. `tests/test_error_disclosure.py` walks every router's AST and
+   fails the build on a new leak.
+5. Tests in `tests/test_api_<group>.py` following the Phase 1 fake pattern.
+6. Frontend fn in `js/api.js` + row in README endpoint table.
