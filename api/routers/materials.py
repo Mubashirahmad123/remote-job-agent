@@ -4,13 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from api import materials
-from api.deps import require_token
+from api.deps import action_budget, require_token
 
 router = APIRouter(tags=["materials"])
 
 
 @router.post("/api/resume/{job_fingerprint}")
-def create_resume(job_fingerprint: str, _: None = Depends(require_token)) -> dict:
+def create_resume(
+    job_fingerprint: str,
+    _: None = Depends(require_token),
+    __: None = Depends(action_budget("action")),
+) -> dict:
     try:
         return materials.generate_resume(job_fingerprint)
     except LookupError:
@@ -34,7 +38,9 @@ def download_resume(job_fingerprint: str, _: None = Depends(require_token)):
 
 @router.post("/api/cover-letter/{job_fingerprint}")
 def create_cover_letter(
-    job_fingerprint: str, _: None = Depends(require_token)
+    job_fingerprint: str,
+    _: None = Depends(require_token),
+    __: None = Depends(action_budget("action")),
 ) -> dict:
     try:
         return materials.generate_cover_letter(job_fingerprint)

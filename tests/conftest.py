@@ -83,7 +83,7 @@ def _isolate_submit_artifacts(monkeypatch, tmp_path):
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limiter():
-    """Clear login rate-limit buckets before AND after every test.
+    """Clear the login AND action rate-limit buckets before and after every test.
 
     api.ratelimit is process-global by design (docker-compose runs the API with
     --workers 1, so in-process is exact). Pytest runs the whole suite in one
@@ -93,11 +93,13 @@ def _reset_rate_limiter():
     testing. Reset on both sides so a test that deliberately exhausts the
     budget cannot leak into the next one.
     """
-    from api.ratelimit import reset_login_limiter
+    from api.ratelimit import reset_action_limiter, reset_login_limiter
 
     reset_login_limiter()
+    reset_action_limiter()
     yield
     reset_login_limiter()
+    reset_action_limiter()
 
 
 @pytest.fixture(autouse=True)

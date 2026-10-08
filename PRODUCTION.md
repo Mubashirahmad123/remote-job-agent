@@ -135,6 +135,10 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
 | `LOGIN_RATE_LIMIT` | `12` | Brute-force budget per client IP per window. Exceeding it → `429` + `Retry-After`, checked before any Argon2 work |
 | `LOGIN_USER_RATE_LIMIT` | `6` | Brute-force budget per username per window. Cleared on a successful login; the per-IP budget is not |
 | `LOGIN_RATE_WINDOW` | `600` | Sliding window in seconds, shared by both budgets |
+| `ACTION_RATE_LIMIT` | `60` | Per-job actions per window **per operator**: `POST /api/resume/{fp}`, `/api/cover-letter/{fp}`, `/api/apply/{fp}` and its `/intent` + `/submit`. Each one runs an LLM call or a headless browser. Exceeding it → `429` + `Retry-After` |
+| `ACTION_RATE_WINDOW` | `600` | Sliding window in seconds for the action budget |
+| `RUN_RATE_LIMIT` | `6` | Whole-pipeline triggers per window **per operator**: `POST /api/scrape` (~47 boards plus a browser) and `POST /api/jobs/refresh`. Stricter than the action budget by an order of magnitude because a single trigger costs that much more |
+| `RUN_RATE_WINDOW` | `600` | Sliding window in seconds for the run budget |
 | `PASSWORD_MAX_LENGTH` | `128` | Resource control, not just validation — `/api/auth/login` is unauthenticated, so an unbounded field buys a full Argon2id verify on arbitrary-length input |
 | `TRUST_PROXY_HEADERS` | empty | Honour `X-Forwarded-For` for rate-limit keying. Leave empty when uvicorn runs with `--proxy-headers` (it already rewrites the client IP); trusting a client-supplied header would let an attacker mint a fresh bucket per request |
 | `API_DOCS_ENABLED` | empty | Publish `/docs` + `/openapi.json` with no session. Default **gated**: anonymous → 401, logged-in browser → Swagger. Only enable on a trusted network |

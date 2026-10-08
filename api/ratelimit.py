@@ -42,10 +42,13 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 __all__ = [
+    "ACTION_KINDS",
     "Decision",
     "RateLimiter",
+    "action_limiter",
     "client_ip",
     "login_limiter",
+    "reset_action_limiter",
     "reset_login_limiter",
 ]
 
@@ -248,3 +251,92 @@ def client_ip(request) -> str:
             # Left-most entry is the original client; the rest are proxies.
             return forwarded.split(",")[0].strip() or direct or "unknown"
     return direct or "unknown"
+
+
+# --- Per-actor budget for expensive actions ----------------------------------
+#
+# login_limiter guards the only unauthenticated write. It guards nothing else,
+# so every authenticated caller could loop the endpoints that cost real money or
+# real CPU with no ceiling at all:
+#
+#   POST /api/resume/{fp}          an LLM call plus PDF generation
+#   POST /api/cover-letter/{fp}    an LLM call plus PDF generation
+#   POST /api/apply/{fp}           a full headless-browser fill run
+#   POST /api/apply/{fp}/intent    a headless-browser recon run
+#   POST /api/apply/{fp}/submit    a headless-browser submission
+#   POST /api/scrape               ~47 boards over the network plus a browser
+#   POST /api/jobs/refresh         a sheet-cache invalidation and refetch
+#
+# Confirmed during the audit: POST /api/scrape returned 202 for the *operator*
+# role and the scrape actually ran. So one leaked operator session, or one XSS
+# payload, is an unbounded Gemini/GLM credit burn and an unbounded outbound
+# traffic source from the operator's own VM.
+#
+# Keyed on ACTOR, not IP. The actor is already resolved for attribution
+# (api/deps.py resolve_actor), and keying on it means the budget follows the
+# identity that is spending: rotating source addresses does not help, which is
+# the exact weakness fixed in H1. In open-access mode every caller shares the
+# "local-dev" actor and therefore one budget, which is correct — there is no
+# identity to separate.
+#
+# Two budgets, because the two classes of action differ by an order of
+# magnitude in cost:
+#
+#   "action"  per-job work a human clicks through one job at a time
+#   "run"     whole-pipeline triggers, of which a handful per hour is generous
+#
+# Per-process, exactly like login_limiter, and for the same reason: compose pins
+# `--workers 1`. Scaling the API out needs this and the login limiter moved to a
+# shared store (Redis) first, or N workers multiply every budget by N.
+
+ACTION_KINDS = ("action", "run")
+
+_ACTION_ENV = {
+    "action": ("ACTION_RATE_LIMIT", 60, "ACTION_RATE_WINDOW", 600),
+    "run": ("RUN_RATE_LIMIT", 6, "RUN_RATE_WINDOW", 600),
+}
+
+
+class _ActionLimiter:
+    """One sliding-window bucket per (kind, actor)."""
+
+    def __init__(self) -> None:
+        self._limiters: Dict[str, Optional[RateLimiter]] = {kind: None for kind in ACTION_KINDS}
+        self._lock = threading.Lock()
+
+    def _build(self, kind: str) -> RateLimiter:
+        """Lazily (re)build one kind from env, so tests can monkeypatch between
+        calls — the same contract login_limiter offers."""
+        limit_env, limit_default, window_env, window_default = _ACTION_ENV[kind]
+        limiter = RateLimiter(
+            _positive_int(limit_env, limit_default),
+            _positive_int(window_env, window_default),
+        )
+        with self._lock:
+            self._limiters[kind] = limiter
+        return limiter
+
+    def _limiter(self, kind: str) -> RateLimiter:
+        if kind not in ACTION_KINDS:
+            raise ValueError(f"unknown action kind {kind!r}; expected one of {ACTION_KINDS}")
+        with self._lock:
+            existing = self._limiters[kind]
+        return existing if existing is not None else self._build(kind)
+
+    def allow(self, actor: str, kind: str) -> Decision:
+        """Spend one unit of `kind` for `actor`."""
+        return self._limiter(kind).allow(f"{kind}:{actor or 'anonymous'}")
+
+    def reset(self) -> None:
+        """Drop every bucket (tests, and `reset_action_limiter`)."""
+        with self._lock:
+            for kind in ACTION_KINDS:
+                self._limiters[kind] = None
+
+
+action_limiter = _ActionLimiter()
+
+
+def reset_action_limiter() -> None:
+    """Clear every action budget — call between tests so state never leaks."""
+    action_limiter.reset()

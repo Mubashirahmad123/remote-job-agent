@@ -234,6 +234,35 @@ def resolve_actor(request: Request, creds: HTTPAuthorizationCredentials | None =
     return ""
 
 
+def action_budget(kind: str):
+    """Dependency factory: spend one unit of the per-actor budget for `kind`.
+
+    Added ALONGSIDE `require_token` rather than replacing it, so the
+    authentication semantics of the routes it guards are unchanged — this is a
+    cost ceiling, not an auth mechanism. It depends on `require_actor` only to
+    learn WHO is spending, which is the identity already recorded for
+    attribution.
+
+    See api/ratelimit.py for why these endpoints needed a budget at all.
+    """
+    from api.ratelimit import action_limiter
+
+    def _dependency(actor: str = Depends(require_actor)) -> None:
+        decision = action_limiter.allow(actor, kind)
+        if not decision.allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Too many requests of this kind. Each one runs an LLM call or "
+                    "a headless browser, so they are budgeted per operator."
+                ),
+                headers={"Retry-After": str(max(1, decision.retry_after))},
+            )
+        return None
+
+    return _dependency
+
+
 def resolve_session_role(request: Request) -> str:
     """Role of the session user, or "" when the caller is not a logged-in human.
 

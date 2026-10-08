@@ -297,9 +297,29 @@ no submit path by design.
   `time.sleep(0.5)` held a threadpool worker per attempt, so ~40 concurrent
   bad passwords saturated the 40-thread pool and stalled every other sync
   route (measured 5.6s wall → 1.4s, with 34/40 answered 429 and no hashing).
-- The limiter is **per-process**, which is exact under the deployed
-  `--workers 1`. Scaling out multiplies the budget by the worker count — move
-  it to a shared store first.
+- The limiters are **per-process**, which is exact under the deployed
+  `--workers 1`. Scaling out multiplies every budget by the worker count — move
+  them to a shared store first.
+- **Action budgets** (`ratelimit.py`, `ACTION_KINDS`): the login limiter guards
+  the only *unauthenticated* write. It guarded nothing else, so every
+  authenticated caller could loop the endpoints that cost real money or real CPU
+  with no ceiling at all — resume and cover-letter generation (an LLM call each),
+  the headless-browser apply/intent/submit runs, and `/api/scrape` (~47 boards)
+  plus `/api/jobs/refresh`. The audit confirmed `POST /api/scrape` returned
+  **202 for the operator role** and the scrape actually ran, so one leaked
+  operator session was an unbounded credit burn and an unbounded outbound
+  traffic source. Two budgets, because the two classes differ by an order of
+  magnitude in cost: `"action"` (per-job, `ACTION_RATE_LIMIT` default 60) and
+  `"run"` (whole-pipeline, `RUN_RATE_LIMIT` default 6), both over 600s.
+  Keyed on the **actor**, not the IP: keying on IP repeats the H1 mistake, where
+  the budget becomes launderable by rotating source addresses and every operator
+  behind one proxy shares a bucket. The actor is already resolved for
+  attribution, so this costs nothing. Wired via `api.deps.action_budget(kind)`
+  added *alongside* `require_token`, never replacing it — auth still runs first,
+  so an anonymous caller gets 401 and spends no budget. A request that then
+  fails (404, 400) **still spends** its unit, deliberately: the cost being
+  limited is the handling, and a caller who can make requests error cheaply
+  should not get unlimited ones.
 - `LoginRequest` bounds `username` (≤64) and `password` (≤128). The ceiling is
   a resource control: `/api/auth/login` is unauthenticated, so an unbounded
   field lets one small JSON body buy a full Argon2id verify on 200 KB of

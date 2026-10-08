@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from api import apply as apply_service
 from api import safety
-from api.deps import require_actor, require_apply_token, require_submit_actor, require_token
+from api.deps import action_budget, require_actor, require_apply_token, require_submit_actor, require_token
 from api.schemas import ApplyIntentOut, ApplyIntentRequest, ApplyRequest, ApplySubmitOut, ApplySubmitRequest
 
 router = APIRouter(tags=["apply"])
@@ -24,6 +24,7 @@ def apply_review(
     job_fingerprint: str,
     body: ApplyRequest | None = None,
     _: None = Depends(require_token),
+    __: None = Depends(action_budget("action")),
     actor: str = Depends(require_actor),
 ) -> dict:
     raw = body.mode if (body is not None and body.mode is not None) else "review"
@@ -48,6 +49,7 @@ def apply_intent(
     job_fingerprint: str,
     body: ApplyIntentRequest | None = None,
     _: None = Depends(require_apply_token),
+    __: None = Depends(action_budget("action")),
     actor: str = Depends(require_actor),
 ) -> dict:
     raw_mode = body.mode if body is not None else "review"
@@ -77,6 +79,7 @@ def apply_submit(
     job_fingerprint: str,
     body: ApplySubmitRequest | None = None,
     _: None = Depends(require_apply_token),
+    __: None = Depends(action_budget("action")),
     actor: str = Depends(require_submit_actor),
 ) -> dict:
     if not safety.submit_enabled():
