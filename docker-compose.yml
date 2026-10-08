@@ -72,12 +72,40 @@ services:
       # rate limiting would key on one shared bucket for every user) and
       # request.url.scheme is always http (so the session cookie's Secure flag
       # would silently depend on SESSION_COOKIE_SECURE=true below).
-      # Trusting "*" is safe ONLY because api:8000 is reachable from the docker
-      # network (Caddy) and 127.0.0.1 on the host — never from the public
-      # internet directly. If you ever publish this port, narrow it to Caddy's
-      # container IP.
+      #
+      # NEVER set this to "*". This used to be "*", on the reasoning that it was
+      # safe because the port is only published to 127.0.0.1 and the docker
+      # network. That reasoning was wrong, and it was exploitable from the
+      # public internet:
+      #
+      #   * uvicorn's ProxyHeadersMiddleware, when every host is trusted, takes
+      #     the LEFT-MOST X-Forwarded-For entry (verified against uvicorn 0.49:
+      #     `if self.always_trust: return _parse_host_port(hosts[0])`).
+      #   * Caddy APPENDS the real client IP to an incoming X-Forwarded-For
+      #     rather than replacing it.
+      #   So an attacker sent `X-Forwarded-For: <chosen>`, Caddy forwarded
+      #   `<chosen>, <real>`, and uvicorn believed `<chosen>`. api.ratelimit
+      #   keys its per-IP login budget on exactly that value.
+      #
+      #   Measured, with the compose flags as they were: 40 login attempts
+      #   across 40 usernames with a fresh spoofed IP each -> 0 x 429. The same
+      #   40 attempts without the header -> 429 at attempt 13. It also poisoned
+      #   the audit trail: 64 login_events rows carried 46 distinct client_ips
+      #   from one real source.
+      #
+      # The port binding never mattered — the forged header arrives *through*
+      # Caddy. Who can open a TCP connection is not who controls the header.
+      #
+      # Narrowing to the internal subnet makes uvicorn walk the list from the
+      # RIGHT and stop at the first non-internal address, which is the real
+      # client Caddy appended. Verified: with 172.28.0.0/16 trusted, the header
+      # "8.8.8.8, 203.0.113.7" resolves to 203.0.113.7.
+      # deploy/Caddyfile also overwrites X-Forwarded-For now, so both ends agree.
+      #
+      # RJA_INTERNAL_SUBNET must match the `networks.default` subnet at the
+      # bottom of this file — one variable drives both, so they cannot drift.
       "--proxy-headers",
-      "--forwarded-allow-ips", "*",
+      "--forwarded-allow-ips", "${RJA_INTERNAL_SUBNET:-172.28.0.0/16}",
     ]
     env_file:
       - .env
@@ -124,6 +152,17 @@ services:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+
+# Pin the internal subnet so `--forwarded-allow-ips` above can name it exactly.
+# Docker otherwise picks a subnet at random from 172.17-172.31, which cannot be
+# written into a static allow-list — and an allow-list you cannot state is an
+# allow-list that ends up as "*", which is the rate-limit bypass this fixes.
+# Services need no `networks:` key: they all stay on `default`.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${RJA_INTERNAL_SUBNET:-172.28.0.0/16}
 
 volumes:
   caddy_data:
