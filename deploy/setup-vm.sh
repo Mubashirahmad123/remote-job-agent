@@ -86,8 +86,34 @@ cd "${REPO_ROOT}"
 [[ -f scraped_jobs.json ]] || printf '[]\n' > scraped_jobs.json
 [[ -f curated_jobs.json ]] || printf '[]\n' > curated_jobs.json
 mkdir -p data logs apply_packages resumes cover_letters screenshots cache
-chown -R "${TARGET_USER}:${TARGET_USER}" data logs apply_packages resumes \
+
+# The container image runs as an unprivileged user (Dockerfile: `USER agent`)
+# whose UID/GID are build args. Those MUST match the owner of the directories
+# bind-mounted above, or the app starts and then cannot write to its own
+# volumes — which looks like a mysterious permission bug at the worst possible
+# time. Chown by numeric ID and record the IDs where docker-compose.yml can
+# interpolate them.
+TARGET_UID="$(id -u "${TARGET_USER}" 2>/dev/null || echo 1000)"
+TARGET_GID="$(id -g "${TARGET_USER}" 2>/dev/null || echo 1000)"
+if [[ "${TARGET_USER}" == "root" ]]; then
+  warn "SUDO_USER is root, so the bind-mounted volumes would be root-owned and"
+  warn "the non-root container could not write them. Creating a normal user and"
+  warn "re-running this script is the fix; falling back to 1000:1000 for now."
+  TARGET_UID=1000; TARGET_GID=1000
+fi
+chown -R "${TARGET_UID}:${TARGET_GID}" data logs apply_packages resumes \
   cover_letters screenshots cache seen_jobs.json scraped_jobs.json curated_jobs.json 2>/dev/null || true
+
+# docker compose reads ./.env for \${RJA_APP_UID} interpolation in the build args.
+if [[ -f .env ]]; then
+  grep -q '^RJA_APP_UID=' .env || printf '\n# Container runtime user; must own the bind-mounted dirs above.\nRJA_APP_UID=%s\nRJA_APP_GID=%s\n' "${TARGET_UID}" "${TARGET_GID}" >> .env
+  log "Container will run as UID ${TARGET_UID} / GID ${TARGET_GID} (matches ${TARGET_USER})"
+else
+  warn ".env does not exist yet. After creating it, add these two lines so the"
+  warn "image's non-root user matches the volume owner:"
+  warn "    RJA_APP_UID=${TARGET_UID}"
+  warn "    RJA_APP_GID=${TARGET_GID}"
+fi
 
 # --- Secrets sanity check -----------------------------------------------------
 missing=()

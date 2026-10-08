@@ -1,7 +1,18 @@
 services:
   # 24/7 background scheduler (Mondays & Thursdays at 9:00 AM)
   scheduler:
-    build: .
+    build:
+      context: .
+      args:
+        # The image now runs as an unprivileged user whose UID/GID must match the
+        # owner of the bind-mounted ./data, ./logs, ./resumes, ... on the host,
+        # or the container cannot write to its own volumes. deploy/setup-vm.sh
+        # derives both from `id -u "${SUDO_USER}"` and writes them into .env,
+        # which docker compose reads for this interpolation. The 1000:1000
+        # defaults keep a plain `docker compose build` correct on the standard
+        # Oracle Cloud Ubuntu image.
+        APP_UID: ${RJA_APP_UID:-1000}
+        APP_GID: ${RJA_APP_GID:-1000}
     container_name: job-agent-scheduler
     restart: unless-stopped
     command: ["python", "scheduler.py"]
@@ -28,7 +39,18 @@ services:
 
   # On-demand runner for CLI commands (e.g. simple scrape, apply, resume, tests)
   runner:
-    build: .
+    build:
+      context: .
+      args:
+        # The image now runs as an unprivileged user whose UID/GID must match the
+        # owner of the bind-mounted ./data, ./logs, ./resumes, ... on the host,
+        # or the container cannot write to its own volumes. deploy/setup-vm.sh
+        # derives both from `id -u "${SUDO_USER}"` and writes them into .env,
+        # which docker compose reads for this interpolation. The 1000:1000
+        # defaults keep a plain `docker compose build` correct on the standard
+        # Oracle Cloud Ubuntu image.
+        APP_UID: ${RJA_APP_UID:-1000}
+        APP_GID: ${RJA_APP_GID:-1000}
     container_name: job-agent-runner
     profiles: ["cli"]
     command: ["python", "main.py", "crewai"]
@@ -56,7 +78,18 @@ services:
   # Binds 0.0.0.0 inside the container; public traffic reaches it only through
   # Caddy. API_TOKEN must be set in .env or api/app.py refuses the non-local bind.
   api:
-    build: .
+    build:
+      context: .
+      args:
+        # The image now runs as an unprivileged user whose UID/GID must match the
+        # owner of the bind-mounted ./data, ./logs, ./resumes, ... on the host,
+        # or the container cannot write to its own volumes. deploy/setup-vm.sh
+        # derives both from `id -u "${SUDO_USER}"` and writes them into .env,
+        # which docker compose reads for this interpolation. The 1000:1000
+        # defaults keep a plain `docker compose build` correct on the standard
+        # Oracle Cloud Ubuntu image.
+        APP_UID: ${RJA_APP_UID:-1000}
+        APP_GID: ${RJA_APP_GID:-1000}
     container_name: job-agent-api
     restart: unless-stopped
     command: [
