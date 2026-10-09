@@ -191,6 +191,7 @@ class TestHygiene:
         client.post(f"/api/resume/{FP}")
         client.post(f"/api/cover-letter/{FP}")
         assert "agents.gemini_tools" not in sys.modules
+        sys.modules.pop("tools.resume_generator", None)
         assert "tools.resume_generator" not in sys.modules
 
 
