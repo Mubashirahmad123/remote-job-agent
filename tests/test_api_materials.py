@@ -71,6 +71,49 @@ class TestResume:
         assert body["status"] == "ok"
         assert body["filename"] == "resume.pdf"
 
+    def test_post_includes_resume_markdown(self, client, monkeypatch):
+        """Preview fix: the POST response carries the real generated markdown
+        so Resume Studio can render it instead of the stub sheet."""
+        monkeypatch.setattr(
+            materials, "generate_resume",
+            lambda fp: {"status": "ok", "job_fingerprint": FP,
+                        "job_title": "Backend Dev", "company": "Acme",
+                        "filename": "resume.pdf",
+                        "resume_markdown": "# Mubashir Ahmad\n\n## Projects\n- Built JobAgent"},
+        )
+        r = client.post(f"/api/resume/{FP}")
+        assert r.status_code == 200
+        body = r.json()
+        assert "Built JobAgent" in body["resume_markdown"]
+
+    def test_post_real_generator_threads_markdown(self, seeded_cache, monkeypatch, tmp_path):
+        """materials.generate_resume passes ``out`` and returns the markdown."""
+        import types
+
+        monkeypatch.setattr(materials, "RESUMES_DIR", tmp_path)
+        pdf = tmp_path / "tailored.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        fake_mod = types.ModuleType("tools.resume_generator")
+
+        def fake_gen(job, output_folder="resumes", skip_existing=True, out=None):
+            if isinstance(out, dict):
+                out["resume_text"] = "# Mubashir Ahmad\n\n## Projects\n- Built JobAgent"
+            return pdf
+
+        fake_mod.generate_resume_for_job = fake_gen
+        monkeypatch.setitem(sys.modules, "tools.resume_generator", fake_mod)
+        seeded_cache.setattr(
+            cache, "_read_tab_values",
+            lambda tab: [SHEET_HEADER,
+                         ["Backend Dev", "Acme", "$80k", "Python", "Remote",
+                          "https://example.com/j/1", "APIs", "2026-09-20", "Src",
+                          "88", "Matched: python", "2026-09-22 10:00", "NEW", FP]]
+            if tab == "ALL JOBS" else [])
+        rec = materials.generate_resume(FP)
+        assert rec["resume_markdown"].startswith("# Mubashir Ahmad")
+        assert "Built JobAgent" in rec["resume_markdown"]
+        assert materials.get_resume_pdf(FP) is not None
+
     def test_post_unknown(self, client, monkeypatch):
         def missing(fp):
             raise LookupError("nope")
@@ -145,10 +188,27 @@ class TestHygiene:
         monkeypatch.setattr(
             materials, "generate_cover_letter", lambda fp: {"status": "ok"}
         )
-        client.post(f"/api/resume/{FP}")
-        client.post(f"/api/cover-letter/{FP}")
-        assert "agents.gemini_tools" not in sys.modules
-        assert "tools.resume_generator" not in sys.modules
+        # Detach any already-loaded heavy module for the duration of this
+        # test so the endpoints really must import it to be seen — then hand
+        # the ORIGINAL module object back in `finally`. A bare
+        # sys.modules.pop() without restore would destroy the module objects
+        # the rest of the suite holds references to: the next
+        # `import tools.resume_generator` would silently re-execute the file
+        # into a FRESH module, and monkeypatches aimed at it would miss the
+        # functions other test modules already imported (that is exactly how
+        # tests/test_resume_generator.py::TestGenerateOutParam broke).
+        saved_rg = sys.modules.pop("tools.resume_generator", None)
+        saved_gt = sys.modules.pop("agents.gemini_tools", None)
+        try:
+            client.post(f"/api/resume/{FP}")
+            client.post(f"/api/cover-letter/{FP}")
+            assert "agents.gemini_tools" not in sys.modules
+            assert "tools.resume_generator" not in sys.modules
+        finally:
+            if saved_gt is not None:
+                sys.modules["agents.gemini_tools"] = saved_gt
+            if saved_rg is not None:
+                sys.modules["tools.resume_generator"] = saved_rg
 
 
 class TestResolveJobShapes:

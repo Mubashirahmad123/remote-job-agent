@@ -20,6 +20,77 @@ DEJAVU_REGULAR_PATH = FONTS_DIR / "DejaVuSans.ttf"
 DEJAVU_BOLD_PATH = FONTS_DIR / "DejaVuSans-Bold.ttf"
 
 
+def _find_arial_paths():
+    """Check OS font dirs for Arial (Windows/macOS) or Liberation Sans (Linux).
+
+    Arial/Liberation Sans are the standard ATS resume fonts — narrower and more
+    conventional than DejaVu. Returns (regular, bold, italic_or_None).
+    """
+    if sys.platform == "win32":
+        base = Path(os.environ.get("WINDIR", "C:\\Windows")) / "Fonts"
+        candidates = [
+            (base / "arial.ttf", base / "arialbd.ttf", base / "ariali.ttf"),
+        ]
+    elif sys.platform == "darwin":
+        supp = Path("/System/Library/Fonts/Supplemental")
+        candidates = [
+            (Path("/Library/Fonts/Arial.ttf"),
+             Path("/Library/Fonts/Arial Bold.ttf"),
+             Path("/Library/Fonts/Arial Italic.ttf")),
+            (supp / "Arial.ttf", supp / "Arial Bold.ttf", supp / "Arial Italic.ttf"),
+        ]
+    else:
+        base = Path("/usr/share/fonts")
+        candidates = [
+            (base / "truetype/liberation/LiberationSans-Regular.ttf",
+             base / "truetype/liberation/LiberationSans-Bold.ttf",
+             base / "truetype/liberation/LiberationSans-Italic.ttf"),
+        ]
+
+    for reg, bold, ital in candidates:
+        if reg.exists() and bold.exists():
+            return reg, bold, (ital if ital.exists() else None)
+    return None, None, None
+
+
+# Typographic Unicode -> ASCII equivalents (Arial/Liberation lack some of
+# these glyphs; a missing glyph renders as a box in the PDF).
+_TYPOGRAPHIC_MAP = {
+    "\u00a0": " ",    # no-break space
+    "\u2010": "-",    # hyphen
+    "\u2011": "-",    # non-breaking hyphen (e.g. +91‑9622907883)
+    "\u2012": "-",
+    "\u2013": "-",    # en dash
+    "\u2014": "-",    # em dash
+    "\u2212": "-",    # minus sign
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201a": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2026": "...",
+    "\u2192": "->",
+    "\u00d7": "x",
+    "\ufe0f": "",     # variation selector
+}
+
+
+def _normalize_typographic(txt: str) -> str:
+    """Replace typographic Unicode with ASCII equivalents, drop the rest.
+
+    Keeps characters Arial/Liberation definitely carry (bullet •, middle
+    dot ·, en-dash already mapped) so bullets and punctuation survive.
+    """
+    out = []
+    for ch in txt:
+        if ch in _TYPOGRAPHIC_MAP:
+            out.append(_TYPOGRAPHIC_MAP[ch])
+        elif ord(ch) < 128:
+            out.append(ch)
+        # else: drop unsupported glyph
+    return "".join(out)
+
+
 def _find_system_paths():
     """Check common OS-specific font directories for DejaVu fonts."""
     if sys.platform == "win32":
@@ -103,24 +174,34 @@ def _download_fonts():
 
 def resolve_font_paths():
     """
-    Returns (regular_path, bold_path, font_name).
-    Checks project fonts/ first, then system paths, then downloads.
+    Returns (regular_path, bold_path, italic_path_or_None, font_name).
+    Chain: Arial/Liberation Sans (standard ATS fonts) -> DejaVu -> Helvetica.
     """
-    # 1. Check project-local fonts/
-    if DEJAVU_REGULAR_PATH.exists() and DEJAVU_BOLD_PATH.exists():
-        return str(DEJAVU_REGULAR_PATH), str(DEJAVU_BOLD_PATH), "DejaVu"
-
-    # 2. Check system paths
-    regular, bold = _find_system_paths()
+    # 1. Arial (Windows/macOS) or Liberation Sans (Linux) — standard ATS fonts
+    regular, bold, italic = _find_arial_paths()
     if regular and bold:
-        return str(regular), str(bold), "DejaVu"
+        return str(regular), str(bold), (str(italic) if italic else None), "Arial"
 
-    # 3. Download
-    if _download_fonts():
+    # 2. DejaVu (project fonts/, system paths, or downloaded)
+    if not (DEJAVU_REGULAR_PATH.exists() and DEJAVU_BOLD_PATH.exists()):
+        dejavu_reg, dejavu_bold = _find_system_paths()
+        if dejavu_reg and dejavu_bold:
+            DEJAVU_REGULAR_PATH_FOUND = (str(dejavu_reg), str(dejavu_bold))
+        else:
+            DEJAVU_REGULAR_PATH_FOUND = None
+    else:
+        DEJAVU_REGULAR_PATH_FOUND = (str(DEJAVU_REGULAR_PATH), str(DEJAVU_BOLD_PATH))
+
+    if DEJAVU_REGULAR_PATH_FOUND is None:
+        _download_fonts()
         if DEJAVU_REGULAR_PATH.exists() and DEJAVU_BOLD_PATH.exists():
-            return str(DEJAVU_REGULAR_PATH), str(DEJAVU_BOLD_PATH), "DejaVu"
+            DEJAVU_REGULAR_PATH_FOUND = (str(DEJAVU_REGULAR_PATH), str(DEJAVU_BOLD_PATH))
 
-    return None, None, "Helvetica"
+    if DEJAVU_REGULAR_PATH_FOUND:
+        reg, bold_p = DEJAVU_REGULAR_PATH_FOUND
+        return reg, bold_p, None, "DejaVu"
+
+    return None, None, None, "Helvetica"
 
 
 class UnicodePDF:
@@ -142,19 +223,22 @@ class UnicodePDF:
         self.pdf.set_auto_page_break(auto=True, margin=margin)
         self.pdf.add_page()
 
-        regular, bold, name = resolve_font_paths()
-        if name == "DejaVu":
+        regular, bold, italic, name = resolve_font_paths()
+        if name in ("Arial", "DejaVu"):
             try:
-                self.pdf.add_font("DejaVu", "", regular, uni=True)
-                self.pdf.add_font("DejaVu", "B", bold, uni=True)
-                self.pdf.add_font("DejaVu", "I", regular, uni=True) # Italic fallback to regular if needed
-                self.font_name = "DejaVu"
+                self.pdf.add_font(name, "", regular, uni=True)
+                self.pdf.add_font(name, "B", bold, uni=True)
+                if italic:
+                    self.pdf.add_font(name, "I", italic, uni=True)
+                else:
+                    self.pdf.add_font(name, "I", regular, uni=True)  # Italic fallback to regular if needed
+                self.font_name = name
             except Exception:
                 self.font_name = "Helvetica"
-                print("Warning: DejaVu font registration failed. Using Helvetica (ASCII only).")
+                print(f"Warning: {name} font registration failed. Using Helvetica (ASCII only).")
         else:
             self.font_name = "Helvetica"
-            print("Warning: DejaVu font not found. Using Helvetica (ASCII only).")
+            print("Warning: Unicode font not found. Using Helvetica (ASCII only).")
 
         self.set_normal(10)
         self.use_text_color(self.COLOR_TEXT)
@@ -185,6 +269,8 @@ class UnicodePDF:
             self.pdf.set_font(self.font_name, "", size)
 
     def _sanitize(self, txt: str) -> str:
+        if self.font_name == "Arial":
+            return _normalize_typographic(txt)
         if self.font_name == "Helvetica":
             return txt.encode("ascii", "ignore").decode("ascii")
         return txt

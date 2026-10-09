@@ -429,11 +429,18 @@
   /* Document-viewer scroll: short docs show fully, long docs scroll
      inside the pane so the whole resume/letter is reachable. */
   min-height: 200px;
-  max-height: min(560px, 62vh);
+  max-height: min(600px, 70vh);
   overflow-y: auto;
   scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: var(--border-active) transparent;
+}
+
+.mock-sheet {
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .doc-mock-preview::-webkit-scrollbar {
@@ -491,6 +498,18 @@
   color: var(--text-secondary);
   margin-left: 6px;
   line-height: 1.45;
+}
+
+/* Real generated resume (markdown preview) */
+.mock-exp-header {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 8px 0 2px;
+}
+
+.mock-bullets {
+  display: block;
 }
 
 .doc-download-bar {
