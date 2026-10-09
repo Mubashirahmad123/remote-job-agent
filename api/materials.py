@@ -44,17 +44,20 @@ def generate_resume(job_fingerprint: str) -> Dict[str, Any]:
     job = resolve_job(job_fingerprint)
     if job is None:
         raise LookupError(f"No job found for '{job_fingerprint}'")
-    pdf_path = generate_resume_for_job(job, skip_existing=False)
+    produced: Dict[str, Any] = {}
+    pdf_path = generate_resume_for_job(job, skip_existing=False, out=produced)
     if not pdf_path:
         raise RuntimeError("Resume generation returned no file")
     pdf_path = str(pdf_path)
-    _record(job_fingerprint, resume_pdf=pdf_path)
+    resume_markdown = (produced.get("resume_text") or "").strip()
+    _record(job_fingerprint, resume_pdf=pdf_path, resume_markdown=resume_markdown)
     return {
         "status": "ok",
         "job_fingerprint": (job.get("job_fingerprint") or "").strip(),
         "job_title": job.get("job_title", ""),
         "company": job.get("company", ""),
         "filename": Path(pdf_path).name,
+        "resume_markdown": resume_markdown,
     }
 
 
