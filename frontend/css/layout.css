@@ -312,11 +312,48 @@
   border-bottom-color: #e2e8f0;
 }
 
+/* --- Header region sizing --------------------------------------------------
+   The header is a three-region flex row, and two of the three regions used to
+   have NO rule at all while .quick-search-wrapper carried a fixed
+   `width: 420px`. That made the row's intrinsic minimum ~1350px. Since
+   .app-main is inset by the 256px fixed sidebar, the header only has
+   (viewport - 256px) to work with, so it overflowed below roughly a 1610px
+   viewport — i.e. on essentially every laptop. The buttons are
+   `white-space: nowrap`, so they cannot shrink to absorb it, and the LAST flex
+   item (#btnSignOut) was simply pushed past the right edge.
+
+   This contract is what keeps that from coming back:
+
+     .header-right  flex: 0 0 auto  — never squeezed (holds the session controls)
+     .header-center flex: 1 1 auto  — absorbs all shrinking (the search is the
+                                      only genuinely compressible region)
+     .header-left   flex: 0 1 auto  — shrinks, with an ellipsis on the title
+
+   Anything new added to .header-right has to respect it, or the sign-out
+   button leaves the viewport again. The tiers below then remove content in
+   order of how little it matters.
+   -------------------------------------------------------------------------- */
+.header-left {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0; /* without this the ellipsis below cannot engage */
+}
+
+.header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-width: 0; /* lets the search shrink instead of forcing an overflow */
+}
+
 .header-left .breadcrumb-container {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
+  min-width: 0;
 }
 
 .breadcrumb-root {
@@ -328,12 +365,22 @@
 .breadcrumb-current {
   color: #f1f5f9;
   font-weight: 600;
+  /* View titles vary in length ("Command Deck" vs "Auto-Apply Cockpit"), and a
+     long one used to widen .header-left and push the header controls out. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Quick Search */
 .quick-search-wrapper {
   position: relative;
-  width: 420px;
+  /* Was a fixed `width: 420px`, which set the header's minimum width and caused
+     the overflow. Now it takes the space .header-center offers it, up to the
+     same 420px, and gives it back when the row runs short. */
+  width: 100%;
+  max-width: 420px;
+  min-width: 0;
   display: flex;
   align-items: center;
 }
@@ -387,6 +434,10 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  /* Never squeezed: this is the region that holds the session controls, and
+     #btnSignOut is its last item, so it was the first thing off-screen when the
+     header overflowed. The search absorbs the shrink instead. */
+  flex: 0 0 auto;
 }
 
 /* Theme Toggle Button */
@@ -425,11 +476,96 @@
   display: block;
 }
 
+/* --- Header responsiveness -------------------------------------------------
+   These breakpoints sit higher than they look like they need to, because the
+   256px fixed sidebar is subtracted from the viewport before the header gets
+   any space: at a 1440px window the header only has ~1184px to work with.
+
+   Each tier drops the least important thing first, and #btnSignOut is dropped
+   last — never. The structural guarantee is the region contract above:
+   .header-right cannot shrink, .header-center shrinks to zero, .header-left
+   shrinks with an ellipsis. So the only remaining way to overflow is for
+   .header-right's own content to exceed the row, and these tiers cap it at
+   ~204px by the bottom.
+   -------------------------------------------------------------------------- */
+
+/* The ESC hint inside the search field is decorative. */
+@media (max-width: 1600px) {
+  .search-key-hint {
+    display: none;
+  }
+  .quick-search-input {
+    padding-right: 14px; /* was 46px, reserving room for the badge above */
+  }
+}
+
+/* Sync Sheets / Scrape Now go icon-only. Both keep title= and aria-label=, so
+   the action is still named for hover and for screen readers; only ~160px of
+   visible label disappears. */
+@media (max-width: 1480px) {
+  #btnSyncSheets span,
+  #btnScrapeNow span {
+    display: none;
+  }
+  #btnSyncSheets,
+  #btnScrapeNow {
+    width: 36px;
+    padding: 0;
+  }
+}
+
+/* The session chip keeps the avatar initials and drops the username, and the
+   search stops competing for width. */
+@media (max-width: 1320px) {
+  .session-chip .session-name {
+    display: none;
+  }
+  .session-chip {
+    padding: 0 4px;
+  }
+  .quick-search-wrapper {
+    max-width: 300px;
+  }
+}
+
+/* Hide the search outright. The Jobs view has its own filter, so this is the
+   least essential control in the header. */
+@media (max-width: 1120px) {
+  .header-center {
+    display: none;
+  }
+}
+
+/* Sign out goes icon-only — which is exactly why the markup now carries an icon
+   — and the breadcrumb drops its root, keeping only the current view. */
+@media (max-width: 900px) {
+  #btnSignOut span {
+    display: none;
+  }
+  #btnSignOut {
+    width: 30px;
+    padding: 0;
+  }
+  .breadcrumb-root,
+  .breadcrumb-sep {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
   .app-sidebar {
     display: none;
   }
   .app-main {
     margin-left: 0;
+  }
+  /* Tighten the header chrome now that the sidebar is gone: 28px a side is a
+     sixth of a 375px phone screen. */
+  .app-header {
+    padding: 0 14px;
+    gap: 10px;
+  }
+  .header-right {
+    gap: 8px;
   }
 }

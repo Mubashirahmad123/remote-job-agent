@@ -11,13 +11,39 @@
 
 	# Large scrape payloads and PDF downloads; give slow resume generation room.
 	reverse_proxy api:8000 {
+		# OVERWRITE the forwarded headers; do not let a client's own values
+		# through. Caddy's default behaviour is to APPEND the real client IP to
+		# an incoming X-Forwarded-For, which leaves an attacker-supplied value at
+		# the FRONT of the list — and uvicorn (under --proxy-headers) reads the
+		# front when it trusts the proxy. api.ratelimit keys the per-IP login
+		# budget on that value, so appending handed every client a fresh rate
+		# limit bucket per request. Setting the field here replaces it outright.
+		#
+		# This is the belt to docker-compose's braces: compose narrows
+		# --forwarded-allow-ips to the internal subnet so uvicorn walks the list
+		# from the right, and this guarantees the list only ever has one entry.
+		# Either alone closes the bypass; both means a future edit to one cannot
+		# reopen it. X-Forwarded-Proto is overwritten for the same reason — it
+		# feeds api.auth.cookie_secure()'s scheme check when
+		# SESSION_COOKIE_SECURE is unset.
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+
 		transport http {
 			read_timeout 300s
 			write_timeout 300s
 		}
 	}
 
-	# Basic hardening headers (the app has no session cookies to protect).
+	# Hardening headers. Cookie-related notes: the app DOES now use a session
+	# cookie (`rja_session`, HttpOnly/SameSite=Lax), so X-Frame-Options matters
+	# for clickjacking and HSTS matters for cookie confidentiality on the wire.
+	# The cookie's `Secure` flag is set by the app itself via
+	# SESSION_COOKIE_SECURE=true (docker-compose) because Caddy terminates TLS
+	# and the api container only ever sees plain HTTP.
+	# No Content-Security-Policy here either: the dashboard uses inline
+	# <script>/<style> blocks, so a strict CSP would break it until those are
+	# extracted into files.
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"

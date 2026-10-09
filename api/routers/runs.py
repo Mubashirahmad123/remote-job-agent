@@ -5,13 +5,16 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 
 from api import runs
-from api.deps import require_token
+from api.deps import action_budget, require_token
 
 router = APIRouter(tags=["runs"])
 
 
 @router.post("/api/scrape", status_code=202)
-def start_scrape(_: None = Depends(require_token)) -> dict:
+def start_scrape(
+    _: None = Depends(require_token),
+    __: None = Depends(action_budget("run")),
+) -> dict:
     try:
         return runs.start_scrape()
     except RuntimeError as e:

@@ -39,6 +39,11 @@ describe('asset integrity', () => {
   test('no script references a JobAgent global that is never assigned', async () => {
     const files = [
       'js/api.js', 'js/store.js', 'js/escape.js', 'js/app.js',
+      // js/auth.js assigns JobAgent.auth, which js/app.js calls. It was missing
+      // from this list when login shipped, so the suite reported "auth
+      // referenced but never defined" — a real failure, caused by adding a file
+      // here without adding it to the inventory this test scans.
+      'js/auth.js',
       'js/components/toast.js', 'js/components/navigation.js',
       'js/components/scrapeMonitor.js', 'js/components/dashboard.js',
       'js/components/jobDesk.js', 'js/components/jobDrawer.js',
@@ -249,5 +254,272 @@ describe('failure path — API unreachable', () => {
     const body = ctx.window.document.body.textContent;
     assert.ok(!/\b(147|24|1,?247)\b/.test(body),
       'legacy hardcoded demo figures must not reappear when live data is missing');
+  });
+});
+
+
+// --- login flow (real API with auth enforced) --------------------------------
+//
+// Everything above runs against an OPEN api (no users), which is how the suite
+// predates login. This block boots a second API with a real user in a throwaway
+// store, because the sign-in path is the one flow the dashboard cannot work
+// without and it had zero end-to-end coverage: grep for login/auth/cookie/401
+// across this file previously returned nothing.
+
+describe('login flow — auth enforced', () => {
+  let authed;
+
+  before(async () => { authed = await startApi({ port: 8741, auth: true }); }, { timeout: 60000 });
+  after(async () => { await stopApi(authed); });
+
+  test('the login page is reachable with no session', async () => {
+    const r = await fetch(`${authed.base}/login.html`);
+    assert.equal(r.status, 200);
+  });
+
+  test('the dashboard shell is NOT reachable with no session', async () => {
+    // Both entry points: the `GET /` gate and the StaticFiles path that used to
+    // bypass it by naming the file directly.
+    for (const path of ['/', '/index.html']) {
+      const r = await fetch(`${authed.base}${path}`, { redirect: 'manual' });
+      assert.equal(r.status, 302, `${path} should redirect to the login page`);
+      assert.match(r.headers.get('location') || '', /login\.html/);
+    }
+  });
+
+  test('/api/health is gated but /api/health/live is not', async () => {
+    assert.equal((await fetch(`${authed.base}/api/health`)).status, 401);
+    assert.equal((await fetch(`${authed.base}/api/health/live`)).status, 200);
+  });
+
+  test('a wrong password renders an error and keeps the visitor on the page', async () => {
+    const ctx = await loadDashboard(authed.base, { page: 'login.html' });
+    const doc = ctx.window.document;
+    doc.getElementById('loginUsername').value = authed.credentials.username;
+    doc.getElementById('loginPassword').value = 'definitely-not-the-password';
+    doc.getElementById('loginForm').dispatchEvent(
+      new ctx.window.Event('submit', { bubbles: true, cancelable: true }),
+    );
+
+    const err = await waitFor(() => {
+      const el = doc.getElementById('loginError');
+      return el && el.textContent.trim() ? el : null;
+    }, { label: 'login error message' });
+    assert.match(err.textContent, /Invalid username or password/i);
+    assert.equal(ctx.navigations.length, 0, 'must not navigate away on failure');
+    assert.ok(
+      ctx.requests.some((u) => u.endsWith('/api/auth/login')),
+      'the form must actually POST to /api/auth/login',
+    );
+    assert.equal(doc.getElementById('loginPassword').value, '', 'password field must be cleared');
+    assert.equal(doc.querySelector('button[type="submit"]').disabled, false, 'must re-enable to retry');
+    assert.deepEqual(ctx.errors, [], `same-origin script errors: ${ctx.errors.join('; ')}`);
+  });
+
+  test('correct credentials set the cookie and navigate to the dashboard', async () => {
+    const ctx = await loadDashboard(authed.base, { page: 'login.html' });
+    const doc = ctx.window.document;
+    doc.getElementById('loginUsername').value = authed.credentials.username;
+    doc.getElementById('loginPassword').value = authed.credentials.password;
+    doc.getElementById('loginForm').dispatchEvent(
+      new ctx.window.Event('submit', { bubbles: true, cancelable: true }),
+    );
+
+    await waitFor(() => (ctx.navigations.length ? ctx.navigations : null),
+      { label: 'post-login navigation' });
+    // The target URL is not observable (jsdom cannot navigate and location is
+    // non-configurable), so assert the attempt plus the call that caused it:
+    // login.html has exactly one navigation site, `replace('/')` after a 200.
+    assert.equal(ctx.navigations.length, 1, 'exactly one navigation on success');
+    assert.ok(ctx.requests.some((u) => u.endsWith('/api/auth/login')));
+    assert.equal(doc.getElementById('loginError').textContent.trim(), '',
+      'no error should be rendered on a successful sign-in');
+    assert.deepEqual(ctx.errors, [], `same-origin script errors: ${ctx.errors.join('; ')}`);
+  });
+
+  test('the session cookie the page receives is HttpOnly and SameSite=Lax', async () => {
+    const cookie = await authed.login();
+    assert.match(cookie, /^rja_session=/);
+    // Re-fetch through HTTP to inspect the flags the browser would have stored.
+    const r = await fetch(`${authed.base}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(authed.credentials),
+    });
+    const raw = (r.headers.getSetCookie?.() ?? []).join('\n').toLowerCase();
+    assert.match(raw, /httponly/);
+    assert.match(raw, /samesite=lax/);
+    assert.match(raw, /path=\//);
+  });
+
+  test('an authenticated dashboard reveals the session chip with the username', async () => {
+    const cookie = await authed.login();
+    const ctx = await loadDashboard(authed.base, { cookie });
+
+    const chip = await waitFor(() => {
+      const el = ctx.window.document.getElementById('sessionChip');
+      return el && !el.classList.contains('hidden') ? el : null;
+    }, { label: 'session chip' });
+    assert.equal(ctx.window.document.getElementById('sessionUsername').textContent,
+      authed.credentials.username);
+    assert.equal(ctx.window.document.getElementById('sessionInitial').textContent, 'E2');
+    assert.ok(chip, 'chip must be revealed for a real session');
+  });
+
+  test('sign-out invalidates the session server-side, not just locally', async () => {
+    const cookie = await authed.login();
+
+    // The cookie must work before logout...
+    assert.equal((await fetch(`${authed.base}/api/health`, { headers: { Cookie: cookie } })).status, 200);
+
+    const ctx = await loadDashboard(authed.base, { cookie });
+    await waitFor(() => {
+      const el = ctx.window.document.getElementById('sessionChip');
+      return el && !el.classList.contains('hidden') ? el : null;
+    }, { label: 'session chip before sign-out' });
+
+    ctx.window.document.getElementById('btnSignOut').click();
+    await waitFor(() => (ctx.navigations.length ? ctx.navigations : null),
+      { label: 'post-signout navigation' });
+    assert.ok(
+      ctx.requests.some((u) => u.endsWith('/api/auth/logout')),
+      'sign-out must call the server, not just drop the cookie locally',
+    );
+
+    // ...and must be dead afterwards. This is the assertion that distinguishes a
+    // real server-side revocation from clearing a cookie in the browser.
+    await waitFor(async () => {
+      const r = await fetch(`${authed.base}/api/health`, { headers: { Cookie: cookie } });
+      return r.status === 401 ? true : null;
+    }, { label: 'session invalidated server-side' });
+  });
+
+  test('an unauthenticated dashboard load is bounced to the login page', async () => {
+    const ctx = await loadDashboard(authed.base);  // no cookie
+    await waitFor(() => (ctx.navigations.length ? ctx.navigations : null),
+      { label: '401 redirect' });
+    // api.js sends every 401 to `baseUrl() + '/login.html'` via location.replace.
+    assert.ok(ctx.navigations.length >= 1, 'a 401 must bounce the page to the login screen');
+    assert.ok(
+      ctx.requests.some((u) => u.includes('/api/')),
+      'the dashboard must have attempted an authenticated API call first',
+    );
+  });
+
+  test('the login response reports the role so the UI can gate admin affordances', async () => {
+    const r = await fetch(`${authed.base}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(authed.credentials),
+    });
+    const body = await r.json();
+    assert.equal(body.authenticated, true);
+    assert.equal(body.username, authed.credentials.username);
+    assert.equal(body.role, 'admin', 'the first user on a fresh store bootstraps as admin');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Header layout contract.
+//
+// The sign-out button used to be pushed off-screen: .quick-search-wrapper had a
+// fixed `width: 420px`, .header-left and .header-center had no rule at all, and
+// .header-right declared no flex behaviour. The header row's intrinsic minimum
+// was therefore ~1350px, while .app-main only offers (viewport - the 256px
+// fixed sidebar) — so it overflowed below roughly a 1610px window, i.e. on
+// nearly every laptop. The buttons are `white-space: nowrap` and cannot shrink,
+// so the last flex item (#btnSignOut) was the casualty.
+//
+// jsdom does no layout, so overflow cannot be asserted directly. What CAN be
+// pinned is the contract that makes overflow impossible, which is what a future
+// edit would most plausibly break.
+// ---------------------------------------------------------------------------
+describe('header layout contract', () => {
+  const read = (rel) => readFileSync(resolve(REPO, 'frontend', rel), 'utf8');
+  const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  /** All declaration blocks for a selector, concatenated (media queries included). */
+  function declarations(css, selector) {
+    const clean = stripComments(css);
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, 'g');
+    const out = [];
+    let m;
+    while ((m = re.exec(clean)) !== null) out.push(m[1]);
+    return out.join('\n');
+  }
+
+  test('.header-right can never be squeezed', () => {
+    const d = declarations(read('css/layout.css'), '.header-right');
+    assert.match(
+      d,
+      /flex:\s*0 0 auto/,
+      '.header-right holds the session controls and must not shrink; without flex: 0 0 auto the row overflow pushes #btnSignOut off-screen',
+    );
+  });
+
+  test('.header-center absorbs the shrink instead', () => {
+    const d = declarations(read('css/layout.css'), '.header-center');
+    assert.match(d, /flex:\s*1 1 auto/, 'the search is the only compressible header region');
+    assert.match(d, /min-width:\s*0/, 'a flex child defaults to min-width: auto and refuses to shrink below its content');
+  });
+
+  test('.header-left shrinks to an ellipsis rather than widening the row', () => {
+    const css = read('css/layout.css');
+    assert.match(declarations(css, '.header-left'), /min-width:\s*0/);
+    const bc = declarations(css, '.breadcrumb-current');
+    assert.match(bc, /text-overflow:\s*ellipsis/);
+    assert.match(bc, /overflow:\s*hidden/);
+  });
+
+  test('the search wrapper has no fixed pixel width', () => {
+    const d = declarations(read('css/layout.css'), '.quick-search-wrapper');
+    assert.doesNotMatch(
+      d,
+      /(^|[^-])width:\s*\d+px/,
+      'a fixed px width here is exactly what set the header minimum and pushed #btnSignOut off-screen',
+    );
+    assert.match(d, /max-width:\s*420px/, 'keep the 420px cap, just not as a floor');
+    assert.match(d, /min-width:\s*0/);
+  });
+
+  test('#btnSignOut still has an icon and an accessible name at every tier', () => {
+    const html = read('index.html');
+    const btn = html.match(/<button[^>]*id="btnSignOut"[\s\S]*?<\/button>/);
+    assert.ok(btn, 'no #btnSignOut button in index.html');
+    assert.match(btn[0], /<svg/, 'the <=900px tier hides the label and shows the icon only; without an <svg> the button would render empty');
+    assert.match(btn[0], /<span>Sign out<\/span>/, 'the visible label must exist at wide tiers');
+    assert.match(btn[0], /aria-label="[^"]+"/, 'title= is not a reliable accessible name once the <span> is display:none');
+  });
+
+  test('every header button the tiers reduce is still named for assistive tech', () => {
+    const html = read('index.html');
+    for (const id of ['btnSyncSheets', 'btnScrapeNow', 'btnThemeToggle', 'btnSignOut']) {
+      const tag = html.match(new RegExp(`<button[^>]*id="${id}"[^>]*>`));
+      assert.ok(tag, `no #${id} in index.html`);
+      assert.match(tag[0], /aria-label="[^"]+"/, `#${id} loses its accessible name when a tier hides its label`);
+    }
+  });
+
+  test('#btnSignOut is the last item in .header-right', () => {
+    // Documented because it is the reason this button was the one that vanished:
+    // overflow ejects the LAST flex item first. Reordering the region changes
+    // which control gets sacrificed, so the order is part of the contract.
+    const html = read('index.html');
+    const region = html.match(/<div class="header-right">([\s\S]*?)<\/header>/);
+    assert.ok(region, 'no .header-right region before </header>');
+    const ids = [...region[1].matchAll(/id="(btn[A-Za-z]+|sessionChip)"/g)].map((m) => m[1]);
+    assert.ok(ids.length >= 4, `expected the full control set, found: ${ids.join(', ')}`);
+    assert.equal(ids[ids.length - 1], 'btnSignOut', `order is: ${ids.join(', ')}`);
+  });
+
+  test('the responsive ladder is present and descending', () => {
+    const css = stripComments(read('css/layout.css'));
+    const widths = [...css.matchAll(/@media \(max-width:\s*(\d+)px\)/g)].map((m) => Number(m[1]));
+    assert.ok(widths.length >= 6, `expected the graded ladder, found only: ${widths.join(', ')}`);
+    for (let i = 1; i < widths.length; i += 1) {
+      assert.ok(widths[i] < widths[i - 1], `breakpoints out of order: ${widths.join(', ')}`);
+    }
+    assert.ok(widths.includes(768), 'the sidebar-hiding 768px breakpoint must survive');
   });
 });

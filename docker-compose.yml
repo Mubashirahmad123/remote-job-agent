@@ -1,7 +1,18 @@
 services:
   # 24/7 background scheduler (Mondays & Thursdays at 9:00 AM)
   scheduler:
-    build: .
+    build:
+      context: .
+      args:
+        # The image now runs as an unprivileged user whose UID/GID must match the
+        # owner of the bind-mounted ./data, ./logs, ./resumes, ... on the host,
+        # or the container cannot write to its own volumes. deploy/setup-vm.sh
+        # derives both from `id -u "${SUDO_USER}"` and writes them into .env,
+        # which docker compose reads for this interpolation. The 1000:1000
+        # defaults keep a plain `docker compose build` correct on the standard
+        # Oracle Cloud Ubuntu image.
+        APP_UID: ${RJA_APP_UID:-1000}
+        APP_GID: ${RJA_APP_GID:-1000}
     container_name: job-agent-scheduler
     restart: unless-stopped
     command: ["python", "scheduler.py"]
@@ -28,7 +39,18 @@ services:
 
   # On-demand runner for CLI commands (e.g. simple scrape, apply, resume, tests)
   runner:
-    build: .
+    build:
+      context: .
+      args:
+        # The image now runs as an unprivileged user whose UID/GID must match the
+        # owner of the bind-mounted ./data, ./logs, ./resumes, ... on the host,
+        # or the container cannot write to its own volumes. deploy/setup-vm.sh
+        # derives both from `id -u "${SUDO_USER}"` and writes them into .env,
+        # which docker compose reads for this interpolation. The 1000:1000
+        # defaults keep a plain `docker compose build` correct on the standard
+        # Oracle Cloud Ubuntu image.
+        APP_UID: ${RJA_APP_UID:-1000}
+        APP_GID: ${RJA_APP_GID:-1000}
     container_name: job-agent-runner
     profiles: ["cli"]
     command: ["python", "main.py", "crewai"]
@@ -56,10 +78,68 @@ services:
   # Binds 0.0.0.0 inside the container; public traffic reaches it only through
   # Caddy. API_TOKEN must be set in .env or api/app.py refuses the non-local bind.
   api:
-    build: .
+    build:
+      context: .
+      args:
+        # The image now runs as an unprivileged user whose UID/GID must match the
+        # owner of the bind-mounted ./data, ./logs, ./resumes, ... on the host,
+        # or the container cannot write to its own volumes. deploy/setup-vm.sh
+        # derives both from `id -u "${SUDO_USER}"` and writes them into .env,
+        # which docker compose reads for this interpolation. The 1000:1000
+        # defaults keep a plain `docker compose build` correct on the standard
+        # Oracle Cloud Ubuntu image.
+        APP_UID: ${RJA_APP_UID:-1000}
+        APP_GID: ${RJA_APP_GID:-1000}
     container_name: job-agent-api
     restart: unless-stopped
-    command: ["python", "-m", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    command: [
+      "python", "-m", "uvicorn", "api.app:app",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      # MUST stay at 1: api/ratelimit.py is per-process, so N workers would
+      # give an attacker N x the login budget. Move the limiter to a shared
+      # store (Redis) before scaling this up.
+      "--workers", "1",
+      # Caddy terminates TLS and forwards X-Forwarded-{For,Proto}. Without
+      # these, request.client.host is always Caddy's container IP (so login
+      # rate limiting would key on one shared bucket for every user) and
+      # request.url.scheme is always http (so the session cookie's Secure flag
+      # would silently depend on SESSION_COOKIE_SECURE=true below).
+      #
+      # NEVER set this to "*". This used to be "*", on the reasoning that it was
+      # safe because the port is only published to 127.0.0.1 and the docker
+      # network. That reasoning was wrong, and it was exploitable from the
+      # public internet:
+      #
+      #   * uvicorn's ProxyHeadersMiddleware, when every host is trusted, takes
+      #     the LEFT-MOST X-Forwarded-For entry (verified against uvicorn 0.49:
+      #     `if self.always_trust: return _parse_host_port(hosts[0])`).
+      #   * Caddy APPENDS the real client IP to an incoming X-Forwarded-For
+      #     rather than replacing it.
+      #   So an attacker sent `X-Forwarded-For: <chosen>`, Caddy forwarded
+      #   `<chosen>, <real>`, and uvicorn believed `<chosen>`. api.ratelimit
+      #   keys its per-IP login budget on exactly that value.
+      #
+      #   Measured, with the compose flags as they were: 40 login attempts
+      #   across 40 usernames with a fresh spoofed IP each -> 0 x 429. The same
+      #   40 attempts without the header -> 429 at attempt 13. It also poisoned
+      #   the audit trail: 64 login_events rows carried 46 distinct client_ips
+      #   from one real source.
+      #
+      # The port binding never mattered — the forged header arrives *through*
+      # Caddy. Who can open a TCP connection is not who controls the header.
+      #
+      # Narrowing to the internal subnet makes uvicorn walk the list from the
+      # RIGHT and stop at the first non-internal address, which is the real
+      # client Caddy appended. Verified: with 172.28.0.0/16 trusted, the header
+      # "8.8.8.8, 203.0.113.7" resolves to 203.0.113.7.
+      # deploy/Caddyfile also overwrites X-Forwarded-For now, so both ends agree.
+      #
+      # RJA_INTERNAL_SUBNET must match the `networks.default` subnet at the
+      # bottom of this file — one variable drives both, so they cannot drift.
+      "--proxy-headers",
+      "--forwarded-allow-ips", "${RJA_INTERNAL_SUBNET:-172.28.0.0/16}",
+    ]
     env_file:
       - .env
     environment:
@@ -105,6 +185,17 @@ services:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+
+# Pin the internal subnet so `--forwarded-allow-ips` above can name it exactly.
+# Docker otherwise picks a subnet at random from 172.17-172.31, which cannot be
+# written into a static allow-list — and an allow-list you cannot state is an
+# allow-list that ends up as "*", which is the rate-limit bypass this fixes.
+# Services need no `networks:` key: they all stay on `default`.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${RJA_INTERNAL_SUBNET:-172.28.0.0/16}
 
 volumes:
   caddy_data:

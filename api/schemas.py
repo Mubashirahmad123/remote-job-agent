@@ -163,6 +163,12 @@ class TrackerEntry(BaseModel):
     match_reason: Optional[str] = None
     scraped_at: Optional[str] = None
     job_fingerprint: Optional[str] = None
+    # Who wrote this row (username, or "automation" for a service-token call).
+    # Optional and nullable: rows written before attribution existed — and rows
+    # on the sheet_writer APPLIED_COLUMNS fork, which has no such column — read
+    # back as None rather than a fabricated value. `to_tracker_entry` is
+    # model-field-driven, so this flows through with no mapper change.
+    created_by: Optional[str] = None
 
     @field_validator(*_TRACKER_TEXT_FIELDS, mode="before", check_fields=False)
     @classmethod
@@ -196,6 +202,30 @@ class TrackerCreate(BaseModel):
     def _normalize_text(cls, v: Any) -> Any:
         return _empty_to_none(v)
 
+    @field_validator("apply_url", mode="after")
+    @classmethod
+    def _apply_url_must_be_navigable(cls, v: str) -> str:
+        """Reject an apply_url the server must never aim a browser at.
+
+        `min_length=1` was the only check here, so `file:///etc/passwd` and
+        `javascript:alert(1)` both passed validation (confirmed by probe — they
+        failed later on an unrelated Sheets error). The auto-applier hands this
+        value to `page.goto()` in a container running as root with .env and
+        keys.json mounted, and api/apply.py serves a screenshot of whatever
+        rendered back to any authenticated caller.
+
+        `resolve=False` on purpose: this is the request path, and doing DNS per
+        request would add latency and hand the caller a DNS primitive. The
+        navigation sites re-check with resolve=True, which is where a public
+        hostname pointing at 169.254.169.254 gets caught.
+        """
+        from tools.url_guard import check_navigable_url
+
+        reason = check_navigable_url(v)
+        if reason:
+            raise ValueError(f"apply_url {reason}")
+        return v
+
 
 class TrackerUpdate(BaseModel):
     """PATCH /api/tracker/{fp} body. Status whitelist mirrors update_status()."""
@@ -211,10 +241,17 @@ class TrackerUpdate(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    """POST /api/auth/login body — username + password (never logged)."""
+    """POST /api/auth/login body — username + password (never logged).
 
-    username: str = Field(min_length=1)
-    password: str = Field(min_length=1)
+    The ceilings are resource controls, not just validation. `/api/auth/login`
+    is unauthenticated, so an unbounded `password` lets one small JSON body buy
+    a full Argon2id verify on arbitrary-length input. 128 characters is far
+    beyond any real passphrase; `api.auth.password_max_length()` enforces the
+    same bound for non-HTTP callers so the two can never disagree silently.
+    """
+
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=128)
 
 
 VALID_TRACKER_STATUSES = frozenset(

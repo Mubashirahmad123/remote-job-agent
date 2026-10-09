@@ -658,8 +658,14 @@ def _resolve_tracker_url(job_fingerprint: str) -> str:
     raise LookupError(f"No application or job found for '{key}'")
 
 
-def add_tracker_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
-    """Append one manual application to APPLIED and refresh tracker cache."""
+def add_tracker_entry(entry: Dict[str, Any], created_by: str = "") -> Dict[str, Any]:
+    """Append one manual application to APPLIED and refresh tracker cache.
+
+    `created_by` is the attributed actor (api.deps.require_actor). It is passed
+    through to the sheet as a best-effort 13th column — see
+    tools.application_tracker.mark_applied for why a failure there must never
+    block the application record itself.
+    """
     from tools.application_tracker import mark_applied
     from tools.sheet_writer import get_sheet
 
@@ -670,6 +676,7 @@ def add_tracker_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
     created = mark_applied(
         spreadsheet,
         apply_url=apply_url,
+        created_by=created_by,
         job_title=entry.get("job_title") or "",
         company=entry.get("company") or "",
         match_score=int(float(entry.get("match_score") or 0)),

@@ -31,7 +31,7 @@ starts a background scrape run in a daemon thread inside the API process
 | Layer | Location | Role | State |
 |---|---|---|---|
 | Scraping | `agents/scrapper.py`, `tools/*scraper*.py` | 45+ boards → raw jobs (per-board `SCRAPER_TIMEOUT`; JobSpy opt-in via `ENABLE_JOBSPY` in isolated child process) | stateless per run |
-| Curation | `agents/curator.py`, `tools/cv_*.py`, `tools/deduplicator.py` | dedup (MD5 `job_fingerprint`), keyword + optional FAISS scoring, rank | `seen_jobs.json`, `cv_embeddings.pkl` |
+| Curation | `agents/curator.py`, `tools/cv_*.py`, `tools/deduplicator.py` | dedup (MD5 `job_fingerprint`), keyword + optional FAISS scoring, rank | `seen_jobs.json`, `cv_embeddings.json` |
 | Persistence | Google Sheets via `tools/sheet_writer.py` | 5 tabs: ALL JOBS, TOP MATCHES, GOOD MATCHES, APPLIED, STATS | the Sheet |
 | Read API | `api/` | TTL cache over Sheets + `curated_jobs.json` enrichment left-join; action routers (scrape runs, tailored materials, CV profile edits) | in-process cache (90s) |
 | Dashboard | `frontend/` | bento metrics, job desk, drawer, resume studio, fill-only review-package cockpit, kanban | browser + `localStorage` (token/base URL) |
@@ -81,7 +81,33 @@ starts a background scrape run in a daemon thread inside the API process
    stored and reported as `needs_review`, never `filled_ready`. The legacy
    CLI blind submit is permanently removed. See `README.md` and `PM.md`.
 
-7. **Auth precedence & actor attribution (Scenario A)** — Human session → attributed by `username`; service token (`APPLY_API_TOKEN`) → attributed as `"automation"`. If both present, **session wins** (explicit rule, not accidental). No ambiguous middle case. All action records (claims, intents, artifacts, tracker entries) carry an `actor`/`created_by` field populated at write time. See `BACKEND.md` §4 and `PM.md` §5.
+7. **Auth precedence & actor attribution (Scenario A)** — Implemented in
+   `api/deps.py` (`resolve_actor` / `require_actor` / `require_submit_actor`).
+   Human session → attributed by `username`; service token (`APPLY_API_TOKEN`) →
+   attributed as `"automation"`; open-access mode with no credentials at all →
+   `"local-dev"`, resolved **last** so it can never mask a real identity. If both
+   a session and a token are present, **session wins** — an explicit rule, not an
+   accidental ordering, and it governs *authorization* as well as attribution.
+   All action records carry an actor populated at write time: `actor TEXT` on
+   `apply_claims`, `apply_intents` and `apply_review_artifacts` (added by
+   in-place `ALTER`, so existing apply history survives the upgrade), plus
+   `created_by` as column 13 of the Sheets APPLIED tab. HTTP routes always pass
+   the actor explicitly; only the CLI/scheduler rely on the `"automation"`
+   service-layer default. Users carry a `role` (`admin`/`operator`); the first
+   user created is admin and later ones default to operator, so a bootstrapping
+   mistake cannot lock the only operator out of the admin-only submit path.
+   `GET /api/activity` exposes the merged feed (login events in it are
+   admin-only, because they carry client IPs).
+
+   Two limits worth stating plainly. **Attribution is forensics, not
+   enforcement:** `daily_apply_caps` is keyed on `cap_date` alone, so the apply
+   budget is one *global* pool shared by every operator (and the browser keeps a
+   second, per-device cap in `localStorage`), so per-operator caps are Scenario B
+   work. And **Sheets status changes are not attributed** — the APPLIED tab keeps
+   no change history, so "who moved this row to rejected, when" is unrecoverable;
+   `created_by` records who added the row and nothing more.
+
+   See `BACKEND.md` §4 and `PM.md` §5.
 
 ## 4b. Planned — Phase 2.1 (design intent, not yet built)
 

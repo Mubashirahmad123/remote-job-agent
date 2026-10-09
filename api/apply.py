@@ -35,6 +35,8 @@ import sqlite3
 import time
 from urllib.parse import urlparse
 
+from api.deps import AUTOMATION_ACTOR
+
 
 class DreamTierForbidden(Exception):
     """Raised when a fill is requested for a dream-tier job (422)."""
@@ -144,8 +146,14 @@ def _fill_ats_form(
     return results.get_nowait()
 
 
-def fill_review(job_fingerprint: str) -> Dict[str, Any]:
-    """Build a review package and fill supported ATS fields, never submit."""
+def fill_review(job_fingerprint: str, actor: str = AUTOMATION_ACTOR) -> Dict[str, Any]:
+    """Build a review package and fill supported ATS fields, never submit.
+
+    `actor` defaults to "automation" because the only non-HTTP caller is the
+    CLI/scheduler. HTTP routes MUST pass the resolved actor explicitly
+    (api.deps.require_actor) — see tests/test_api_actor_attribution.py, which
+    fails if a route stops threading it.
+    """
     from api import cache
 
     job = cache.get_job(job_fingerprint)
@@ -223,6 +231,7 @@ def fill_review(job_fingerprint: str) -> Dict[str, Any]:
             "cover_letter_text": review_cover,
             "field_verification": field_verification,
             "profile_fields_verified": profile_fields_verified,
+            "actor": actor,
         })
 
     fill_error = (fill_result.get("error") if fill_result else None) or needs_review_reason
@@ -318,7 +327,9 @@ def _prepare_submit_materials(job: Dict[str, Any]) -> Dict[str, str]:
     return {"resume_path": str(resume_path), "cover_letter_text": cover_text}
 
 
-def create_greenhouse_intent(job_fingerprint: str) -> Dict[str, str]:
+def create_greenhouse_intent(
+    job_fingerprint: str, actor: str = AUTOMATION_ACTOR
+) -> Dict[str, str]:
     """Issue a five-minute one-use intent for the REVIEWED materials.
 
     Immutability invariant: the intent NEVER regenerates materials and NEVER
@@ -371,7 +382,9 @@ def create_greenhouse_intent(job_fingerprint: str) -> Dict[str, str]:
 
         token = secrets.token_urlsafe(32)
         try:
-            result = create_intent(connection, job_fingerprint, token, expires_at, now)
+            result = create_intent(
+                connection, job_fingerprint, token, expires_at, now, actor=actor
+            )
         except ActiveIntentConflict as error:
             raise SubmitRejected(409, "An unexpired intent already exists", error.retry_after)
     finally:
@@ -635,6 +648,7 @@ def submit_greenhouse(
     body_fingerprint: str | None,
     intent_token: str | None,
     typed_title: str | None,
+    actor: str = AUTOMATION_ACTOR,
 ) -> Dict[str, Any]:
     """Validate the request, claim/cap atomically, then submit Greenhouse only."""
     from api import safety
@@ -739,6 +753,7 @@ def submit_greenhouse(
                 daily_cap=auto_applier.AUTO_APPLY_DAILY_CAP,
                 intent_hash=token_hash,
                 intent_token_hash=token_hash,
+                actor=actor,
             )
         except ClaimConflict as error:
             raise SubmitRejected(409, "A submit claim already exists", error.retry_after)

@@ -8,10 +8,12 @@ import time
 import random
 from bs4 import BeautifulSoup
 import html as _html
-import urllib3
-
-# Suppress SSL warnings
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# NOTE: this file used to call urllib3.disable_warnings(InsecureRequestWarning)
+# so the insecure requests below would not complain. The warning is the only
+# signal that verification was skipped, so suppressing it made the downgrade
+# invisible in every log. Nothing here disables verification any more, and the
+# suppression stays removed on purpose: if a future change reintroduces an
+# unverified request, it should be loud.
 
 
 # ---- feedparser for RSS ----
@@ -298,8 +300,7 @@ MASTER_BOARDS = {
     },
     "TimesJobs": {
         "url": "https://www.timesjobs.com/jobsearch/result.html?txtKeywords=developer&txtLocation=remote",
-        "type": "html",
-        "verify_ssl": False
+        "type": "html"
     },
     "WorkInStartups": {
         "url": "https://www.workinstartups.com/job-board",
@@ -346,7 +347,7 @@ ADDITIONAL_BOARDS = {
     "GoRemote": {"url": "https://www.workingnomads.co/jobs?tag=developer", "type": "html"},
     "RemoteFrontendJobs": {"url": "https://reactjobs.io/jobs/front-end/remote", "type": "html"},
     "FounditIN": {"url": "https://www.naukri.com/remote-developer-jobs", "type": "html"},
-    "NaukriGulf": {"url": "https://www.naukrigulf.com/remote-jobs", "type": "html", "verify_ssl": False},
+    "NaukriGulf": {"url": "https://www.naukrigulf.com/remote-jobs", "type": "html"},
 }
 MASTER_BOARDS.update(ADDITIONAL_BOARDS)
 
@@ -751,7 +752,12 @@ _SESSION.headers.update(HEADERS)
 
 # Boards that need special handling
 BOT_PROTECTED_BOARDS = {"FlexJobs", "EU Remote Jobs", "TrueUp", "RemoteRocketship", "GulfTalent", "WorkInStartups", "Dice", "Naukri", "CWJobs", "Shine", "NoFluffJobs", "LandingJobs", "WeAreDevelopers", "DailyRemote", "BuiltIn", "RemoteJobsCom", "JustJoinIt"}
-SSL_ISSUE_BOARDS = {"TimesJobs", "NaukriGulf"}
+# SSL_ISSUE_BOARDS was removed. It listed boards whose TLS certificate did not
+# validate, and fetch_with_retry used to turn verification OFF for them. That
+# trades a broken board for a man-in-the-middle hole, and the two boards it
+# covered (TimesJobs, NaukriGulf) are now scraped with verification on like
+# every other board: if their chain does not validate, they are skipped and the
+# reason is logged. See fetch_with_retry's SSLError handler.
 # Boards that render via JS — plain requests returns a shell page, so the main
 # loop skips them and the PlaywrightStealth pass below handles them instead.
 # Nothing is dropped: every board is still attempted, just through the right path.
@@ -765,19 +771,19 @@ SSL_ISSUE_BOARDS = {"TimesJobs", "NaukriGulf"}
 JS_RENDERED_BOARDS = {"YCombinator", "Wellfound", "NoDesk", "GulfTalent", "NoFluffJobs", "JustJoinIt"}
 
 
-def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, verify_ssl=True, board_name=""):
+def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, board_name=""):
     """
-    Fetch URL with retry logic, random delays, SSL fallback, and bot protection bypass.
+    Fetch URL with retry logic, random delays, and bot protection bypass.
+
+    Certificate verification is always on and is not a parameter. There used to
+    be a `verify_ssl` argument plus two ways for it to be turned off (a
+    per-board allow-list, and an automatic downgrade on the first TLS error);
+    see the SSLError handler below for why both are gone.
     """
     is_bot_protected = board_name in BOT_PROTECTED_BOARDS
-    is_ssl_issue = board_name in SSL_ISSUE_BOARDS
 
     # Longer delays for bot-protected sites
     base_delay = random.uniform(3, 6) if is_bot_protected else random.uniform(1, 3)
-
-    # Start with SSL verification off for known SSL issue sites
-    if is_ssl_issue and verify_ssl:
-        verify_ssl = False
 
     for attempt in range(max_retries):
         try:
@@ -788,10 +794,12 @@ def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, verify_ssl=Tr
                 headers = HEADERS_POOL[attempt % len(HEADERS_POOL)]
 
             response = _SESSION.get(
-                url, 
-                headers=headers or HEADERS, 
-                timeout=timeout, 
-                verify=verify_ssl,
+                url,
+                headers=headers or HEADERS,
+                timeout=timeout,
+                # No `verify=` argument on purpose: requests defaults to True,
+                # and spelling it out would reintroduce a value that could be
+                # set to False by a caller or by a future edit to this function.
                 allow_redirects=True
             )
 
@@ -811,14 +819,29 @@ def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, verify_ssl=Tr
             return response
 
         except requests.exceptions.SSLError as e:
-            print(f"  SSL error on attempt {attempt + 1}: {e}")
-            if attempt == 0:
-                print(f"  -> Retrying with SSL verification disabled...")
-                verify_ssl = False
-                continue
+            # Verification is not negotiable. This handler used to set
+            # verify=False and retry, which meant an on-path attacker only had
+            # to cause ONE TLS failure and could then serve arbitrary job
+            # content over an unauthenticated connection. That content includes
+            # apply_url, which the auto-applier hands to a real browser, and it
+            # is also pasted into the LLM prompts that generate resumes and
+            # cover letters. Observed firing live against jobspresso.co,
+            # arc.dev, lemon.io, euremotejobs.com and workingnomads.co.
+            #
+            # Retries stay (transient TLS resets are real), but they retry with
+            # verification ON. A board whose certificate does not validate is a
+            # board we do not scrape.
+            print(f"  TLS error on attempt {attempt + 1}: {e}")
             if attempt < max_retries - 1:
                 time.sleep(random.uniform(2, 5))
                 continue
+            print(
+                f"  !! Skipping {board_name or url}: its TLS certificate did not "
+                f"validate after {max_retries} attempts. Verification is never "
+                f"disabled. If this board's chain is genuinely incomplete, point "
+                f"REQUESTS_CA_BUNDLE at a bundle containing the missing "
+                f"intermediate (that still verifies) or drop the board."
+            )
             return None
 
         except requests.exceptions.Timeout:
@@ -2048,7 +2071,6 @@ def parse_html_justjoinit(html, board="JustJoinIt", base_url="https://justjoin.i
 def fetch_jobs_from_board(name, info, debug=False):
     url = info['url']
     typ = info['type']
-    verify_ssl = info.get('verify_ssl', True)
 
     try:
         if typ == "api":
@@ -2063,7 +2085,7 @@ def fetch_jobs_from_board(name, info, debug=False):
                     f"{url}?app_id={app_id}&app_key={app_key}"
                     "&what=developer+remote&results_per_page=50&content-type=application/json"
                 )
-            response = fetch_with_retry(url, timeout=30, board_name=name, verify_ssl=verify_ssl)
+            response = fetch_with_retry(url, timeout=30, board_name=name)
             if response is None:
                 return []
             data = response.json()
@@ -2108,7 +2130,7 @@ def fetch_jobs_from_board(name, info, debug=False):
                 rss = fetch_authentic_jobs_rss()
                 if rss:
                     return rss
-            response = fetch_with_retry(url, timeout=40, board_name=name, verify_ssl=verify_ssl)
+            response = fetch_with_retry(url, timeout=40, board_name=name)
             if response is None:
                 return []
             html = response.text
@@ -2133,7 +2155,7 @@ def fetch_jobs_from_board(name, info, debug=False):
                 combined, seen_urls = [], set()
                 for role_url in LEMON_ROLE_PAGES:
                     try:
-                        r = fetch_with_retry(role_url, timeout=40, board_name=name, verify_ssl=verify_ssl)
+                        r = fetch_with_retry(role_url, timeout=40, board_name=name)
                         if r is None:
                             continue
                         for job in parse_html_lemon(r.text, role_url, name):

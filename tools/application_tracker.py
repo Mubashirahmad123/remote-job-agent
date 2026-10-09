@@ -3,19 +3,59 @@ import json
 from datetime import datetime
 from typing import Optional
 
+APPLIED_HEADERS = [
+    "job_title", "company", "apply_url", "match_score",
+    "applied_date", "status", "follow_up_date", "notes",
+    "source", "salary", "contact", "last_updated",
+    # 13th column: who wrote the row (username, or "automation"). Appended last
+    # so every pre-existing positional reader of columns A-L is unaffected.
+    "created_by",
+]
+
+CREATED_BY_COL = len(APPLIED_HEADERS)  # 1-indexed position of `created_by`
+
+
 def get_applied_sheet(sheets_client):
     """Get or create the APPLIED tab in Google Sheets."""
     try:
         return sheets_client.worksheet("APPLIED")
     except Exception:
-        sheet = sheets_client.add_worksheet(title="APPLIED", rows=1000, cols=12)
-        headers = [
-            "job_title", "company", "apply_url", "match_score",
-            "applied_date", "status", "follow_up_date", "notes",
-            "source", "salary", "contact", "last_updated"
-        ]
-        sheet.append_row(headers)
+        sheet = sheets_client.add_worksheet(
+            title="APPLIED", rows=1000, cols=len(APPLIED_HEADERS)
+        )
+        sheet.append_row(list(APPLIED_HEADERS))
         return sheet
+
+
+def _ensure_created_by_header(sheet) -> bool:
+    """Make sure row 1 has a `created_by` header before writing into that column.
+
+    Returns True when the column is safe to write. Every failure mode returns
+    False rather than raising: this is a live user spreadsheet, and losing the
+    attribution is strictly better than failing to record an application.
+
+    An existing APPLIED tab predates the column, so the header cell is written
+    only when it is genuinely empty — never overwriting a column the user may
+    already be using for something else.
+    """
+    try:
+        rows = sheet.get_all_values()
+    except Exception:
+        return False
+    if not rows:
+        return False
+    header = rows[0]
+    existing = [str(h).strip().lower() for h in header]
+    if "created_by" in existing:
+        return True
+    if len(header) >= CREATED_BY_COL:
+        # Something else already occupies that column — do not clobber it.
+        return False
+    try:
+        sheet.update_cell(1, CREATED_BY_COL, "created_by")
+        return True
+    except Exception:
+        return False
 
 
 def mark_applied(
@@ -29,10 +69,16 @@ def mark_applied(
     salary: str = "",
     contact: str = "",
     follow_up_days: int = 7,
+    created_by: str = "",
 ) -> dict:
     """
     Mark a job as applied. Adds a row to the APPLIED sheet.
     Returns the entry dict.
+
+    `created_by` is the attributed actor. It is written as the 13th column when
+    the header can be secured, and silently omitted otherwise — a spreadsheet
+    whose layout this code cannot safely extend must still get the application
+    row. Attribution is best-effort by design; the record is not.
     """
     sheet = get_applied_sheet(sheets_client)
 
@@ -56,6 +102,11 @@ def mark_applied(
         contact,
         now.strftime("%Y-%m-%d %H:%M"),
     ]
+    actor = (created_by or "").strip()
+    # Only extend the row when the header is actually in place; appending a 13th
+    # value under an unheaded column would be worse than not writing it.
+    if actor and _ensure_created_by_header(sheet):
+        entry.append(actor)
     sheet.append_row(entry)
     return {
         "job_title": job_title,
@@ -64,6 +115,9 @@ def mark_applied(
         "applied_date": entry[4],
         "follow_up_date": follow_up_date,
         "status": "applied",
+        # Echoed only when it was really written, so a caller cannot render an
+        # attribution the sheet does not hold.
+        **({"created_by": actor} if len(entry) > 12 else {}),
     }
 
 

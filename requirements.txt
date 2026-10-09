@@ -1,13 +1,33 @@
 # Core
-requests==2.32.3
+# 2.33.0, not 2.32.3: the older pin carried two published advisories
+# (PYSEC-2026-1872, fixed in 2.32.4; PYSEC-2026-2275, fixed in 2.33.0).
+# `requests` makes every outbound call this app does, so it is the one
+# dependency where an advisory is worth a same-day bump. Verified compatible
+# with everything that constrains it here: crawl4ai `~=2.26`, python-jobspy
+# `>=2.31,<3`, google-genai `>=2.28.1,<3`, and its own tightened floor
+# `urllib3>=1.26` against the locked urllib3 2.8.0.
+requests==2.33.0
 beautifulsoup4==4.12.3
 python-dotenv==1.2.2
 feedparser==6.0.11
 
 # AI / CrewAI
 crewai==1.14.7
-google-genai>=1.0.0
-zhipuai>=2.1.0  # required for the GLM fallback step (Fallback 3)
+# Bounded above: an unbounded `>=1.0.0` means the next major release is
+# allowed to break `docker build` with no change on our side. The lock holds
+# 1.55.0; raise the ceiling deliberately, after a test run, not implicitly.
+google-genai>=1.0.0,<2
+# `zhipuai` used to live here for the GLM fallback (Fallback 3). It was REMOVED
+# deliberately, not by accident: it pins pyjwt>=2.8.0,<2.9.0 while crewai pins
+# pyjwt>=2.13.0,<3, so the two can never be installed together. The result was
+# `pip install -r requirements.txt` -> ResolutionImpossible and `docker build`
+# failing at Dockerfile:25 (the error is quoted in CHANGELOG.md, 2026-10-08). Every
+# zhipuai 2.1.x release has the same pin and the last one shipped 2025-08-25,
+# so waiting for upstream is not a fix. GLM is now reached over its
+# OpenAI-compatible HTTP endpoint by tools/glm_client.py using `requests`,
+# which is already a dependency and already how the Groq and Mistral rungs work.
+# Do NOT add zhipuai back without dropping crewai, or the image stops building.
+
 # Job scraping
 python-jobspy==1.1.4
 playwright==1.47.0
@@ -42,8 +62,11 @@ openpyxl==3.1.5
 apscheduler==3.10.4
 schedule==1.2.0
 
-#Test
-pytest
+# Test
+# Bounded, and not left bare: an unpinned pytest resolves to whatever is
+# newest at build time, so a pytest major with a breaking plugin API turns CI
+# red on an unrelated commit. The lock holds 9.1.1.
+pytest>=9,<10
 
 # API (Phase 1 reads)
 fastapi==0.141.1

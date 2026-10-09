@@ -31,10 +31,16 @@ data/
 
 # Optional semantic embeddings
 *.pkl
+# The CV embedding cache, both formats. This is derived from my_cv.pdf, so it
+# carries the same personal data and must never be committed. The .pkl line stays
+# because an operator upgrading from before the JSON switch still has one, and it
+# would otherwise show up as a new untracked file.
+cv_embeddings.json
 cv_embeddings.pkl
 
 # Python
 venv/
+.venv/
 .env/
 __pycache__/
 *.pyc

@@ -126,7 +126,24 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
 | `API_PORT` | `8000` | — |
 | `API_TOKEN` | empty | **Server-side only.** When set, non-local binds are allowed and `Authorization: Bearer <API_TOKEN>` authorizes server-to-server `/api/*` calls (scheduler/CI). Browser users log in with username/password (HttpOnly session cookie). Never exposed to the browser. |
 | `APPLY_API_TOKEN` | empty | Dedicated elevated token for `POST /api/apply/{fp}/intent` + `/submit` + tracker reconcile. These routes accept EITHER a valid dashboard login session (human-in-the-loop) OR `Bearer <APPLY_API_TOKEN>` (server-to-server). The general `API_TOKEN` is never accepted on them. Set before any submit unlock; unset fails closed with 401. |
-| `API_CORS_ORIGINS` | localhost:3000/5173/8000/8080 | Comma-separated override; `file://` (`null` origin) is never allowed — serve the UI from the API |
+| `API_CORS_ORIGINS` | localhost:3000/5173/8000/8080 | Comma-separated override of exact `scheme://host[:port]` origins. Entries are **filtered, not trusted**: `*`, the `null` origin (`file://` — serve the UI from the API), non-http(s) schemes and anything with a path or trailing slash are dropped at startup with a warning, and the defaults apply if nothing usable remains. The filter exists because `allow_credentials=True` (auth is a cookie) and Starlette does *not* reject `*` in that mode — it reflects the caller's Origin, which was confirmed live to let `https://evil.example` read `/api/jobs` with the operator's cookie |
+| `APPLY_STATE_DB_PATH` | `data/apply_submit.db` | Apply-state database: claims, intents, review artifacts, **login audit events**, and — unless `AUTH_DB_PATH` is set — the `users`/`sessions` tables. This one file is the entire durable state of the deployment; see §6 for backup |
+| `AUTH_DB_PATH` | `APPLY_STATE_DB_PATH` → `data/apply_submit.db` | Optional dedicated SQLite file for the `users`/`sessions` tables. Default reuses the apply-state DB — no new infrastructure. **Left empty, your Argon2id password hashes live inside `data/apply_submit.db`** |
+| `CSP_MODE` | `enforce` | `enforce` \| `report-only` \| `off`. The Content-Security-Policy served on every response. `script-src 'self'` with **no** `'unsafe-inline'`, so an injected inline payload cannot execute; `connect-src 'self'` blocks exfiltration, which is the whole point of an XSS; `img-src 'self' data: blob:` blocks `<img>` beacons, which need no script at all. Use `report-only` to check it against a real browser first (jsdom does not enforce CSP, so the test suite cannot catch a broken resource load). An unrecognised value enforces and warns. `style-src` still allows `'unsafe-inline'` for 43 markup `style="..."` attributes — CSS cannot execute, and its `background:url()` exfil channel is closed by `img-src` |
+| `SESSION_TTL_HOURS` | `168` | **Absolute** session lifetime (7 days), clamped to 1–2160. A session dies this long after it was minted however actively it is used |
+| `SESSION_IDLE_TIMEOUT_HOURS` | `24` | **Sliding** idle ceiling, clamped to 1–`SESSION_TTL_HOURS`. A session dies this long after its *last request* even with TTL left, so a cookie copied from a backup or a shared machine does not stay valid for a week. `0` clamps to 1 hour — it does not mean unlimited; set it equal to `SESSION_TTL_HOURS` for absolute-only. Bounds steal-now-use-later, not an attacker who keeps using the cookie |
+| `MAX_SESSIONS_PER_USER` | `10` | Live sessions per user, clamped to 1–1000. Exceeding it evicts the **oldest** session rather than refusing the newest, so phone + laptop + desktop never locks an operator out. Without a cap a stolen password could mint unlimited 7-day sessions invisibly |
+| `SESSION_COOKIE_SECURE` | empty = auto | Empty sets `Secure` only when the request arrives as https. **Set `true` behind a TLS-terminating proxy** (docker-compose does) — the API container only ever sees plain HTTP from Caddy |
+| `LOGIN_RATE_LIMIT` | `12` | Brute-force budget per client IP per window. Exceeding it → `429` + `Retry-After`, checked before any Argon2 work |
+| `LOGIN_USER_RATE_LIMIT` | `6` | Brute-force budget per username per window. Cleared on a successful login; the per-IP budget is not |
+| `LOGIN_RATE_WINDOW` | `600` | Sliding window in seconds, shared by both budgets |
+| `ACTION_RATE_LIMIT` | `60` | Per-job actions per window **per operator**: `POST /api/resume/{fp}`, `/api/cover-letter/{fp}`, `/api/apply/{fp}` and its `/intent` + `/submit`. Each one runs an LLM call or a headless browser. Exceeding it → `429` + `Retry-After` |
+| `ACTION_RATE_WINDOW` | `600` | Sliding window in seconds for the action budget |
+| `RUN_RATE_LIMIT` | `6` | Whole-pipeline triggers per window **per operator**: `POST /api/scrape` (~47 boards plus a browser) and `POST /api/jobs/refresh`. Stricter than the action budget by an order of magnitude because a single trigger costs that much more |
+| `RUN_RATE_WINDOW` | `600` | Sliding window in seconds for the run budget |
+| `PASSWORD_MAX_LENGTH` | `128` | Resource control, not just validation — `/api/auth/login` is unauthenticated, so an unbounded field buys a full Argon2id verify on arbitrary-length input |
+| `TRUST_PROXY_HEADERS` | empty | Honour `X-Forwarded-For` for rate-limit keying. Leave empty when uvicorn runs with `--proxy-headers` (it already rewrites the client IP); trusting a client-supplied header would let an attacker mint a fresh bucket per request |
+| `API_DOCS_ENABLED` | empty | Publish `/docs` + `/openapi.json` with no session. Default **gated**: anonymous → 401, logged-in browser → Swagger. Only enable on a trusted network |
 | `API_CACHE_TTL` | `90` | Seconds, clamped to 60–120 |
 | `SITE_ADDRESS` | `:80` | Caddy site address (compose `caddy` service). A real hostname — free: DuckDNS — enables automatic Let's Encrypt HTTPS + HTTP→HTTPS redirect; bare IP stays plain HTTP |
 | `CV_PATH` | `my_cv.pdf` | Primary CV (matching fallback, profile-cache anchor) |
@@ -136,6 +153,7 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
 | `AUTO_APPLY_THRESHOLD` | `75` | Minimum match score for the auto-apply queue |
 | `TIER_BATCH_MAX` | `75` | Auto-apply tier bound (`agents/auto_applier.py`): score ≤ this → batch tier, up to `TIER_DREAM_THRESHOLD` → mid tier |
 | `TIER_DREAM_THRESHOLD` | `90` | Score ≥ this → dream tier — manual review only (dashboard apply returns 422) |
+| `GLM_BASE_URL` | `https://open.bigmodel.cn/api/paas/v4` | Zhipu GLM endpoint base for LLM fallback rung 3 (`tools/glm_client.py`). Override only behind a proxy or for a regional endpoint. GLM is called over plain HTTP like the Groq/Mistral rungs — **there is no `zhipuai` SDK dependency**, and re-adding one breaks the build (see `requirements.txt`) |
 
 ---
 
@@ -149,6 +167,34 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
   plain HTTP.
 - Health endpoint leaks nothing: `sheets_configured` / `curated_jobs_loaded`
   are presence-only signals (covered by `tests/test_api_phase1.py`).
+- `GET /api/health/live` is the **only** API route reachable without
+  credentials besides the login trio. It returns exactly `{"status":"ok"}` and
+  is excluded from the OpenAPI schema, so orchestrator probes work while
+  build/config/state stay behind the login.
+- Dependencies are pinned with an upper bound and scanned for known
+  vulnerabilities on every push (`dependency-audit` CI job,
+  `deploy/dependency_audit.py`). It fails on findings **new** since
+  `deploy/audit-baseline.txt` was recorded, not on the 48 that were already
+  there — clearing those is a porting project (`crawl4ai` fixes start five
+  minors on, `pillow` two majors on, `chromadb` has no fix published), and a job
+  red from day one gets switched off. On a new finding: upgrade past it, or add
+  the line to the baseline and own the decision. Caveat: the `Dockerfile`
+  installs `requirements.txt`, not the lock, so transitive versions can drift
+  between builds and the audit checks the best available record of what ships.
+- Login does not reveal which usernames exist. Both failures return the same
+  401 body, both are audited, and both now cost one Argon2id verify — a missing
+  username is checked against a decoy hash so the response times are
+  indistinguishable (see `BACKEND.md` §4). Before that, an existing username
+  measured 601-799 ms against 507-508 ms for one that did not exist.
+- Every write is attributed: `require_actor` resolves session → username,
+  service token → `"automation"`, open-access → `"local-dev"`, and 401s rather
+  than writing an unattributed row. Precedence and the role model are in
+  `BACKEND.md` §4.
+- `create_user.py` is the **only** way to make a user — there is no
+  `/register`. The first user created is `admin`, later ones default to
+  `operator`. Changing a password revokes that user's sessions.
+- `GET /api/activity` exposes who did what, and its login events carry client
+  IPs, so they are returned to admins only.
 - **Phase 2.1a (planned):** uploaded CVs are PII. Gitignored upload dir,
   content-sniffed type validation, server-side size cap, token-gated endpoint,
   never logged, never baked into an image. Full rules in §8a.
@@ -160,6 +206,16 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
 - `GET /api/health` → `{"status":"ok","sheets_configured":true,"data_source":"sheets"}`
   - `data_source: snapshot` = Sheets unreachable, serving local scrape snapshot
   - `data_source: empty` = no Sheets, no snapshot (UI shows an explicit empty state)
+- `GET /api/health/live` → `{"status":"ok"}` with **no credentials**. Point
+  Docker/compose/uptime probes here, not at `/api/health`, which now requires a
+  session or a Bearer token and will otherwise report the container unhealthy
+  and restart it in a loop.
+- `GET /api/activity?limit=N` → merged, time-ordered audit feed: apply claims,
+  intents, review artifacts and login events, each carrying the actor that
+  produced it. Login events (which include client IPs) appear only for an
+  `admin` session; `includes_login_events` in the response says which you got.
+  Sheets status changes are **not** in the feed — the APPLIED tab keeps no change
+  history, so only row creation is attributable.
 - `POST /api/jobs/refresh` clears the TTL cache after a scheduled scrape lands.
 - Logs: `logs/scraper.log` (scheduler); `docker compose logs -f api` (container).
 - Sidebar `Hot` badge is live (`dashboard.js:_applyMetrics` ← `/api/stats`
@@ -167,6 +223,66 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
   only (score ≥ 85, strict, matches the Command Deck card) or **B)** TOP +
   GOOD MATCHES (score ≥ 70, everything curated)? Currently A; reads 0 while
   no job scores 85+ even when Total Jobs is 24.
+
+### Backup and restore
+
+Login moved durable state into `data/apply_submit.db`, so that file is now a
+**credential store** and not just an apply log. What needs backing up:
+
+| Artifact | Contains | Losing it means |
+|---|---|---|
+| `data/apply_submit.db` (+ `-wal`, `-shm`) | apply claims, intents, review artifacts, login audit events — and, unless `AUTH_DB_PATH` is set, the `users`/`sessions` tables with the Argon2id hashes | Every operator is locked out and must be recreated with `create_user.py`; all apply history and the whole audit trail are gone. **There is no password recovery** — hashes cannot be reset from a lost DB |
+| `.env` | every secret: `API_TOKEN`, `APPLY_API_TOKEN`, LLM keys, applicant PII | A redeploy needs all values re-entered by hand |
+| `keys.json` | Google service-account key | Sheets reads and writes stop (`data_source: empty`) |
+| `my_cv.pdf`, `cvs/` | the CV the matcher and resume generator work from | Matching degrades; generated resumes lose their source profile |
+| The Google Sheet itself | the APPLIED tab including `created_by` | Application history — note this lives in Google, not on the VM |
+
+The database runs in **WAL mode**, so copying `apply_submit.db` alone while the
+API is running can lose the most recent transactions: they may still be sitting
+in the `-wal` file. Either stop the container first, or take a consistent online
+snapshot through SQLite itself:
+
+```bash
+# Safe while the API is running - one consistent snapshot, no -wal needed
+docker compose exec -T api python - <<'PY'
+import os, sqlite3
+src = sqlite3.connect(os.getenv("APPLY_STATE_DB_PATH", "data/apply_submit.db"))
+dst = sqlite3.connect("/tmp/backup.db")
+with dst:
+    src.backup(dst)
+print("snapshot written")
+PY
+docker compose cp api:/tmp/backup.db "./backups/apply_submit-$(date +%F).db"
+
+# Or simply stop first, then copy all three files together
+docker compose stop api
+cp data/apply_submit.db data/apply_submit.db-wal data/apply_submit.db-shm backups/ 2>/dev/null
+docker compose start api
+```
+
+**Restore:** stop the API, put the file back at the same path, delete any stale
+`apply_submit.db-wal` / `-shm` sitting beside it (a WAL from a different
+database generation will corrupt the restored file), then start the API.
+
+Schema migrations are idempotent and run at connect time (`PRAGMA table_info` →
+conditional `ALTER`), so an **older backup is upgraded in place** on first open.
+Rows written before attribution existed keep `actor = NULL`; the migration never
+invents an actor for them.
+
+Verify a backup before you trust it:
+
+```bash
+python3 -c "
+import sqlite3
+c = sqlite3.connect('backups/apply_submit-2026-10-07.db')
+print('integrity:', c.execute('PRAGMA integrity_check').fetchone()[0])
+print('users:', c.execute('SELECT count(*) FROM users').fetchone()[0])
+print('tables:', [r[0] for r in c.execute(\"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\")])
+"
+```
+
+Keep backups **off the VM** — they contain password hashes and a service-account
+key, so a snapshot sitting beside the thing it backs up is not a backup.
 
 ---
 

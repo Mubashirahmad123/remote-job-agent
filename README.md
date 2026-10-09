@@ -13,7 +13,7 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | CV-based job matching | ✅ | Parses your PDF/DOCX CV via LLM fallback chain, local keyword scoring (no API calls per job) |
 | **Multi-CV matching** | 🟡 Partial | `CV_DIR=cvs/` — auto-picks the best CV per job (keyword-based); pick recorded as `selected_cv`/`selected_cv_path` per job and used for scoring, resume + cover-letter generation. Semantic scoring still uses the primary CV only |
 | **ATS 1-page resume + cover letter** | ✅ | Multi-pass shrink engine guarantees exactly 1 page; slate/navy styled header, section rules, hanging-indent bullets (verified with pdfplumber) |
-| **Semantic job matching** | ✅ | Optional FAISS + sentence-transformers for cosine-similarity scoring (catches synonyms) — `pip install sentence-transformers faiss-cpu`, then build the index with `python -m tools.embedding_matcher` (required — without `cv_embeddings.pkl` scoring silently stays keyword-only) |
+| **Semantic job matching** | ✅ | Optional FAISS + sentence-transformers for cosine-similarity scoring (catches synonyms) — `pip install sentence-transformers faiss-cpu`, then build the index with `python -m tools.embedding_matcher` (required — without `cv_embeddings.json` scoring silently stays keyword-only) |
 | Duplicate detection | ✅ | MD5 fingerprinting prevents duplicate entries across runs |
 | Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS — with colored score bands, hyperlinks, frozen headers |
 | **AI cover letters with role detection** | ✅ | Detects backend/frontend/fullstack/mobile role from job title and tailors tone, skills, and experience accordingly |
@@ -273,7 +273,7 @@ APPLICANT_GITHUB=https://github.com/yourprofile
 
 # Embedding Matcher (optional — install sentence-transformers + faiss-cpu)
 EMBEDDING_MODEL=all-MiniLM-L6-v2
-CV_EMBEDDINGS_PATH=cv_embeddings.pkl
+CV_EMBEDDINGS_PATH=cv_embeddings.json
 
 # API + dashboard (compose binds 0.0.0.0 inside the container → API_TOKEN required)
 API_HOST=127.0.0.1  # non-local bind refuses to start without API_TOKEN
@@ -388,14 +388,18 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 
 | Endpoint | Description |
 |---|---|
+| `GET /api/health/live` | `{"status":"ok"}` — the **only** API route reachable with no credentials besides the three below. Point container/uptime probes here; not in the OpenAPI schema |
+| `POST /api/auth/login` | `{username, password}` → `200 {ok, username, role, expires_at}` + HttpOnly `rja_session` cookie. Rate-limited per IP and per username *before* any Argon2 work → `429` + `Retry-After` |
+| `POST /api/auth/logout` | Revokes the session server-side and clears the cookie → `{ok, deleted}` |
+| `GET /api/auth/me` | `{authenticated, username, role, expires_at}` for the current cookie |
 | `GET /api/health` | `{status, sheets_configured, curated_jobs_loaded, data_source}` — `data_source` is `sheets` \| `snapshot` \| `empty` |
 | `GET /api/jobs?tab=&q=&source=&limit=&offset=` | Enriched jobs from `ALL JOBS` / `TOP MATCHES` / `GOOD MATCHES` |
 | `GET /api/jobs/{fingerprint}` | One job by MD5 fingerprint |
 | `GET /api/stats` | `{total_jobs, tabs, by_source, stats_rows, curated_jobs}` |
 | `GET /api/skills?tab=&limit=` | `{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name,count,pct}]}` — canonicalized `tech_stack` demand (powers the dashboard skill cloud) |
 | `GET /api/tracker?status=` | APPLIED-tab rows; supports both tracker CLI header and auto-apply APPLIED header fork (`job_fingerprint`, `applied_at`, fill-review statuses) |
-| `POST /api/tracker` | Add a manual application row to APPLIED (`apply_url`, optional title/company/notes/source/salary/contact/follow-up) |
-| `PATCH /api/tracker/{fp}` | `{status, notes}` — status whitelist: applied, interviewing, offer, rejected, withdrawn, ghosted |
+| `POST /api/tracker` | Add a manual application row to APPLIED (`apply_url`, optional title/company/notes/source/salary/contact/follow-up). `created_by` is set **server-side** from the resolved actor — a client-supplied value in the row is ignored |
+| `PATCH /api/tracker/{fp}` | `{status, notes}` — status whitelist: applied, interviewing, offer, rejected, withdrawn, ghosted. Status changes are **not** attributed: the APPLIED tab keeps no change history |
 | `POST /api/jobs/refresh` | `{tab?}` — invalidate the sheet cache on demand |
 | `POST /api/scrape` | Start a background scrape run → `202 {run_id, status}` (409 if one is active) |
 | `GET /api/scrape` / `GET /api/scrape/{run_id}` | List runs / poll `{status, phase, scraped, curated, error}` |
@@ -405,7 +409,8 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `PUT /api/cv/profile` | Persist Resume Studio edits (contact + skills) into the profile cache → `CvProfileOut` (501 when uncached; never triggers LLM parsing) |
 | `GET /api/cv/variants` | CV variants `[{name, tags}]` via `CV_DIR`/`cvs/` discovery (missing dir → `[]`) |
 | `POST /api/apply/{fp}` | Phase 2a fill-and-review: `{mode:"review"}` → per-ATS fill status (`filled_ready`, or `needs_review` when Greenhouse required profile fields are missing/unverified), package path, and screenshot path for Greenhouse/Lever; unsupported ATSs return `package_only`. Other modes → 400, dream tier → 422, unknown → 404. The browser never submits. |
-| `POST /api/apply/{fp}/intent` + `POST /api/apply/{fp}/submit` | Greenhouse-only verified submit (kill-switched: 403 while `api/safety.py SUBMIT_ENABLED=False`; dedicated `APPLY_API_TOKEN` required) |
+| `POST /api/apply/{fp}/intent` + `POST /api/apply/{fp}/submit` | Greenhouse-only verified submit (kill-switched: 403 while `api/safety.py SUBMIT_ENABLED=False`; dedicated `APPLY_API_TOKEN` **or** an `admin` session required) |
+| `GET /api/activity?limit=N` | Merged, time-ordered audit feed of apply claims, intents, review artifacts and login events, each carrying the actor that produced it. Login events include client IPs, so they are returned to `admin` sessions only (`includes_login_events` says which you got) |
 
 Notes:
 
@@ -419,8 +424,17 @@ Notes:
   server-to-server `/api/*` calls; browser users log in via the session flow).
 - Production login: open `http://<host>/` → login page → username + password
   → HttpOnly session cookie → Dashboard. The `API_TOKEN` is **server-side
-  only** (never in URLs, localStorage, JS, or responses). Create the first
-  user with `python create_user.py <username> [password]`.
+  only** (never in URLs, localStorage, JS, or responses). Create users with
+  `python create_user.py <username> [password] [--role admin|operator]` — there
+  is no `/register`. The **first** user created is `admin` and later ones
+  default to `operator`; only an `admin` session (or `APPLY_API_TOKEN`) can
+  reach the submit route once the kill-switch is lifted. Changing a password
+  revokes that user's existing sessions.
+- Every write is attributed to whoever made it: a session records its
+  `username`, a service token records `"automation"`, and an unauthenticated
+  write in open-access mode records `"local-dev"`. See `GET /api/activity`,
+  `BACKEND.md` §4 and the backup notes in `PRODUCTION.md` §6 — by default the
+  password hashes live in `data/apply_submit.db`.
 - `file://` origins are blocked by design — always open the dashboard via the
   server URL (the dashboard and API are served same-origin).
 - Scrape-status polling is one 5s loop per page (single-loop guard in

@@ -1,5 +1,284 @@
 # CHANGELOG.md
 
+## 2026-10-08 — actor attribution, CI, and a dependency conflict that had broken `docker build`
+
+Three separate things landed together because the third was found while doing
+the first two: Scenario A attribution was implemented, CI was created to run the
+suites that existed but nobody executed, and writing that CI surfaced the reason
+the project's Docker image could not be built at all.
+
+**515 pytest tests + 29 e2e tests pass.**
+
+### Scenario A — multi-operator attribution (`PM.md` §5, was "implementation not started")
+
+- **`api/deps.py` gained `resolve_actor()` / `require_actor()` /
+  `require_submit_actor()`.** Every write is now attributed: a session resolves
+  to its `username`, a service Bearer to `"automation"`, and — checked *last*, so
+  it can never mask a real identity — an unauthenticated request in open-access
+  mode to `"local-dev"`. Nothing resolving at all is a `401`, never an
+  unattributed row. When both a session and a token are present the **session
+  wins**, for authorization as well as attribution; that was previously an
+  accident of check order in `apply_access_ok()` and is now a documented, tested
+  rule.
+- **`actor TEXT` added to `apply_claims`, `apply_intents` and
+  `apply_review_artifacts`**, plus `created_by` as column 13 of the Sheets
+  APPLIED tab. All three SQLite tables upgrade **in place** via
+  `_add_column_if_missing` (`PRAGMA table_info` → conditional `ALTER`) because
+  SQLite has no `ADD COLUMN IF NOT EXISTS` and live deployments hold real apply
+  history that must not be recreated; a test starts from the *oldest* artifact
+  schema and asserts every later column arrives and the row survives. Rows
+  predating attribution keep `actor = NULL` — the migration never invents one.
+  The Sheets column is **best-effort**: if the header cannot be secured,
+  attribution is dropped rather than the application row.
+- **Roles (`admin` / `operator`)** on the users table, settable via
+  `create_user.py --role`. The **first** user created is admin and later ones
+  default to operator, so a bootstrapping mistake cannot lock the only operator
+  out of the admin-only submit path.
+- **`require_submit_actor`, not `require_admin_actor`.** The first
+  implementation 403'd the documented server-to-server submit path: a service
+  Bearer has *no role* (it is not a person), so demanding `admin` rejected it.
+  Now a session must be admin, and with no session `APPLY_API_TOKEN` is accepted
+  as `"automation"`. Kept as a separate dependency from the kill-switch so
+  `SUBMIT_ENABLED=false` → `403` is still evaluated first.
+- **`GET /api/activity?limit=N`** — merged, time-ordered, actor-attributed feed.
+  Its login events carry client IPs and are therefore **admin-only**, decided
+  from the caller's role rather than a query parameter; `includes_login_events`
+  says why sign-in history is absent for a non-admin.
+- **`GET /api/health/live`** — unauthenticated, exactly `{"status":"ok"}`,
+  excluded from the OpenAPI schema, in its own router in `_OPEN_ROUTERS`.
+  Gating `/api/health` behind login broke container/orchestrator probes, which
+  have no session and would have restarted a healthy container in a loop.
+  Un-gating the whole health router was rejected: it reports build/config/state.
+- **Fixed: login audit events were always empty.** `api/activity.py` read
+  `login_events` through `apply_state.connect()` — the wrong database. The
+  auth tables live in `AUTH_DB_PATH` (defaulting to the apply-state file, but
+  separable), and the tolerant `_rows` helper swallows `sqlite3.Error` by
+  design, so the wrong-DB query returned `[]` silently instead of failing. It
+  now opens `api.auth.connect()` explicitly.
+- **Recorded as limits, not silently omitted:** attribution is *forensics, not
+  enforcement*. `daily_apply_caps` is keyed on `cap_date` alone, so the apply
+  budget is one global pool shared by every operator (with a second, per-browser
+  cap in `localStorage`), and Sheets status changes are unattributed because the
+  APPLIED tab keeps no change history. Both are documented in `PM.md` §5 and
+  `ARCHITECTURE.md` §4 as Scenario B work.
+
+### CI — `.github/workflows/ci.yml` (new)
+
+Three jobs on every push and PR, with nothing allowed to fail: the full pytest
+suite, the Node e2e suite against a real uvicorn, and a `docker build`. This
+exists because the repo had 500+ passing tests and 29 passing e2e tests with
+nothing running them, and because PR #25 merged documentation for
+`require_actor` before any of it was implemented.
+
+- **Lock-file drift check** that fails on a missing package *or* a disagreeing
+  exact pin. Verified in both directions: green on the regenerated lock, and it
+  reproduces the old failure (`fastapi`, `pytest` absent; `uvicorn` pinned to
+  `0.53.0` against a `0.49.0` requirement).
+- **Image-leak check** asserting no `.env`, `keys.json`, `*.db`, `.venv/` or
+  `node_modules/` is baked into a layer. The container filesystem is listed
+  once — the earlier per-pattern loop re-streamed the whole export per pattern.
+- The ignore list and `continue-on-error` step were **removed** after
+  establishing that all 515 tests are offline unit tests performing no HTTP
+  calls and needing no Playwright binaries. Their only failures were missing
+  dependencies in a minimal environment, so tolerating them would have hidden
+  real regressions in the apply and scraper-timeout logic.
+
+### Fixed: `requirements.txt` was unsatisfiable, so the image could not build
+
+- **`zhipuai` removed.** It pins `pyjwt>=2.8.0,<2.9.0`; `crewai==1.14.7` pins
+  `pyjwt>=2.13.0,<3`. The ranges do not intersect, so `pip install -r
+  requirements.txt` died with `ResolutionImpossible` and `docker build` failed at
+  the install step — on every commit, with nothing reporting it. The 143 KB
+  UTF-16 build log that recorded it had been committed in PR #25 as
+  `docker-build-error.txt`; it is deleted by this change, and the error is quoted
+  here instead — a binary-encoded log cannot be diffed or reviewed, `git clone`
+  put it on every production VM, and the failure is now prevented structurally by
+  CI rather than merely documented. Every `zhipuai` 2.1.x release carries the same
+  pin and the last shipped 2025-08-25, so waiting for upstream was not a fix.
+- **New `tools/glm_client.py`** replaces the SDK for GLM (fallback rung 3),
+  calling Zhipu's OpenAI-compatible endpoint over `requests` — already a
+  dependency, and already how the Groq and Mistral rungs work. The SDK's
+  non-obvious auth is reproduced exactly: it does *not* send the raw key, it
+  splits `id.secret` and signs an HS256 JWT whose `exp`/`timestamp` are in
+  **milliseconds**, with a non-standard `sign_type` header and `typ` sorted last
+  because pyjwt merges its default after the caller's headers.
+  `tests/test_glm_client.py` pins this with **golden vectors captured from
+  `zhipuai==2.1.5.20250825`**, so equivalence is asserted without the SDK
+  installed; the resulting token is byte-identical, all three segments included.
+  Single-token keys (no dot) are passed through verbatim, matching the SDK with
+  its token cache disabled.
+- **`requirements.lock.txt` regenerated** — and it was worse than "missing
+  argon2-cffi". It had been compiled on **Windows** with no environment markers,
+  so it shipped an unmarked `pywin32==312` that cannot install on the Linux
+  deployment VM, omitted `fastapi` and `pytest` entirely, and disagreed with
+  `requirements.txt` on `uvicorn`. Rebuilt with
+  `uv pip compile … --universal`, which keeps `pywin32` behind
+  `sys_platform == 'win32'` and adds a correctly-marked `uvloop`; the header now
+  records the flag so the next regeneration does not silently drop the markers.
+  Verified installable on Linux with a dry-run resolve.
+- **`.dockerignore` was missing `.venv/` and `node_modules/`** — it excluded only
+  `venv/`. Since the Dockerfile ends in `COPY . .`, a developer's virtualenv and
+  the e2e `jsdom` tree would have been baked into the production image. The
+  `docker-build-error.txt` entry stays even though that file is now deleted: it
+  is kept as a pattern, because `docker compose build 2>&1 | tee <log>` is
+  precisely how a build log got committed in the first place.
+
+### Test harness and e2e
+
+- **`startApi()` is auth-isolated.** It always sets a throwaway `AUTH_DB_PATH`
+  (removed on cleanup, `-wal`/`-shm` included). Previously the suite booted
+  against the developer's real database, so the moment anyone ran the documented
+  `python create_user.py <name>`, every `/api/*` route began answering `401` and
+  `startApi()` spun for 30s before reporting "API did not start" — an error
+  pointing at startup when the cause was auth. Mirrors `_isolate_auth_db` in
+  `tests/conftest.py`.
+- **New login-flow suite** (10 tests, port 8741, `auth: true`): dashboard
+  redirects for `/` and `/index.html`, `/api/health` 401 vs `/api/health/live`
+  200, wrong password renders an error and clears the field without navigating,
+  correct credentials navigate exactly once, cookie flags
+  `HttpOnly`/`SameSite=Lax`/`Path=/` asserted on the wire, session chip shows
+  username and initial, and sign-out invalidates the old cookie (it 401s
+  afterwards, not merely deletes it client-side).
+- **jsdom cannot navigate and `location.replace` cannot be stubbed** — the
+  property is non-writable and non-configurable, and redefining `window.location`
+  throws. But jsdom emits a `jsdomError` for navigation attempts on the virtual
+  console, so tests assert attempt *counts* plus the network calls recorded by
+  the harness. This also required setting the document URL to the page being
+  loaded: with `url: base + '/'`, `location.replace('/')` in `login.html` was a
+  same-document no-op and the success path was indistinguishable from "never
+  navigated".
+- **The harness resolves relative URLs against the document base.** Node's
+  `fetch` cannot take a relative URL, so `login.html`'s correct same-origin
+  `fetch('/api/auth/login')` threw and the page rendered "Cannot reach the
+  server"; `api.js` never hit this because `baseUrl()` builds absolute URLs.
+- **`run.sh` accepts `.venv/` and the ambient interpreter**, matching the
+  harness, and exports its choice as `RJA_PYTHON` so the script that fails fast
+  and the harness that spawns uvicorn cannot disagree. It now preflights
+  `import fastapi, uvicorn` and prints the exact `pip install` command — a
+  missing dependency used to surface as a 30s startup timeout.
+- **Fixed a pre-existing e2e failure:** the asset-integrity test's hardcoded
+  inventory was missing `js/auth.js`, so `JobAgent.auth` (used at
+  `frontend/js/app.js:13`) read as "referenced but never defined". The login
+  feature shipped without updating the list that guards it.
+
+### Documentation corrected
+
+`PM.md` §5 said "implementation not started" while `BACKEND.md` §4 described
+`require_actor` in the present tense and `ARCHITECTURE.md` listed attribution as
+item 7 of the *current-state* decisions — two lines above the §4b "planned, not
+yet built" boundary. The three disagreed with each other; all now describe what
+is actually shipped, including the deviations from the plan and the two things
+attribution deliberately does not do.
+
+## 2026-10-07 — auth hardening: login is now safe to expose publicly
+
+The username/password login (Argon2id + server-side sessions in SQLite,
+HttpOnly cookie) was already cryptographically sound — 24/24 `/api/*` routes
+gated, only SHA-256 of the token persisted, fail-closed on DB errors. Probing
+the running app found the *abuse* and *deployment* paths were not. All seven
+probes below were reproduced first, then fixed, then re-verified.
+
+- **New `api/ratelimit.py`** — sliding-window limiter for
+  `POST /api/auth/login`, the only unauthenticated write on the API. Two
+  independent budgets are checked *before any Argon2 work*: per client IP
+  (`LOGIN_RATE_LIMIT`, 12) and per username (`LOGIN_USER_RATE_LIMIT`, 6) over
+  `LOGIN_RATE_WINDOW` (600s), answering `429` + `Retry-After`. Both are needed
+  — per-IP alone lets one attacker lock out a NAT'd office, per-username alone
+  lets an attacker spray one password across accounts from rotating IPs. A
+  successful login clears the *username* budget only (one valid credential does
+  not prove the address is benign). Memory is bounded: per-key history is
+  trimmed to the window and the key set is capped, so rotating IPs cannot grow
+  it without bound. Deliberately per-process, which is exact under the deployed
+  `--workers 1`; scaling out needs a shared store first.
+- **`/api/auth/login` is now `async def`** and awaits its failure penalty. The
+  previous sync `def` + `time.sleep(0.5)` held a Starlette threadpool worker
+  for the whole penalty, so ~40 concurrent bad passwords saturated the default
+  40-thread pool and stalled every other sync route: measured **5.64s wall →
+  1.40s**, with 34/40 answered `429` and zero hashing. Remaining blocking work
+  (SQLite + Argon2) is dispatched via `run_in_threadpool` so the event loop is
+  never held by a slow hash.
+- **`purge_expired_sessions()` moved to the success path** — a failed attempt
+  no longer earns an unauthenticated database write.
+- **Bind guard now reads uvicorn's `--host` flag**, not just `API_HOST`. The
+  documented `uvicorn api.app:app --host 0.0.0.0` bound on every interface with
+  `API_HOST` unset and no `API_TOKEN`, which combined with `open_access()`
+  (no users) meant a fully public API. Both are now checked.
+- **Auth is attached at the router level** via
+  `include_router(dependencies=[Depends(require_token)])`, in addition to the
+  existing per-route dependency. Per-route auth fails OPEN — one forgotten
+  `Depends` on a new endpoint ships it public. Note this **cannot** be done by
+  appending to `router.dependencies`: this FastAPI version resolves included
+  routers lazily (`_IncludedRouter`) and post-construction mutation is a silent
+  no-op, which a test now pins in both directions.
+- **New `_GateMiddleware`** covers what no router dependency can reach:
+  `/docs` + `/openapi.json` were public (`401` now; a logged-in browser still
+  gets Swagger, `API_DOCS_ENABLED=true` to publish), and `/index.html` was
+  served straight from the `StaticFiles` mount, bypassing the `GET /` login
+  redirect (`302` now). It also sets `X-Content-Type-Options`,
+  `X-Frame-Options` and `Referrer-Policy` on every response so a bare-uvicorn
+  deploy is not silently unprotected without Caddy. No CSP yet — the dashboard
+  relies on inline `<script>`/`<style>` blocks, so a strict policy would break
+  it rather than half-protect it.
+- **A password reset now revokes every session for that user.** Previously a
+  stolen `rja_session` cookie kept working for the rest of its 7-day TTL no
+  matter how often the password was rotated, which defeated the point of
+  resetting. `revoke_user_sessions()` is targeted — resetting one user does not
+  sign out anyone else. `create_user.py` says so when it resets.
+- **`LoginRequest` bounds `username` (≤64) and `password` (≤128)**, enforced in
+  `api.auth.verify_login` too so non-HTTP callers cannot bypass it. A 200 KB
+  password previously reached Argon2 (`422` now).
+- **SQLite: schema DDL runs once per (process, db path)**, not on every
+  authenticated request — `require_token` reads the sessions table per call and
+  was rebuilding the schema each time (~3.6 ms/request, 50 connections for 50
+  requests → 0 rebuilds). `journal_mode=WAL` is set at init so the per-request
+  read is not blocked by a concurrent login/logout write. Added
+  `idx_sessions_user` for the new revoke-by-user path, and `users.last_login_at`
+  as an audit signal (with an idempotent `ALTER` so existing DBs upgrade in
+  place).
+- **CORS `allow_credentials=True`** — auth is a cookie now, so a cross-origin
+  dashboard configured via `API_CORS_ORIGINS` could never have authenticated.
+  Safe because `cors_origins()` always returns an explicit list, never `*`.
+- **`open_access()` is announced at startup** with `warnings.warn`. "No users
+  and no `API_TOKEN`" serves the entire API unauthenticated; it stays a
+  deliberate localhost convenience, but a forgotten `create_user.py` on a
+  public host is now shouted about in the log instead of failing silently.
+- **`docker-compose.yml`**: uvicorn now runs `--proxy-headers
+  --forwarded-allow-ips *` so `request.client.host` is the real client (rate
+  limiting keyed on Caddy's container IP would have put every user in one
+  shared bucket) and `request.url.scheme` is correct. `--workers 1` is now
+  documented as a *requirement* of the in-process limiter.
+- **`deploy/setup-vm.sh` no longer instructs the removed `?token=` flow.** Step
+  4 told deployers to open `http://<VM_PUBLIC_IP>/?token=<API_TOKEN>` and let
+  it persist to `localStorage` — that path was deleted and `api.js` now
+  actively removes any legacy `rja_api_token` key. Replaced with the real flow
+  (`docker compose exec api python create_user.py <username>`).
+- **`requirements.lock.txt` regenerated for auth**: `argon2-cffi` was in
+  `requirements.txt` but absent from the lock, so the pinned install was not
+  reproducible. Added `argon2-cffi==25.1.0` + `argon2-cffi-bindings==26.1.0`
+  and attributed the existing `cffi` to them.
+- Docs synced: BACKEND.md §4 rewritten (its "`API_TOKEN` empty → open" bullet
+  was false once a user exists), PRODUCTION.md §4 config table gained the seven
+  new variables, `.env.example` documents each with its threat rationale,
+  `deploy/Caddyfile` comment no longer claims "the app has no session cookies to
+  protect".
+- **New `tests/test_api_auth_hardening.py`** (31 tests), one per defect above,
+  plus `tests/conftest.py` fixtures that reset the process-global limiter and
+  the schema memo between tests. Full API suite: **304 passed, 1 skipped**.
+
+### Still open (deliberately not in this change)
+
+- **`require_actor` / multi-operator attribution is documented but not
+  implemented.** BACKEND.md §4 and ARCHITECTURE.md §7 both specify
+  `api.deps.require_actor(request, creds) -> str`, an `"automation"` sentinel,
+  and an `actor`/`created_by` field on every write. None of it exists — the
+  session `username` is available and currently discarded. Left out because it
+  touches every write path and is a feature, not a security fix; bundling it
+  would make this change hard to review and easy to revert.
+- No Content-Security-Policy (needs every inline block extracted first).
+- No account lockout or 2FA — acceptable for a single-operator tool, but the
+  rate limiter is the only brute-force control.
+- The rate limiter is per-process; a multi-worker deploy needs Redis/SQLite.
+
 ## 2026-10-03 — live-submit recon: Greenhouse Democorp demo board blocked pre-flight
 
 - Ran the read-only Playwright recon against Greenhouse's public Democorp

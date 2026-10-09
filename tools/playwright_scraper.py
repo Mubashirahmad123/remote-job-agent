@@ -4,6 +4,8 @@ import datetime
 import logging
 from typing import List, Dict, Any
 
+from tools.url_guard import assert_navigable_url
+
 logger = logging.getLogger(__name__)
 
 def _job(title, company, url, source, summary="", salary="", timezone="Remote"):
@@ -146,7 +148,11 @@ def _scrape_weworkremotely(page, debug=False, timeout=30000):
     try:
         url = "https://weworkremotely.com/categories/remote-programming-jobs"
         logger.debug(f"Scraping {source}: {url}")
-        
+
+        # A board's listing page can link anywhere, and JS_RENDERED_BOARDS is
+        # fetched with a real browser; do not let a poisoned listing aim it at
+        # an internal address. See tools/url_guard.py.
+        assert_navigable_url(url, resolve=True)
         page.goto(url, wait_until="domcontentloaded", timeout=timeout)
         page.wait_for_selector("section.jobs", timeout=15000)
         
@@ -211,7 +217,11 @@ def _scrape_remoteco(page, debug=False, timeout=30000):
     try:
         url = "https://remote.co/remote-jobs/developer/"
         logger.debug(f"Scraping {source}: {url}")
-        
+
+        # A board's listing page can link anywhere, and JS_RENDERED_BOARDS is
+        # fetched with a real browser; do not let a poisoned listing aim it at
+        # an internal address. See tools/url_guard.py.
+        assert_navigable_url(url, resolve=True)
         page.goto(url, wait_until="domcontentloaded", timeout=timeout)
         page.wait_for_selector("body", timeout=10000)
         
@@ -273,7 +283,11 @@ def _scrape_wellfound(page, debug=False, timeout=30000):
     try:
         url = "https://wellfound.com/role/r/remote/full-stack-developer"
         logger.debug(f"Scraping {source}: {url}")
-        
+
+        # A board's listing page can link anywhere, and JS_RENDERED_BOARDS is
+        # fetched with a real browser; do not let a poisoned listing aim it at
+        # an internal address. See tools/url_guard.py.
+        assert_navigable_url(url, resolve=True)
         page.goto(url, wait_until="domcontentloaded", timeout=timeout)
         page.wait_for_selector("body", timeout=10000)
         
@@ -335,7 +349,11 @@ def _scrape_nodesk(page, debug=False, timeout=30000):
     try:
         url = "https://nodesk.co/remote-jobs/engineering/"
         logger.debug(f"Scraping {source}: {url}")
-        
+
+        # A board's listing page can link anywhere, and JS_RENDERED_BOARDS is
+        # fetched with a real browser; do not let a poisoned listing aim it at
+        # an internal address. See tools/url_guard.py.
+        assert_navigable_url(url, resolve=True)
         page.goto(url, wait_until="domcontentloaded", timeout=timeout)
         page.wait_for_selector("body", timeout=10000)
         page.wait_for_timeout(2000)
@@ -544,6 +562,7 @@ def _scrape_lemon(page, debug=False, timeout=30000):
     try:
         for role_url in role_pages:
             try:
+                assert_navigable_url(role_url, resolve=True)
                 page.goto(role_url, wait_until="domcontentloaded", timeout=timeout)
                 page.wait_for_timeout(3000)
             except Exception as exc:

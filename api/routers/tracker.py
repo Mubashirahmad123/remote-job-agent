@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials
 
 from api import cache
-from api.deps import _bearer, apply_access_ok, require_token
+from api.deps import _bearer, apply_access_ok, require_actor, require_token
+from api.errors import failure
 from api.mappers import to_tracker_entry
 from api.schemas import TrackerCreate, TrackerEntry, TrackerUpdate, VALID_TRACKER_STATUSES
 
@@ -25,13 +26,14 @@ def list_tracker(
 def create_tracker_entry(
     body: TrackerCreate,
     _: None = Depends(require_token),
+    actor: str = Depends(require_actor),
 ) -> TrackerEntry:
     try:
-        row = cache.add_tracker_entry(body.model_dump())
+        row = cache.add_tracker_entry(body.model_dump(), created_by=actor)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Tracker create failed: {e}")
+        raise failure("Tracker create", e)
     return to_tracker_entry(row)
 
 
@@ -67,7 +69,7 @@ def patch_tracker(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Tracker update failed: {e}")
+        raise failure("Tracker update", e)
     if row is None:
         raise HTTPException(status_code=404, detail="Application not found")
     if body.reconcile_submit_failure:

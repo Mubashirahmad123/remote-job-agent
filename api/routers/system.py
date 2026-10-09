@@ -5,14 +5,16 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from api import cache
-from api.deps import require_token
+from api.deps import action_budget, require_token
 
 router = APIRouter(tags=["system"])
 
 
 @router.post("/api/jobs/refresh")
 def refresh_jobs(
-    body: Optional[dict] = None, _: None = Depends(require_token)
+    body: Optional[dict] = None,
+    _: None = Depends(require_token),
+    __: None = Depends(action_budget("run")),
 ) -> dict:
     tab = (body or {}).get("tab") if isinstance(body, dict) else None
     try:

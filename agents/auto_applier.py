@@ -23,6 +23,8 @@ import random
 import sqlite3
 import json
 from datetime import datetime, timedelta
+
+from tools.url_guard import assert_navigable_url, is_navigable_url
 from pathlib import Path
 from dotenv import load_dotenv
 from typing import Optional, Dict, List
@@ -46,6 +48,12 @@ def _is_container() -> bool:
 
 def _safe_open_browser(url: str) -> bool:
     if _is_container():
+        return False
+    # Guarded here rather than at the three call sites, so a new caller cannot
+    # forget it. This one opens the OPERATOR's own browser rather than the
+    # server's, so the impact is smaller — but `file:///etc/passwd` in a
+    # headless-server fallback path is still not something to hand a browser.
+    if not is_navigable_url(url):
         return False
     try:
         return webbrowser.open(url)
@@ -298,6 +306,11 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
     
     try:
         print(f"  🌐 Navigating to: {job_url}")
+        # job_url came from a job row, and job rows come from scraped postings,
+        # so this is attacker-reachable. resolve=True: a public-looking hostname
+        # that points at 169.254.169.254 or a docker-network neighbour must not
+        # be opened by a browser running as root with .env mounted.
+        assert_navigable_url(job_url, resolve=True)
         # F2 (2b pre-fix): domcontentloaded + explicit selector wait.
         # networkidle never fires on ATS pages (hcaptcha/LinkedIn/resume-
         # parser third parties) and guarantees a 30s goto timeout.
@@ -603,6 +616,7 @@ def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
     
     try:
         print(f"  🌐 Navigating to: {job_url}")
+        assert_navigable_url(job_url, resolve=True)  # see the Greenhouse path
         # Third-party scripts can keep network activity open indefinitely.
         page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
         bare = (job_url or "").rstrip("/")
@@ -617,6 +631,10 @@ def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
 
             apply_url = urljoin(job_url, href)
             print(f"  🔗 Following apply page: {apply_url}")
+            # Re-check after urljoin: href came out of the rendered page, so the
+            # joined URL is a second, independent attacker-controlled value even
+            # when job_url itself was fine.
+            assert_navigable_url(apply_url, resolve=True)
             page.goto(apply_url, wait_until="domcontentloaded", timeout=30000)
         page.wait_for_selector(".application-form, form", timeout=15000)
         

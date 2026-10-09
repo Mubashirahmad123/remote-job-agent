@@ -4,19 +4,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from api import materials
-from api.deps import require_token
+from api.deps import action_budget, require_token
+from api.errors import failure
 
 router = APIRouter(tags=["materials"])
 
 
 @router.post("/api/resume/{job_fingerprint}")
-def create_resume(job_fingerprint: str, _: None = Depends(require_token)) -> dict:
+def create_resume(
+    job_fingerprint: str,
+    _: None = Depends(require_token),
+    __: None = Depends(action_budget("action")),
+) -> dict:
     try:
         return materials.generate_resume(job_fingerprint)
     except LookupError:
         raise HTTPException(status_code=404, detail="Job not found")
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Resume generation failed: {e}")
+        raise failure("Resume generation", e)
 
 
 @router.get("/api/resume/{job_fingerprint}/download")
@@ -34,16 +39,16 @@ def download_resume(job_fingerprint: str, _: None = Depends(require_token)):
 
 @router.post("/api/cover-letter/{job_fingerprint}")
 def create_cover_letter(
-    job_fingerprint: str, _: None = Depends(require_token)
+    job_fingerprint: str,
+    _: None = Depends(require_token),
+    __: None = Depends(action_budget("action")),
 ) -> dict:
     try:
         return materials.generate_cover_letter(job_fingerprint)
     except LookupError:
         raise HTTPException(status_code=404, detail="Job not found")
     except Exception as e:
-        raise HTTPException(
-            status_code=502, detail=f"Cover letter generation failed: {e}"
-        )
+        raise failure("Cover letter generation", e)
 
 
 @router.get("/api/cover-letter/{job_fingerprint}/download")

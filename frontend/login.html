@@ -134,50 +134,6 @@
       <p class="login-footnote">Sessions last 7 days. Sign out from the dashboard header to end yours early.</p>
     </div>
   </main>
-  <script>
-    (function () {
-      'use strict';
-      var form = document.getElementById('loginForm');
-      var user = document.getElementById('loginUsername');
-      var pass = document.getElementById('loginPassword');
-      var errorEl = document.getElementById('loginError');
-      var btn = form.querySelector('button[type="submit"]');
-
-      form.addEventListener('submit', async function (e) {
-        e.preventDefault();
-        errorEl.textContent = '';
-        btn.disabled = true;
-        try {
-          var res = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({ username: user.value.trim(), password: pass.value }),
-          });
-          if (res.status === 401) {
-            errorEl.textContent = 'Invalid username or password.';
-            pass.value = '';
-            pass.focus();
-            btn.disabled = false;
-            return;
-          }
-          if (!res.ok) {
-            var detail = 'Sign in failed (HTTP ' + res.status + ').';
-            try {
-              var body = await res.json();
-              if (body && body.detail) detail = String(body.detail);
-            } catch (_) { /* keep generic message */ }
-            errorEl.textContent = detail;
-            btn.disabled = false;
-            return;
-          }
-          window.location.replace('/');
-        } catch (_) {
-          errorEl.textContent = 'Cannot reach the server — is it running?';
-          btn.disabled = false;
-        }
-      });
-    })();
-  </script>
+  <script src="js/login.js"></script>
 </body>
 </html>

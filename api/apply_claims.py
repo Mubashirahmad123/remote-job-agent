@@ -26,6 +26,24 @@ class DailyCapExceeded(Exception):
         self.retry_after = retry_after
 
 
+def _add_column_if_missing(
+    connection: sqlite3.Connection, table: str, column: str, declaration: str
+) -> None:
+    """Idempotent ADD COLUMN.
+
+    SQLite has no `ADD COLUMN IF NOT EXISTS`, and every existing deployment
+    already has these tables populated with real apply history — recreating
+    them is not an option. So the schema is inspected first and the ALTER only
+    runs when the column is genuinely absent. Mirrors the pattern already used
+    in api/apply_state.py for the artifact columns.
+    """
+    existing = {
+        row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in existing:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
+
+
 def initialize_claim_store(connection: sqlite3.Connection) -> None:
     connection.execute(
         """CREATE TABLE IF NOT EXISTS apply_claims (
@@ -33,9 +51,14 @@ def initialize_claim_store(connection: sqlite3.Connection) -> None:
             status TEXT NOT NULL,
             claimed_at TEXT NOT NULL,
             cap_date TEXT NOT NULL,
-            intent_hash TEXT NOT NULL
+            intent_hash TEXT NOT NULL,
+            actor TEXT
         )"""
     )
+    # `actor` was added after the table shipped; upgrade existing rows in place.
+    # Nullable on purpose: a claim written before attribution existed has no
+    # knowable author, and back-filling a guess would be worse than NULL.
+    _add_column_if_missing(connection, "apply_claims", "actor", "TEXT")
     connection.execute(
         """CREATE TABLE IF NOT EXISTS daily_apply_caps (
             cap_date TEXT PRIMARY KEY,
@@ -66,8 +89,15 @@ def claim_first(
     stale_after_minutes: int = STALE_CLAIM_MINUTES,
     intent_hash: str = "",
     intent_token_hash: str | None = None,
+    actor: str = "",
 ) -> dict:
-    """Reserve a unique job claim and daily-cap slot in one write transaction."""
+    """Reserve a unique job claim and daily-cap slot in one write transaction.
+
+    `actor` is recorded on the claim row (see api.deps.resolve_actor). It is
+    accepted but NOT required, because the daily cap is global rather than
+    per-operator — attribution here is for forensics, not enforcement. An empty
+    actor is stored as NULL so "unknown" stays distinguishable from a real name.
+    """
     timestamp = _as_utc(now or datetime.now(timezone.utc))
     timestamp_text = timestamp.isoformat()
     cap_date = timestamp.date().isoformat()
@@ -125,9 +155,15 @@ def claim_first(
 
         connection.execute(
             "INSERT INTO apply_claims "
-            "(job_fingerprint, status, claimed_at, cap_date, intent_hash) "
-            "VALUES (?, 'submit_in_progress', ?, ?, ?)",
-            (job_fingerprint, timestamp_text, cap_date, intent_hash),
+            "(job_fingerprint, status, claimed_at, cap_date, intent_hash, actor) "
+            "VALUES (?, 'submit_in_progress', ?, ?, ?, ?)",
+            (
+                job_fingerprint,
+                timestamp_text,
+                cap_date,
+                intent_hash,
+                (actor or "").strip() or None,
+            ),
         )
         connection.execute(
             "INSERT INTO daily_apply_caps (cap_date, count) VALUES (?, 1) "
@@ -152,6 +188,7 @@ def claim_first(
         "status": "submit_in_progress",
         "claimed_at": timestamp_text,
         "cap_date": cap_date,
+        "actor": (actor or "").strip() or None,
     }
 
 

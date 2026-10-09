@@ -2,6 +2,8 @@
 .github
 .vscode
 venv/
+.venv/
+node_modules/
 __pycache__/
 *.pyc
 *.pyo
@@ -9,6 +11,14 @@ __pycache__/
 .env
 keys.json
 my_cv.pdf
+# The CV embedding cache. It is derived from my_cv.pdf, which the line above
+# already excludes, so shipping the cache would defeat that exclusion — and it is
+# plain JSON now, readable straight out of an image layer with no tooling. The
+# *.pkl pattern covers an operator who still has the pre-JSON cache in the build
+# context.
+cv_embeddings.json
+cv_embeddings.pkl
+*.pkl
 data/*.db
 logs/
 scraped_jobs.json
@@ -23,8 +33,17 @@ resumes/
 screenshots/
 cache/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 install.log
 scrape_bg.log
 scrape_bg_err.log
 test_scrape_output.txt
 fresh_scrape.json
+# Build logs. No such file is committed any more — the 143 KB UTF-16 log of the
+# zhipuai/crewai pyjwt conflict was deleted once the conflict was fixed — but the
+# pattern stays: `docker compose build 2>&1 | tee <log>` is exactly how that one
+# got committed, and a captured build log never belongs in an image layer.
+docker-build-error.txt
+*-build-error.txt
+build-*.log
