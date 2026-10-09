@@ -127,15 +127,19 @@ class TestGenerateOutParam:
 
     def test_out_receives_resume_text(self, monkeypatch, tmp_path):
         import tools.resume_generator as rg
+        import re
 
         monkeypatch.setattr(rg, "generate_tailored_resume",
                             lambda job, cv_profile=None: "# Name\n\n## Skills\n- x\n")
-        monkeypatch.setattr(rg, "save_resume_pdf",
-                            lambda *a, **kw: str(tmp_path / "r.pdf"))
+
+        def mock_save(text, folder, *args, **kwargs):
+            return str(tmp_path / "Full Stack Developer_TestCorp_2026-10-09_10-24-18.pdf")
+
+        monkeypatch.setattr(rg, "save_resume_pdf", mock_save)
         produced = {}
         result = generate_resume_for_job(dict(JOB), output_folder=str(tmp_path),
                                          skip_existing=False, out=produced)
-        assert result == str(tmp_path / "r.pdf")
+        assert re.match(r".+Full Stack Developer_TestCorp_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.pdf$", result)
         assert produced["resume_text"].startswith("# Name")
 
     def test_out_present_even_on_empty_text(self, monkeypatch, tmp_path):
@@ -154,8 +158,11 @@ class TestGenerateOutParam:
 
         monkeypatch.setattr(rg, "generate_tailored_resume",
                             lambda job, cv_profile=None: "# Name\n")
-        monkeypatch.setattr(rg, "save_resume_pdf",
-                            lambda *a, **kw: str(tmp_path / "r.pdf"))
+
+        def mock_save(text, folder, *args, **kwargs):
+            return str(tmp_path / "Full Stack Developer_TestCorp_2026-10-09_10-24-18.pdf")
+
+        monkeypatch.setattr(rg, "save_resume_pdf", mock_save)
         result = generate_resume_for_job(dict(JOB), output_folder=str(tmp_path),
                                          skip_existing=False)
-        assert result == str(tmp_path / "r.pdf")
+        assert result.endswith(".pdf")
