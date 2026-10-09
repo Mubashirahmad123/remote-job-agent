@@ -301,9 +301,9 @@ def _build_smart_prompt(job, cv_profile, base_text):
     if any(k in title_lower for k in ["backend", "back-end", "server-side", "api", "node", "python", "java", "go", "rust", "django", "flask", "spring"]):
         role_category = "backend"
         role_hint = "Focus on backend skills: APIs, databases, server-side logic, system design."
-    elif any(k in title_lower for k in ["frontend", "front-end", "ui", "react", "vue", "angular", "css", "html", "webpack"]):
+    elif any(k in title_lower for k in ["frontend", "front-end", "ui", "react", "vue", "angular", "css", "html", "webpack", "shopify"]):
         role_category = "frontend"
-        role_hint = "Focus on frontend skills: UI/UX, component libraries, state management, performance."
+        role_hint = "Focus on frontend skills: UI/UX, component libraries, state management, performance. For Shopify/Frontend roles: omit pre-2023 experience and non-web projects to keep the resume ATS-friendly and 1-page."
     elif any(k in title_lower for k in ["fullstack", "full-stack", "full stack"]):
         role_category = "fullstack"
         role_hint = "Balance frontend and backend skills. Show end-to-end project ownership."
@@ -328,11 +328,26 @@ def _build_smart_prompt(job, cv_profile, base_text):
         if matched:
             skill_match = f"\nMATCHING SKILLS FROM YOUR CV: {', '.join(matched[:10])}"
 
-    # Smart truncation: take first 4000 chars but break at sentence boundary
-    safe_base = base_text[:4500]
-    last_period = safe_base.rfind('.')
-    if last_period > 3000:
-        safe_base = safe_base[:last_period + 1]
+    # Smart truncation: keep the head (contact/summary/experience) AND the
+    # tail (projects/education usually live at the end of a CV). A head-only
+    # cut erased the PROJECTS section, so the LLM invented its own projects.
+    head_limit = 3500
+    tail_limit = 1500
+    if len(base_text) > head_limit + tail_limit + 200:
+        head = base_text[:head_limit]
+        last_period = head.rfind('.')
+        if last_period > head_limit * 0.6:
+            head = head[:last_period + 1]
+        tail = base_text[-tail_limit:]
+        first_break = tail.find('\n')
+        if 0 <= first_break < 120:  # don't start mid-word/line
+            tail = tail[first_break + 1:]
+        safe_base = f"{head}\n[...middle omitted...]\n{tail}"
+    else:
+        safe_base = base_text[:4500]
+        last_period = safe_base.rfind('.')
+        if last_period > 3000:
+            safe_base = safe_base[:last_period + 1]
 
     profile_json = json.dumps(cv_profile, indent=2) if cv_profile else "{}"
 
@@ -355,12 +370,55 @@ CANDIDATE CV (relevant sections):
 INSTRUCTIONS FOR 1-PAGE ATS RESUME:
 1. Keep content ultra-concise to guarantee a 1-PAGE fit.
 2. Write a professional summary (2-3 sentences max, ~40 words) directly aligned with this job.
-3. Include a "Technical Skills" section grouped logically (Languages, Frameworks, Tools/Cloud).
-4. Include top 2-3 work experiences with max 3 bullet points each, highlighting measurable impact.
-5. Use standard markdown headers: # for Candidate Name, ## for Sections, ### for Role | Company | Dates.
-6. Return ONLY markdown text, no preamble or extra notes."""
+3. Include a "Technical Skills" section grouped logically (Languages, Frameworks, Tools/Cloud) using only skills present in the CV/profile.
+4. Include the candidate's work experiences (up to 3, most recent first) with max 3 bullet points each, highlighting measurable impact. NEVER silently drop a real role from the CV.
+5. PROJECTS: if the CV contains a Projects section, include ALL of the candidate's ACTUAL projects under a "## Projects" section (never drop one unless space truly forces it — count is how many the CV has). Describe only what the candidate really built, reworded for keyword alignment with this job.
+6. Use standard markdown headers: # for Candidate Name, ## for Sections, ### for Role | Company | Dates.
+
+GROUNDING RULES (CRITICAL — factual accuracy):
+7. Use ONLY employers, job titles, dates, education, projects, and metrics that appear in the candidate's CV/profile above.
+8. NEVER invent, fabricate, or substitute projects, companies, roles, dates, certifications, or numbers. If a detail is not in the CV, omit it.
+9. Rephrasing bullets for impact and keywords is allowed, but every underlying fact must come from the CV.
+10. Do NOT append keyword lists, "Keywords:" footers, or "---" separators. The resume must END with the Education section — no trailing notes of any kind.
+
+Return ONLY markdown text, no preamble or extra notes."""
 
     return prompt
+
+
+def _filter_cv_data(cv_profile, base_text):
+    """Programmatically filter out projects/experience not relevant to the target role.
+
+    Removes:
+    - "CRM Application"/"customer relationship management" project (non-web, not relevant for Shopify/Frontend roles)
+    - "Yarikul Infotech" experience entry (pre-2023, non-web)
+    """
+    # --- Filter cv_profile experience: drop Yarikul Infotech entries ---
+    if cv_profile:
+        filtered_experience = []
+        for exp in cv_profile.get("experience", []):
+            company = exp.get("company", "") or ""
+            title = exp.get("title", "") or ""
+            if "yarikul" in company.lower() or "yarikul" in title.lower():
+                continue  # skip Yarikul Infotech
+            filtered_experience.append(exp)
+        cv_profile["experience"] = filtered_experience
+
+    # --- Filter base_text: remove lines mentioning CRM Application, Yarikul, or customer relationship management ---
+    if base_text:
+        lines = base_text.split("\n")
+        filtered_lines = []
+        for line in lines:
+            lower = line.lower()
+            # Drop CRM Application / customer relationship management project
+            if "crm application" in lower or "customer relationship management" in lower:
+                continue  # drop CRM project
+            if "yarikul" in lower:
+                continue  # drop Yarikul Infotech experience
+            filtered_lines.append(line)
+        base_text = "\n".join(filtered_lines)
+
+    return cv_profile, base_text
 
 
 def generate_tailored_resume(job, cv_profile=None):
@@ -376,10 +434,16 @@ def generate_tailored_resume(job, cv_profile=None):
         cv_profile = _load_cv_profile(selected_cv_path or None)
 
     base_text = _get_base_resume_text(cv_profile, selected_cv_path or None)
+
+    # Programmatically filter out projects/experience the user has rejected
+    cv_profile, base_text = _filter_cv_data(cv_profile, base_text)
+
     prompt = _build_smart_prompt(job, cv_profile, base_text)
 
     try:
         resume_text = generate_with_fallback(prompt, task="resume_generation")
+        # Strip LLM-added footers (Keywords:, ---) before validation/rendering
+        resume_text = _strip_llm_footer(resume_text)
         # Basic validation
         if not resume_text or len(resume_text) < 200:
             raise Exception("Generated resume too short")
@@ -389,6 +453,24 @@ def generate_tailored_resume(job, cv_profile=None):
     except Exception as e:
         print(f"Resume generation failed: {e}")
         return _generate_fallback_resume(job, cv_profile)
+
+
+def _strip_llm_footer(text: str) -> str:
+    """Remove LLM-added footers: 'Keywords:' lines, '---' rules, trailing blanks.
+
+    Models asked for keyword alignment sometimes append a keyword footer and a
+    horizontal rule after the last section; neither belongs in an ATS resume
+    (the PDF renderer draws its own section rules, and a stray '---' renders
+    as literal text after EDUCATION).
+    """
+    if not text:
+        return text
+    kw_re = re.compile(r"^\s*(?:[-•*]\s*)?keywords\s*[:\-–—]\s*", re.IGNORECASE)
+    hr_re = re.compile(r"^\s*(?:[-*_=]\s*){3,}$")
+    kept = [ln for ln in text.split("\n") if not (kw_re.match(ln) or hr_re.match(ln))]
+    while kept and not kept[-1].strip():
+        kept.pop()
+    return "\n".join(kept)
 
 
 def _generate_fallback_resume(job, cv_profile):
@@ -497,10 +579,11 @@ def save_resume_pdf(resume_text, job_title, company, folder="resumes", cv_profil
         filepath = os.path.join(folder, filename)
 
         # Multi-pass rendering configs to guarantee 1-page fit
+        # (Arial is narrower than DejaVu, so pass 1 can afford 10pt body)
         passes = [
-            {"margin": 12, "body_size": 9.5, "bullet_lh": 4.2},
-            {"margin": 10, "body_size": 9.0, "bullet_lh": 3.8},
-            {"margin": 8,  "body_size": 8.5, "bullet_lh": 3.5},
+            {"margin": 12, "body_size": 10.0, "bullet_lh": 4.4},
+            {"margin": 11, "body_size": 9.5,  "bullet_lh": 4.2},
+            {"margin": 10, "body_size": 9.0,  "bullet_lh": 3.8},
         ]
 
         # Parse candidate profile for header contact info (prefer the picked CV)
@@ -547,6 +630,12 @@ def save_resume_pdf(resume_text, job_title, company, folder="resumes", cv_profil
                 stripped = line.strip()
 
                 if not stripped:
+                    idx += 1
+                    continue
+
+                # Horizontal rule (---) — never render as text; the layout
+                # engine draws its own section dividers.
+                if re.match(r"^(?:[-*_=]\s*){3,}$", stripped):
                     idx += 1
                     continue
 
@@ -667,7 +756,7 @@ def sanitize_filename(s):
     return re.sub(r'[\\/*?:"<>|]', "", s)
 
 
-def generate_resume_for_job(job, output_folder="resumes", skip_existing=True):
+def generate_resume_for_job(job, output_folder="resumes", skip_existing=True, out=None):
     """
     Full pipeline: generate tailored resume and save as PDF.
     
@@ -675,6 +764,9 @@ def generate_resume_for_job(job, output_folder="resumes", skip_existing=True):
         job: dict with job_title, company, tech_stack, summary, apply_url
         output_folder: where to save PDFs
         skip_existing: if True, return existing resume if < 7 days old
+        out: optional dict — when given, receives "resume_text" (the markdown
+            the PDF was rendered from) so callers (API materials) can show the
+            real generated content in previews instead of a stub.
     
     Returns:
         Path to PDF file, or None on failure
@@ -693,6 +785,9 @@ def generate_resume_for_job(job, output_folder="resumes", skip_existing=True):
     selected_cv_path = job.get("selected_cv_path", "") if isinstance(job, dict) else ""
     cv_profile = _load_cv_profile(selected_cv_path or None)
     resume_text = generate_tailored_resume(job, cv_profile)
+
+    if isinstance(out, dict):
+        out["resume_text"] = resume_text or ""
 
     if resume_text:
         pdf_path = save_resume_pdf(

@@ -321,6 +321,46 @@ JobAgent.resumeStudio = {
       + (demoBadge ? '\n<div class="mock-bullet">• Demo preview — live generation replaces this with LLM output</div>' : '');
   },
 
+  /**
+   * Markdown -> preview HTML. Escapes every input character FIRST, then
+   * transforms line structure (# / ## / ### / bullets / bold) — so LLM
+   * output can never inject markup. 'Keywords:' footers and '---' rules are
+   * dropped (same rules as tools/resume_generator._strip_llm_footer).
+   */
+  _mdToHtml(text) {
+    const escaped = this.escapeHtml(text == null ? '' : String(text));
+    const bold = (s) => s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    const lines = escaped.split('\n');
+    const out = [];
+    let inList = false;
+    const closeList = () => { if (inList) { out.push('</div>'); inList = false; } };
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) { closeList(); continue; }
+      if (/^(?:[-*_=]\s*){3,}$/.test(line)) { closeList(); continue; }
+      if (/^(?:[-•*]\s*)?keywords\s*[:\-–—]/i.test(line)) { closeList(); continue; }
+      if (/^###\s+/.test(line)) {
+        closeList();
+        out.push(`<div class="mock-exp-header">${bold(line.replace(/^###\s+/, ''))}</div>`);
+      } else if (/^##\s+/.test(line)) {
+        closeList();
+        out.push(`<div class="mock-section-title">${this.escapeHtml(line.replace(/^##\s+/, '')).toUpperCase()}</div>`);
+      } else if (/^#\s+/.test(line)) {
+        closeList();
+        out.push(`<div class="mock-name">${this.escapeHtml(line.replace(/^#\s+/, '').split('|')[0].trim())}</div>`);
+      } else if (/^[-•*]\s+/.test(line)) {
+        if (!inList) { out.push('<div class="mock-bullets">'); inList = true; }
+        out.push(`<div class="mock-bullet">&bull; ${bold(line.replace(/^[-•*]\s+/, ''))}</div>`);
+      } else {
+        closeList();
+        out.push(`<div class="mock-text">${bold(line)}</div>`);
+      }
+    }
+    closeList();
+    return out.join('');
+  },
+
   _demoCoverText(jobTitle, company) {
     return `Dear Hiring Team,\n\nI am excited to apply for the ${jobTitle || 'role'}${company ? ' at ' + company : ''}. `
       + `My background aligns closely with the tech stack and requirements in the posting. (Demo letter — live generation replaces this.)`;
@@ -625,12 +665,17 @@ JobAgent.resumeStudio = {
     if (this.shrinkProgressCard) this.shrinkProgressCard.classList.add('hidden');
     const jobTitle = (resume && resume.job_title) || '';
     const company = (resume && resume.company) || '';
+    // Real generated resume first (full markdown the PDF was rendered from —
+    // scrollable via .doc-mock-preview); stub sheet only when absent.
+    const markdown = (resume && resume.resume_markdown) || '';
     const prof = this._demoProfile();
-    const resumeHtml = this._resumeSheetHtml({
-      name: prof.name,
-      sub: [jobTitle, company, prof.email].filter(Boolean).join(' • '),
-      skills: prof.skills, jobTitle, company, demoBadge: false,
-    });
+    const resumeHtml = markdown
+      ? this._mdToHtml(markdown)
+      : this._resumeSheetHtml({
+          name: prof.name,
+          sub: [jobTitle, company, prof.email].filter(Boolean).join(' • '),
+          skills: prof.skills, jobTitle, company, demoBadge: false,
+        });
     const coverText = (letter && letter.cover_letter) || '';
     const coverHtml = this._coverSheetHtml({ coverText, jobTitle, company, demoBadge: false });
     if (this.lastResult) {
