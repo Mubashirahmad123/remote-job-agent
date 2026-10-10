@@ -199,6 +199,16 @@ contained change rather than a refactor.
 
 ## 3. Backlog
 
+- **Domain-agnostic matching — separate branch, deferred (no target date):**
+  main stays dev-only — the scraper filters, rejection engine, scoring
+  categories, and resume/cover-letter generation all assume software
+  development roles, which is intentional and stays for personal use. A future
+  *separate branch* will remove that assumption so an uploaded CV's domain
+  (customer support, cybersecurity, sales, etc.) drives matching instead of a
+  hardcoded dev filter. Touches `TECH_FILTER`/`DEV_TITLE_FILTER`
+  (`agents/scrapper.py`), the rejection engine (`tools/cv_matcher.py`),
+  `CORE_CATEGORIES`, and role-detection (`agents/gemini_tools.py`). **Do not
+  build on main.**
 - **Windows/cp1252 test failures (scoped, small, not yet landed):** the
   source-scanning tests read repo files with `Path.read_text()` and no
   `encoding=` — the locale codec on Windows (cp1252) cannot decode the UTF-8
