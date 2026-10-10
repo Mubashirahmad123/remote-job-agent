@@ -18,7 +18,6 @@ JobAgent.navigation = {
     this.navItems = document.querySelectorAll('.nav-item');
     this.viewPanels = document.querySelectorAll('.view-panel');
     this.currentViewTitle = document.getElementById('currentViewTitle');
-    this.globalSearchInput = document.getElementById('globalSearchInput');
     this.btnSyncSheets = document.getElementById('btnSyncSheets');
     this.btnScrapeNow = document.getElementById('btnScrapeNow');
     this.scrapeStatusCard = document.getElementById('scrapeStatusCard');
@@ -57,28 +56,13 @@ JobAgent.navigation = {
       });
     });
 
-    // ⌘K / Ctrl+K keyboard shortcut
+    // Escape closes drawer/modals
     window.addEventListener('keydown', (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        this.globalSearchInput.focus();
-      } else if (e.key === 'Escape') {
+      if (e.key === 'Escape') {
         if (JobAgent.jobDrawer) JobAgent.jobDrawer.close();
         if (JobAgent.autoApply) JobAgent.autoApply.closeModal();
       }
     });
-
-    if (this.globalSearchInput) {
-      this.globalSearchInput.addEventListener('input', (e) => {
-        const val = e.target.value.trim();
-        if (JobAgent.store.state.activeTab !== 'jobs') {
-          this.switchTab('jobs');
-        }
-        const jobSearchInput = document.getElementById('jobFilterSearch');
-        if (jobSearchInput) jobSearchInput.value = val;
-        JobAgent.store.setFilter('search', val.toLowerCase());
-      });
-    }
 
     if (this.btnSyncSheets) {
       this.btnSyncSheets.addEventListener('click', () => {

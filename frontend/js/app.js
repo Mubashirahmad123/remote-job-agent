@@ -63,15 +63,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  const searchInput = document.getElementById('globalSearchInput');
-  if (searchInput && !searchInput.dataset.wired) {
-    searchInput.dataset.wired = '1';
-    searchInput.addEventListener('input', (e) => {
-      if (JobAgent.store) JobAgent.store.setFilter('search', e.target.value.toLowerCase());
-      if (JobAgent.navigation) JobAgent.navigation.switchTab('jobs');
-    });
-  }
-
   // Scrape Now -> POST /api/scrape, poll run status, reload on done.
   // Status is mirrored to the sidebar card (dot/title/sub/progress) so the
   // user always sees run state, plus the button disables while scraping.

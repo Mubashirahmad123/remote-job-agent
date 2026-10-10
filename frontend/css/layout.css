@@ -313,39 +313,17 @@
 }
 
 /* --- Header region sizing --------------------------------------------------
-   The header is a three-region flex row, and two of the three regions used to
-   have NO rule at all while .quick-search-wrapper carried a fixed
-   `width: 420px`. That made the row's intrinsic minimum ~1350px. Since
-   .app-main is inset by the 256px fixed sidebar, the header only has
-   (viewport - 256px) to work with, so it overflowed below roughly a 1610px
-   viewport — i.e. on essentially every laptop. The buttons are
-   `white-space: nowrap`, so they cannot shrink to absorb it, and the LAST flex
-   item (#btnSignOut) was simply pushed past the right edge.
-
-   This contract is what keeps that from coming back:
-
-     .header-right  flex: 0 0 auto  — never squeezed (holds the session controls)
-     .header-center flex: 1 1 auto  — absorbs all shrinking (the search is the
-                                      only genuinely compressible region)
-     .header-left   flex: 0 1 auto  — shrinks, with an ellipsis on the title
-
-   Anything new added to .header-right has to respect it, or the sign-out
-   button leaves the viewport again. The tiers below then remove content in
-   order of how little it matters.
+   The header is a two-region flex row (breadcrumb + session controls) with
+   `space-between`, so it can no longer overflow horizontally: the buttons are
+   `white-space: nowrap` and .header-right never shrinks, while .header-left
+   shrinks with an ellipsis on the title. Anything new added to .header-right
+   must respect that, or the sign-out button leaves the viewport again.
    -------------------------------------------------------------------------- */
 .header-left {
   display: flex;
   align-items: center;
   flex: 0 1 auto;
   min-width: 0; /* without this the ellipsis below cannot engage */
-}
-
-.header-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1 1 auto;
-  min-width: 0; /* lets the search shrink instead of forcing an overflow */
 }
 
 .header-left .breadcrumb-container {
@@ -356,12 +334,6 @@
   min-width: 0;
 }
 
-.breadcrumb-root {
-  color: #64748b;
-}
-.breadcrumb-sep {
-  color: #475569;
-}
 .breadcrumb-current {
   color: #f1f5f9;
   font-weight: 600;
@@ -370,64 +342,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Quick Search */
-.quick-search-wrapper {
-  position: relative;
-  /* Was a fixed `width: 420px`, which set the header's minimum width and caused
-     the overflow. Now it takes the space .header-center offers it, up to the
-     same 420px, and gives it back when the row runs short. */
-  width: 100%;
-  max-width: 420px;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 14px;
-  width: 15px;
-  height: 15px;
-  color: var(--text-muted);
-  pointer-events: none;
-}
-
-.quick-search-input {
-  width: 100%;
-  height: 38px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-md);
-  padding: 0 46px 0 38px;
-  color: #f1f5f9;
-  font-size: 13px;
-  outline: none;
-  transition: all var(--transition-fast);
-  font-family: var(--font-sans);
-}
-
-.quick-search-input::placeholder {
-  color: #475569;
-}
-
-.quick-search-input:focus {
-  border-color: rgba(59, 130, 246, 0.5);
-  background: rgba(255, 255, 255, 0.07);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
-}
-
-.search-key-hint {
-  position: absolute;
-  right: 12px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  padding: 2px 5px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
 }
 
 .header-right {
@@ -483,21 +397,10 @@
 
    Each tier drops the least important thing first, and #btnSignOut is dropped
    last — never. The structural guarantee is the region contract above:
-   .header-right cannot shrink, .header-center shrinks to zero, .header-left
-   shrinks with an ellipsis. So the only remaining way to overflow is for
-   .header-right's own content to exceed the row, and these tiers cap it at
-   ~204px by the bottom.
+   .header-right cannot shrink and .header-left shrinks with an ellipsis. So
+   the only remaining way to overflow is for .header-right's own content to
+   exceed the row, and these tiers cap it at ~204px by the bottom.
    -------------------------------------------------------------------------- */
-
-/* The ESC hint inside the search field is decorative. */
-@media (max-width: 1600px) {
-  .search-key-hint {
-    display: none;
-  }
-  .quick-search-input {
-    padding-right: 14px; /* was 46px, reserving room for the badge above */
-  }
-}
 
 /* Sync Sheets / Scrape Now go icon-only. Both keep title= and aria-label=, so
    the action is still named for hover and for screen readers; only ~160px of
@@ -514,8 +417,7 @@
   }
 }
 
-/* The session chip keeps the avatar initials and drops the username, and the
-   search stops competing for width. */
+/* The session chip keeps the avatar initials and drops the username. */
 @media (max-width: 1320px) {
   .session-chip .session-name {
     display: none;
@@ -523,21 +425,9 @@
   .session-chip {
     padding: 0 4px;
   }
-  .quick-search-wrapper {
-    max-width: 300px;
-  }
 }
 
-/* Hide the search outright. The Jobs view has its own filter, so this is the
-   least essential control in the header. */
-@media (max-width: 1120px) {
-  .header-center {
-    display: none;
-  }
-}
-
-/* Sign out goes icon-only — which is exactly why the markup now carries an icon
-   — and the breadcrumb drops its root, keeping only the current view. */
+/* Sign out goes icon-only — which is exactly why the markup now carries an icon. */
 @media (max-width: 900px) {
   #btnSignOut span {
     display: none;
@@ -545,10 +435,6 @@
   #btnSignOut {
     width: 30px;
     padding: 0;
-  }
-  .breadcrumb-root,
-  .breadcrumb-sep {
-    display: none;
   }
 }
 

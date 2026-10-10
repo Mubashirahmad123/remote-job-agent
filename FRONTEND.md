@@ -150,7 +150,7 @@ live: `jobs[], tracker[], stats, skills, health, usingLive, dataSource(sheets|sn
 | `resumeStudio.js` | CV upload (local demo), tailor engine, profile edit + variants panels, Resume/Cover-Letter preview tabs + Open-PDF | `POST /api/resume` + `/api/cover-letter`, `GET` + `PUT /api/cv/profile`, `GET /api/cv/variants` (quiet fallback to dynamic demo preview when 404/501/unreachable) | `tailorJobSelect`, `btnGenerateTailored`, `cvVariantList`, `btnEditProfile`, `profSkills`, `generatedPreviewCard`, `tabPreviewResume`, `tabPreviewCover`, `btnOpenPdf` |
 | `autoApply.js` | fill-and-review queue, safety lock, activity and latest results | API fills supported Greenhouse/Lever forms in visible windows and captures screenshot paths; unsupported ATSs remain package-only; `needs_review` fills render amber and are never counted as filled; per-job failures do not stop later jobs | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider` (enforced), `btnRunAutoApplyQueue`, `btnViewScreenshots`, `terminalLog`, `reviewQueueResults` |
 | `toast.js` | notifications | `JobAgent.toast.show(msg)` | — |
-| `app.js` | boot: `init()` all → `store.loadAll()` → wire Sync Sheets + global search | `/api/jobs/refresh` | `btnSyncSheets`, `globalSearchInput`, `btnScrapeNow` (Phase 2: scrape trigger) |
+| `app.js` | boot: `init()` all → `store.loadAll()` → wire Sync Sheets | `/api/jobs/refresh` | `btnSyncSheets`, `btnScrapeNow` (Phase 2: scrape trigger) |
 
 ## 5. Conventions
 

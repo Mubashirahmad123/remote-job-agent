@@ -422,13 +422,13 @@ describe('login flow — auth enforced', () => {
 // ---------------------------------------------------------------------------
 // Header layout contract.
 //
-// The sign-out button used to be pushed off-screen: .quick-search-wrapper had a
-// fixed `width: 420px`, .header-left and .header-center had no rule at all, and
-// .header-right declared no flex behaviour. The header row's intrinsic minimum
-// was therefore ~1350px, while .app-main only offers (viewport - the 256px
-// fixed sidebar) — so it overflowed below roughly a 1610px window, i.e. on
-// nearly every laptop. The buttons are `white-space: nowrap` and cannot shrink,
-// so the last flex item (#btnSignOut) was the casualty.
+// The header used to carry a global search region whose wrapper had a fixed
+// `width: 420px`, which set the row's intrinsic minimum at ~1350px. The header
+// only gets (viewport - the 256px fixed sidebar) of space, so it overflowed
+// below roughly a 1610px window, i.e. on nearly every laptop — and since the
+// buttons are `white-space: nowrap` and cannot shrink, the last flex item
+// (#btnSignOut) was the casualty. The search has since been removed outright
+// (the Jobs view has its own filter), leaving a two-region row.
 //
 // jsdom does no layout, so overflow cannot be asserted directly. What CAN be
 // pinned is the contract that makes overflow impossible, which is what a future
@@ -458,12 +458,6 @@ describe('header layout contract', () => {
     );
   });
 
-  test('.header-center absorbs the shrink instead', () => {
-    const d = declarations(read('css/layout.css'), '.header-center');
-    assert.match(d, /flex:\s*1 1 auto/, 'the search is the only compressible header region');
-    assert.match(d, /min-width:\s*0/, 'a flex child defaults to min-width: auto and refuses to shrink below its content');
-  });
-
   test('.header-left shrinks to an ellipsis rather than widening the row', () => {
     const css = read('css/layout.css');
     assert.match(declarations(css, '.header-left'), /min-width:\s*0/);
@@ -472,15 +466,15 @@ describe('header layout contract', () => {
     assert.match(bc, /overflow:\s*hidden/);
   });
 
-  test('the search wrapper has no fixed pixel width', () => {
-    const d = declarations(read('css/layout.css'), '.quick-search-wrapper');
+  test('the global search input is not in the header', () => {
+    const html = read('index.html');
+    const header = html.match(/<header class="app-header">[\s\S]*?<\/header>/);
+    assert.ok(header, 'no .app-header in index.html');
     assert.doesNotMatch(
-      d,
-      /(^|[^-])width:\s*\d+px/,
-      'a fixed px width here is exactly what set the header minimum and pushed #btnSignOut off-screen',
+      header[0],
+      /globalSearchInput|quick-search/,
+      'the header search was removed; re-adding it needs a width contract or #btnSignOut gets pushed off-screen again',
     );
-    assert.match(d, /max-width:\s*420px/, 'keep the 420px cap, just not as a floor');
-    assert.match(d, /min-width:\s*0/);
   });
 
   test('#btnSignOut still has an icon and an accessible name at every tier', () => {
@@ -516,7 +510,7 @@ describe('header layout contract', () => {
   test('the responsive ladder is present and descending', () => {
     const css = stripComments(read('css/layout.css'));
     const widths = [...css.matchAll(/@media \(max-width:\s*(\d+)px\)/g)].map((m) => Number(m[1]));
-    assert.ok(widths.length >= 6, `expected the graded ladder, found only: ${widths.join(', ')}`);
+    assert.ok(widths.length >= 4, `expected the graded ladder, found only: ${widths.join(', ')}`);
     for (let i = 1; i < widths.length; i += 1) {
       assert.ok(widths[i] < widths[i - 1], `breakpoints out of order: ${widths.join(', ')}`);
     }
