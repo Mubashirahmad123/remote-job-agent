@@ -1,5 +1,70 @@
 # CHANGELOG.md
 
+## 2026-10-09 — resume CV fidelity + the PR #28 CI root cause (PR #29)
+
+Two related things: the resume tailoring work landed on main, and the CI
+failure that blocked its first merge attempt was traced to a test-harness
+mistake rather than a product bug. **PR #28 could not merge** — its branch
+was cut from a stale repo snapshot with no shared history, so a merge would
+have reverted the PR #26 security work; PR #29 re-applied only its intended
+8-file diff onto current main.
+
+### Resume tailoring is now grounded in the actual CV
+
+- **GROUNDING RULES + PROJECTS instruction** in the prompt (`resume_generator._build_smart_prompt`):
+  only employers, titles, dates, education, projects and metrics that appear
+  in the CV/profile are allowed; inventing or substituting any of them is
+  prohibited. `include ALL of the candidate's ACTUAL projects` — a prior
+  head-only truncation erased the PROJECTS section from the prompt, and the
+  LLM invented replacements; truncation now keeps head **and** tail.
+- **`_strip_llm_footer`** — `Keywords:` lines and stray `---` rules the models
+  append after Education are removed before validation/rendering (the PDF
+  engine draws its own section rules).
+- **`_filter_cv_data`** — the operator-rejected pre-web history (the "Yarikul
+  Infotech" internship and the "CRM Application"/"customer relationship
+  management" project) is dropped from the profile and raw CV text **before
+  the prompt is built**, for Shopify/frontend-targeted tailoring. Filtering
+  happens programmatically, so it does not depend on the model obeying.
+- **1-page pass sizes retuned** for the Arial/Liberation font (narrower than
+  DejaVu, so pass 1 affords 10pt body); `---` lines are never rendered as
+  literal text. `tools/font_utils.py` gained Arial/Liberation resolution +
+  typographic Unicode normalization.
+- **`out=` param** — `generate_resume_for_job` surfaces the generated
+  markdown; `api/materials.py` threads it through and `POST /api/resume/{fp}`
+  now returns `resume_markdown` alongside `filename`.
+- **Live markdown preview** — Resume Studio renders the *actual* generated
+  resume markdown in the preview pane (escaped first, so LLM output cannot
+  inject HTML), in a taller scrollable pane; the stub demo sheet renders only
+  when no real markdown exists.
+
+### The PR #28 CI failure: a sys.modules foot-gun, not a resume bug
+
+The three `TestGenerateOutParam` failures (real PDFs with timestamped
+names instead of the mocked `r.pdf`, real Gemini calls in captured stdout)
+looked like a filename-format change. They were not. An earlier "fix" for
+`test_no_heavy_imports` did a bare `sys.modules.pop("tools.resume_generator")`
+before asserting — which **permanently destroyed the module object** the rest
+of the suite held references to. The next `import tools.resume_generator`
+re-executed the file into a *fresh* module, so the tests' monkeypatches of
+`generate_tailored_resume` / `save_resume_pdf` silently missed the functions
+under test and the real pipeline ran. The loosened-filename-assertion variant
+of that "fix" made the wrong behavior pass; both were discarded.
+
+The merged fix (8961c62c3): the hygiene test pops the module **for the
+duration of the request and restores the original object in `finally`**, and
+`TestGenerateOutParam` imports and calls through the *same in-test module
+reference* (`rg.generate_resume_for_job`), so patch and call can never
+diverge. The strict `r.pdf` assertions are unchanged — the endpoints still
+must not import the heavy module, and the rest of the suite keeps its module
+identity.
+
+### Known local gap (not CI)
+
+The full suite is green in CI (Linux). On Windows, 13 `test_glm_client.py`
+tests plus three other source-scanning tests fail on the cp1252 default
+codec: `Path.read_text()` without `encoding=` reads UTF-8 sources as
+cp1252. Fix scoped, not yet landed — see `PM.md` §3 Backlog.
+
 ## 2026-10-08 — actor attribution, CI, and a dependency conflict that had broken `docker build`
 
 Three separate things landed together because the third was found while doing

@@ -1,15 +1,32 @@
 # TESTER.md — Testing Guide
 
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Suite is pytest,
-last verified 2026-10-03: **336 passed, 1 skipped** across the current test files,
-plus a **frontend E2E smoke suite: 19 passed** (`./tests/e2e/run.sh`).
+last verified in CI (Linux) 2026-10-09 after PR #29: **green, ~900 collected,
+1 skipped**, plus a **frontend E2E suite: 29 passed** (`./tests/e2e/run.sh` —
+asset integrity, happy path, API-unreachable, and the login-flow suite).
 The skip is the Lever exact confirmation-copy assertion, a deliberate documented
 limitation (Lever stays fill-only; no paid trial account) — not a blocker.
 Coverage includes `test_api_phase1.py`,
 `test_api_phase2.py`, `test_api_cv.py`, `test_api_materials.py`,
 `test_api_freshness.py`, `test_api_jobs_contract.py`, `test_auto_applier.py`,
-`test_country_filter.py`, `test_api_apply.py`, and
-`test_apply_submit_primitives.py`.
+`test_country_filter.py`, `test_api_apply.py`,
+`test_apply_submit_primitives.py`, `test_resume_generator.py` (prompt
+grounding, footer strip, out-param), `test_api_skills.py`,
+`test_source_naming.py`, `test_submit_dryrun.py`, `test_submit_recon.py`,
+`test_scraper_timeout.py`, `test_glm_client.py` (golden vectors +
+consumer wiring), `test_api_auth.py`, `test_api_auth_hardening.py`,
+`test_api_actor_attribution.py`, and the PR #26 security suites
+(`test_content_security_policy.py`, `test_embedding_cache.py`,
+`test_url_guard.py`, container-hardening, TLS-verification,
+proxy-header-trust, session-idle-timeout, login-timing).
+
+> **Windows caveat (scoped fix pending — see PM.md §3 Backlog):** the
+> source-scanning tests read repo files with `Path.read_text()` and no
+> `encoding=`, so on a cp1252 Windows locale 13 `test_glm_client.py`
+> consumer tests plus the CSP / embedding-cache / url-guard scans fail on
+> UTF-8 bytes, and `test_api_phase2::test_get_one_and_list` can flake in the
+> full-suite order (passes alone). CI on Linux is the release gate, not a
+> local Windows run.
 
 ---
 

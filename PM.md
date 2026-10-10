@@ -1,6 +1,6 @@
 # PM.md — Project Tracker (Phases, Status, Next)
 
-Living plan for the remote-job-agent build. Status last reconciled 2026-10-01.
+Living plan for the remote-job-agent build. Status last reconciled 2026-10-09.
 
 ---
 
@@ -20,8 +20,9 @@ Living plan for the remote-job-agent build. Status last reconciled 2026-10-01.
 | 2 — Action API | scrape ✅ + status card; resume/cover-letter ✅ (Studio wired); CV profile GET+PUT ✅ + variants ✅; fill-and-review API ✅; cockpit queue connected; skills aggregate ✅ | ✅ endpoints complete — 2b live submit remains unproven: 2026-10-03 Democorp recon found no confirmation metadata, so `/intent` would fail closed before fill or click; reCAPTCHA also present. No submission occurred. |
 | 2.1 — CV-upload-first + cache seam | 2.1a upload→parse→match→gap analysis in Resume Studio; 2.1b cache backend seam + multi-worker warning | ⬜ planned, target 3–4 days from 2026-10-03 (spec in §2.1) |
 | 3 — Polish | auto-apply telemetry wiring, E2E checks | 🟡 in progress — tracker review mapping done; frontend E2E smoke landed (19 assertions, mutation-tested) |
+| 3 — Resume CV fidelity | grounded prompts, rejected-entry filtering, footer strip, Arial 1-page passes, live markdown preview (`resume_generator` + Studio) | ✅ done (2026-10-09, PR #29) — tailoring no longer invents projects/experience; preview shows the real generated resume |
 
-Full suite last verified 2026-10-03: **336 passed, 1 skipped** (+45 since the 291 baseline: `/api/skills`, scraper parity, source naming), plus 19 frontend E2E assertions (`./tests/e2e/run.sh`) (`venv\Scripts\python.exe -m pytest tests/ -q`). The skip is the Lever exact confirmation-copy assertion, now a deliberate documented limitation (Lever submit deferred — no paid trial account; see 2b split below), not a temporary blocker. Scrape-log fixes landed the same day (curator sign format, Arbeitnow `company_name` backfill, single-loop poll guard, and the spurious `scraped_at` missing-column warning); details in `CHANGELOG.md` and `PRODUCTION.md` §7. To be unambiguous about that last one: `scraped_at` **is** populated — `prepare_job_for_sheet` (`tools/sheet_writer.py`) sets `scraped_at`/`status`/`job_fingerprint` defaults on every job before the row is built, on both write paths. The warning was false: `append_rows` validated its sample job *before* those defaults were applied, so it reported columns that the very next step filled in. The fix applies the defaults to the sample first — nothing was suppressed or merely relocated, and a genuinely missing column still warns. Score parsing is also hardened: `_safe_score` (`agents/auto_applier.py`) and the sheet-writer twin coerce `"85.0"`, `"87%"`, `""`, `None`, and bools instead of raising on `int("85.0")`; unparseable values score 0 and fall to `batch`. Covered by `tests/test_apply_submit_primitives.py` (`"85.0"`/`""`/`None`/`"95%"`). Claim, intent, validation, and Greenhouse verification helpers are implemented; Greenhouse `/intent` + `/submit` routes exist, are kill-switch gated (403 while `SUBMIT_ENABLED=False`), and are tested. Lever has no submit path by design.
+Suite last verified 2026-10-09 in CI (Linux) after PR #29 — green; the only skip remains the Lever exact confirmation-copy assertion. **Local Windows runs are not a release gate**: 16 tests fail there on the cp1252 default codec (`Path.read_text()` without `encoding=` reading UTF-8 sources — 13 in `test_glm_client.py`, plus one each in the CSP / embedding-cache / url-guard scans and one `test_api_phase2` isolation flake that passes alone). Encoding fix scoped in §3 Backlog. Historical note — full suite last verified 2026-10-03: **336 passed, 1 skipped** (+45 since the 291 baseline: `/api/skills`, scraper parity, source naming), plus 19 frontend E2E assertions (`./tests/e2e/run.sh`) (`venv\Scripts\python.exe -m pytest tests/ -q`). The skip is the Lever exact confirmation-copy assertion, now a deliberate documented limitation (Lever submit deferred — no paid trial account; see 2b split below), not a temporary blocker. Scrape-log fixes landed the same day (curator sign format, Arbeitnow `company_name` backfill, single-loop poll guard, and the spurious `scraped_at` missing-column warning); details in `CHANGELOG.md` and `PRODUCTION.md` §7. To be unambiguous about that last one: `scraped_at` **is** populated — `prepare_job_for_sheet` (`tools/sheet_writer.py`) sets `scraped_at`/`status`/`job_fingerprint` defaults on every job before the row is built, on both write paths. The warning was false: `append_rows` validated its sample job *before* those defaults were applied, so it reported columns that the very next step filled in. The fix applies the defaults to the sample first — nothing was suppressed or merely relocated, and a genuinely missing column still warns. Score parsing is also hardened: `_safe_score` (`agents/auto_applier.py`) and the sheet-writer twin coerce `"85.0"`, `"87%"`, `""`, `None`, and bools instead of raising on `int("85.0")`; unparseable values score 0 and fall to `batch`. Covered by `tests/test_apply_submit_primitives.py` (`"85.0"`/`""`/`None`/`"95%"`). Claim, intent, validation, and Greenhouse verification helpers are implemented; Greenhouse `/intent` + `/submit` routes exist, are kill-switch gated (403 while `SUBMIT_ENABLED=False`), and are tested. Lever has no submit path by design.
 
 ## 2. Next: Phase 2 — Action API (spec)
 
@@ -198,6 +199,16 @@ contained change rather than a refactor.
 
 ## 3. Backlog
 
+- **Windows/cp1252 test failures (scoped, small, not yet landed):** the
+  source-scanning tests read repo files with `Path.read_text()` and no
+  `encoding=` — the locale codec on Windows (cp1252) cannot decode the UTF-8
+  sources, so 13 `test_glm_client.py` consumer tests plus
+  `test_content_security_policy`, `test_embedding_cache` and `test_url_guard`
+  scans fail locally while CI (Linux, UTF-8 default) stays green. Fix: pass
+  `encoding="utf-8"` at each read site; also note the observed
+  `test_api_phase2::test_get_one_and_list` full-suite-only flake on Windows
+  (passes in isolation — likely shared-state leakage between tests, worth a
+  look when the encoding fix lands). Delivered as its own small PR.
 - **CV-upload-first flow → promoted to Phase 2.1a** (see §2.1; spec, scope and
   acceptance criteria live there). Originally from operator notes: upload the
   CV first, scrape/match on that basis, and have Resume Studio surface CV

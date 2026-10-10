@@ -178,11 +178,17 @@ poll loop per page (`pollActive` guard in `frontend/js/app.js`), so a
 refresh-resume plus click/409 path never stacks concurrent
 `GET /api/scrape/{run_id}` loops.
 
-### `POST /api/resume/{fp}` → `{status, filename}` (+ `GET …/download` PDF)
+### `POST /api/resume/{fp}` → `{status, filename, resume_markdown, job_title, company, job_fingerprint}` (+ `GET …/download` PDF)
 ### `POST /api/cover-letter/{fp}` → `{status, filename, cover_letter}` (+ `GET …/download` text)
 `api/materials.py` resolves the fingerprint against Sheets/snapshot rows,
 runs `resume_generator` / `gemini_tools`, and serves fp-mapped files only
 (404 unknown job / nothing generated yet, 502 generation failure).
+`resume_markdown` is the exact text the PDF was rendered from, threaded out
+of `generate_resume_for_job(..., out=)` — the generation prompt is grounded
+in the parsed CV (invented employers/projects prohibited; the
+operator-rejected pre-web entries are filtered from profile + raw CV text
+before the prompt is built; LLM keyword footers stripped), so the Resume
+Studio preview shows the real document rather than a stub.
 
 ### `GET /api/cv/profile` → `CvProfileOut` (501 when no fresh cache)
 Cheap read only: `cache.get_cv_profile()` serves the on-disk

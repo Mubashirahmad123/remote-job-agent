@@ -19,7 +19,7 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | **AI cover letters with role detection** | ✅ | Detects backend/frontend/fullstack/mobile role from job title and tailors tone, skills, and experience accordingly |
 | **LLM fallback chain** | ✅ | Gemini → Groq → Mistral → GLM → Ollama Cloud — pipeline never crashes from API quota errors |
 | **Auto-apply workflow** | 🟡 Fill/review over dashboard API; submit kill-switched | The cockpit prepares up to three jobs per run (daily-cap enforced); Greenhouse/Lever open visibly with the final tailored resume + cover letter filled and paused for manual review, plus an in-browser screenshot preview. Other ATSs receive a package only. Greenhouse `/intent` + `/submit` routes exist but fail closed with 403 while `api/safety.py SUBMIT_ENABLED=False`. The legacy CLI blind submit is permanently disabled. |
-| **Tailored resume generation** | ✅ | Generates ATS-optimized resume PDF matched to each job's tech stack `python main.py resume` |
+| **Tailored resume generation** | ✅ | Generates ATS-optimized resume PDF matched to each job's tech stack — grounded strictly in the actual CV (prompt forbids invented employers/projects; rejected pre-web entries filtered before the LLM sees them; LLM keyword footers stripped) `python main.py resume` |
 | **Country/location filter** | ✅ | 452-country detection — blocks jobs from non-whitelisted countries, allows 198 whitelisted terms |
 | **Cross-platform Unicode PDFs** | ✅ | Auto-downloads DejaVu fonts — works on Windows/macOS/Linux; covers accents, Arabic, Cyrillic |
 | Application tracker | ✅ | `track.py` CLI + live Pipeline Tracker kanban — APPLIED sheet rows, fill-review/package statuses, status cycling, follow-up reminders |
@@ -184,7 +184,7 @@ remote-job-agent/
 │       ├── store.js          # Reactive state + backend→UI normalization (no mock layer)
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
 ├── tests/
-│   └── test_api_*.py etc.   # 291 isolated API tests (faked Sheets, no network) + auto_applier + country_filter
+│   └── test_*.py etc.        # ~900 isolated tests (faked Sheets, no network) — see TESTER.md; CI is the release gate
 ├── apply_packages/           # Auto-generated apply packages (resume + cover letter + form data)
 ├── cover_letters/            # Generated PDF cover letters
 ├── resumes/                  # Generated tailored PDF resumes
@@ -403,7 +403,7 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `POST /api/jobs/refresh` | `{tab?}` — invalidate the sheet cache on demand |
 | `POST /api/scrape` | Start a background scrape run → `202 {run_id, status}` (409 if one is active) |
 | `GET /api/scrape` / `GET /api/scrape/{run_id}` | List runs / poll `{status, phase, scraped, curated, error}` |
-| `POST /api/resume/{fp}` | Tailor 1-page resume PDF → `{status, filename}` + `GET …/download` |
+| `POST /api/resume/{fp}` | Tailor 1-page resume PDF → `{status, filename, resume_markdown}` (the exact markdown the PDF was rendered from — powers the Studio's live preview) + `GET …/download` |
 | `POST /api/cover-letter/{fp}` | Role-aware cover letter → `{status, filename, cover_letter}` + `GET …/download` |
 | `GET /api/cv/profile` | Cached parsed-CV profile → `CvProfileOut` (501 when no fresh `cache/cv_profile_*.json`; per-request LLM parsing disabled) |
 | `PUT /api/cv/profile` | Persist Resume Studio edits (contact + skills) into the profile cache → `CvProfileOut` (501 when uncached; never triggers LLM parsing) |
