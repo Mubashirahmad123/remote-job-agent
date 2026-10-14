@@ -4,18 +4,22 @@ Gate placement (submit unreachable, not merely unrequested):
   - any `mode` other than "review" -> 400 (never dispatch).
   - dream tier -> 422 via DreamTierForbidden (well-formed but forbidden).
   - unknown fingerprint -> 404.
+  - already packaged -> 409 AlreadyPackaged (regenerate is the override).
+  - concurrent duplicate fill -> 409 FillInProgress (claim-first, see
+    api/fill_claims.py — two rapid clicks must not double-generate).
   - AUTO_APPLY_CONFIRM is never read here or in api.apply — env cannot
     re-enable submit over HTTP. See api/safety.py SUBMIT_ENABLED=False.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 
 from api import apply as apply_service
 from api import safety
 from api.deps import action_budget, require_actor, require_apply_token, require_submit_actor, require_token
 from api.errors import failure, missing
-from api.schemas import ApplyIntentOut, ApplyIntentRequest, ApplyRequest, ApplySubmitOut, ApplySubmitRequest
+from api.mappers import to_job_out
+from api.schemas import ApplyIntentOut, ApplyIntentRequest, ApplyQueueOut, ApplyRequest, ApplySubmitOut, ApplySubmitRequest
 
 router = APIRouter(tags=["apply"])
 
@@ -32,17 +36,78 @@ def apply_review(
     mode = raw.strip().lower()
     if mode != "review":
         raise HTTPException(status_code=400, detail="Only mode='review' is supported (fill-only)")
+    regenerate = bool(body.regenerate) if body is not None else False
     try:
         # `actor` is threaded to the artifact row so a review package records
         # who generated it — the service default ("automation") is only correct
         # for the CLI/scheduler, never for a dashboard click.
-        return apply_service.fill_review(job_fingerprint, actor=actor)
+        return apply_service.fill_review(
+            job_fingerprint, actor=actor, regenerate=regenerate
+        )
     except LookupError:
         raise HTTPException(status_code=404, detail="Job not found")
+    except apply_service.AlreadyPackaged as e:
+        # 409, not an error: the job IS packaged, and the deliberate regenerate
+        # action is how a caller rebuilds it. This is what stops a double click
+        # from burning a second resume/cover-letter pass.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Job '{e.job_fingerprint}' already has a package"
+                + (f" at {e.package_path}" if e.package_path else "")
+                + ". Use the per-job Regenerate action to rebuild it deliberately."
+            ),
+        )
+    except apply_service.FillInProgress as e:
+        # 409, not an error: a fill for this job is already running (rapid
+        # double-click, second tab). The in-flight request is the one that
+        # will deliver the package — this caller must skip, not race it.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A fill for job '{e.job_fingerprint}' is already in progress"
+                + (f" (started at {e.claimed_at})" if e.claimed_at else "")
+                + ". Skip it for now — the running fill will produce the package."
+            ),
+        )
     except apply_service.DreamTierForbidden as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise failure("Apply fill", e)
+
+
+@router.get("/api/apply/packages")
+def list_packages(_: None = Depends(require_token)) -> dict:
+    """Fingerprints that already have an apply package (dashboard memory)."""
+    from api import apply_state
+
+    fingerprints = sorted(apply_state.list_packaged_fingerprints())
+    return {"fingerprints": fingerprints, "count": len(fingerprints)}
+
+
+@router.get("/api/apply/queue", response_model=ApplyQueueOut)
+def apply_queue(
+    _: None = Depends(require_token),
+    threshold: float = Query(0, ge=0, le=100),
+    limit: int = Query(3, ge=1, le=10),
+    tab: str = Query("ALL JOBS"),
+) -> ApplyQueueOut:
+    """Next-best jobs for Fill & Review, excluding already-processed ones."""
+    try:
+        result = apply_service.select_queue_jobs(
+            threshold=threshold, limit=limit, tab=tab
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise failure("Apply queue", e)
+    return ApplyQueueOut(
+        jobs=[to_job_out(j) for j in result["jobs"]],
+        eligible_total=result["eligible_total"],
+        excluded=result["excluded"],
+        threshold=result["threshold"],
+        limit=result["limit"],
+    )
 
 
 @router.post("/api/apply/{job_fingerprint}/intent", response_model=ApplyIntentOut)

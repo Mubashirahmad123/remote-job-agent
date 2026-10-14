@@ -30,6 +30,10 @@ JobAgent.store = {
     // ---- live data (populated by loadAll) ----
     jobs: [],
     tracker: [],
+    // Fingerprints that already have an apply package (GET /api/apply/packages).
+    // The queue endpoint enforces the same exclusion server-side; this copy is
+    // for per-job UI ("already packaged" + the Regenerate affordance).
+    packagedFingerprints: [],
     stats: null,
     skills: null,
     health: null,
@@ -311,7 +315,27 @@ JobAgent.store = {
     }
   },
 
+  isPackaged(fingerprint) {
+    const fp = String(fingerprint || '');
+    return fp !== '' && this.state.packagedFingerprints.includes(fp);
+  },
+
+  // Which jobs already have a package. Non-fatal on failure: the queue endpoint
+  // applies the same exclusion server-side, so a missing list only costs the
+  // per-job "Regenerate" affordance, never correctness.
+  async loadPackages() {
+    try {
+      const res = await JobAgent.api.getPackagedFingerprints();
+      this.state.packagedFingerprints = Array.isArray(res && res.fingerprints) ? res.fingerprints : [];
+      this.notify();
+    } catch (e) {
+      console.warn('[store] packaged fingerprints unavailable:', e.message);
+    }
+  },
+
   async loadAll() {
-    await Promise.all([this.loadJobs(), this.loadTracker(), this.loadStats(), this.loadSkills()]);
+    await Promise.all([
+      this.loadJobs(), this.loadTracker(), this.loadStats(), this.loadSkills(), this.loadPackages(),
+    ]);
   },
 };

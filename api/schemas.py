@@ -358,9 +358,30 @@ class ApplyRequest(BaseModel):
     `mode` is a plain str (not Literal) so the router can return 400 for
     anything other than "review" instead of FastAPI's automatic 422.
     No confirm/submit fields exist by design — submit is unreachable.
+
+    `regenerate` is the deliberate per-job rebuild override: without it a job
+    that already has a package is refused (409) so the bulk queue cannot
+    re-process the same top-N on every click.
     """
 
     mode: str = "review"
+    regenerate: bool = False
+
+
+class ApplyQueueOut(BaseModel):
+    """GET /api/apply/queue — the next-best UNPROCESSED jobs to fill.
+
+    `excluded` explains an empty queue (how many candidates were skipped as
+    already packaged / fill in progress / already tracked / below threshold /
+    dream-tier), so the dashboard can say WHY instead of silently repeating
+    old work.
+    """
+
+    jobs: List[JobOut] = Field(default_factory=list)
+    eligible_total: int = 0
+    excluded: Dict[str, int] = Field(default_factory=dict)
+    threshold: float = 0
+    limit: int = 3
 
 
 class ApplyIntentRequest(BaseModel):
