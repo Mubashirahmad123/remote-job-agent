@@ -235,7 +235,14 @@ def _get_cache_path(cv_path: str) -> Path:
 
 
 def _load_cached_profile(cv_path: str) -> dict:
-    """Load cached profile if it exists and is recent (< 7 days)."""
+    """Load cached profile if it exists and is recent (< 7 days).
+
+    Never trusts an empty-shell entry (no name + no skills + no experience):
+    that is a recorded FAILED parse, not a profile. The 2026-10-03 incident ran
+    for days because exactly such a file was served as a valid cached profile
+    and every job scored 0 against it. A shell is treated as a cache miss so
+    the caller re-parses instead of silently scoring against nothing.
+    """
     cache_path = _get_cache_path(cv_path)
     if not cache_path.exists():
         return None
@@ -244,13 +251,28 @@ def _load_cached_profile(cv_path: str) -> dict:
         if age > 7:
             return None
         with open(cache_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        if _is_empty_shell(data):
+            print(f"⚠️ Ignoring cached CV profile '{cache_path.name}': empty shell from a "
+                  f"failed parse (no name/skills/experience). Re-parsing.")
+            return None
+        return data
     except Exception:
         return None
 
 
 def _save_cached_profile(cv_path: str, profile: dict):
-    """Save profile to cache."""
+    """Save profile to cache. Refuses to persist an empty shell.
+
+    Caching a failed parse as if it were valid data is the 2026-10-03 bug:
+    the shell outlived the transient LLM outage that produced it and broke
+    every scoring run for days. Raises CVParseError instead of writing.
+    """
+    if _is_empty_shell(profile):
+        raise CVParseError(
+            "Refusing to cache an empty CV profile (no name, no skills, no "
+            "experience) — that is a failed parse, not a profile."
+        )
     try:
         cache_path = _get_cache_path(cv_path)
         with open(cache_path, "w", encoding="utf-8") as f:
@@ -282,6 +304,30 @@ def _smart_truncate(text: str, max_chars: int = 6000) -> str:
 # =============================================================================
 # PROFILE VALIDATION
 # =============================================================================
+
+class CVParseError(Exception):
+    """Raised when CV parsing fails or produces an empty, unusable profile.
+
+    Callers must treat this as "no profile available" — never as an
+    empty-but-valid profile. An empty shell flowing downstream silently
+    turned every job score into 0 for days (2026-10-03 incident).
+    """
+
+
+def _is_empty_shell(profile) -> bool:
+    """True when a profile carries no usable signal: no name, no skills
+    AND no experience. This is the three-field check used to diagnose the
+    2026-10-03 zero-score incident; it means parsing FAILED, not that the
+    CV is sparse — a real parse always yields at least one of the three.
+    """
+    if not isinstance(profile, dict):
+        return True
+    return (
+        not profile.get("name")
+        and not profile.get("skills")
+        and not profile.get("experience")
+    )
+
 
 def _validate_profile(profile: dict) -> dict:
     """Ensure profile has all required fields with correct types."""
@@ -342,6 +388,13 @@ def parse_cv(cv_path: str, use_cache: bool = True, return_raw: bool = False) -> 
     
     Returns:
         Parsed CV profile dict with all required fields
+    
+    Raises:
+        CVParseError: if no text could be extracted from the file, or if
+            parsing yields an empty profile (no name AND no skills AND no
+            experience). An empty result is a FAILED parse and is never
+            cached or returned as if it were valid — a cached empty shell
+            silently scored every job 0 for days (2026-10-03 incident).
     """
     # Check cache
     if use_cache:
@@ -354,7 +407,10 @@ def parse_cv(cv_path: str, use_cache: bool = True, return_raw: bool = False) -> 
     text = extract_cv_text(cv_path)
     if not text:
         print("❌ Could not extract text from CV")
-        return _validate_profile({})
+        raise CVParseError(
+            f"Could not extract any text from '{cv_path}' — the file is "
+            "corrupt, empty, or not a readable PDF/DOCX."
+        )
     
     # Smart truncate
     safe_text = _smart_truncate(text, max_chars=6000)
@@ -405,6 +461,7 @@ CV TEXT:
 """
     
     # Parse with LLM fallback
+    parse_error = None
     try:
         raw_response = _parse_with_llm(prompt, task="cv_parsing")
         
@@ -420,13 +477,30 @@ CV TEXT:
     except json.JSONDecodeError as e:
         print(f"⚠️ JSON parsing failed: {e}")
         print(f"   Raw response: {raw_response[:200]}...")
+        parse_error = f"LLM returned invalid JSON: {e}"
         parsed = {}
     except Exception as e:
         print(f"⚠️ LLM parsing failed: {e}")
+        parse_error = str(e)
         parsed = {}
     
     # Validate
     profile = _validate_profile(parsed)
+    
+    # Empty-shell gate (2026-10-03 incident): no name AND no skills AND no
+    # experience means parsing FAILED — a real parse always yields at least
+    # one of the three. Never cache it, never return it as if it were valid;
+    # a cached shell silently scored every job 0 for days.
+    if _is_empty_shell(profile):
+        cause = parse_error or "no name, no skills and no experience were extracted"
+        print("❌ CV parse produced an empty profile — refusing to cache or return it.")
+        print(f"   Cause: {cause}")
+        print("   Check LLM provider availability (Gemini/Groq/Mistral/GLM/Ollama)")
+        print(f"   and that '{cv_path}' is a readable PDF/DOCX.")
+        raise CVParseError(
+            f"CV parse produced an empty profile for '{cv_path}' — refusing to "
+            f"cache or return it. Cause: {cause}"
+        )
     
     # Add metadata
     profile["_parsed_at"] = datetime.now().isoformat()
