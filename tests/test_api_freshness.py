@@ -136,3 +136,72 @@ class TestNoStaleSnapshot:
         cache.refresh()
         assert len(cache.get_tab_rows("ALL JOBS", force=True)) == 1
         cache.refresh()
+
+
+class TestSnapshotPin:
+    """JOBS_SOURCE=snapshot must make the snapshot the SOURCE, not the fallback.
+
+    The e2e suite seeds a 7-job fixture via SNAPSHOT_FILE and asserts on those
+    counts. But SNAPSHOT_FILE only chooses the offline fallback, and
+    _read_tab_values consults Google first whenever GOOGLE_SERVICE_ACCOUNT and
+    keys.json happen to resolve — so on a developer machine with a real .env the
+    suite silently read their actual spreadsheet. Observed as 44 real jobs and
+    three failures on a clean HEAD checkout, while CI stayed green because it
+    has no credentials. Reproduced at HEAD by copying keys.json into a clean
+    worktree, so this is a pre-existing harness gap, not a recent regression.
+    """
+
+    def test_pinned_process_never_reaches_sheets(self, monkeypatch):
+        monkeypatch.setenv("JOBS_SOURCE", "snapshot")
+        assert cache.snapshot_pinned() is True
+
+        # Spy on the Sheets CLIENT, not on cache._read_tab_values — patching
+        # that helper would replace the very pin check under test and assert
+        # nothing. _read_tab_values imports get_sheet inside the function body,
+        # so patching it on the module is what the real read resolves.
+        import tools.sheet_writer as sw
+
+        def _explode():
+            raise AssertionError("JOBS_SOURCE=snapshot still opened Google Sheets")
+
+        monkeypatch.setattr(sw, "get_sheet", _explode)
+        monkeypatch.setattr(
+            cache, "_local_snapshot_rows",
+            lambda: [{"job_title": "Fixture Job", "apply_url": "https://x/y",
+                      "job_fingerprint": "fp-fixture"}],
+        )
+        cache.refresh()
+        rows = cache.get_tab_rows("ALL JOBS", force=True)
+        assert [r["job_fingerprint"] for r in rows] == ["fp-fixture"]
+        cache.refresh()
+
+    def test_pinned_process_reports_sheets_as_unconfigured(self, monkeypatch, tmp_path):
+        # Even with credentials fully present and readable, a pinned process
+        # must not claim Sheets as its source — otherwise /api/health lies and
+        # the fallback guard above stops applying.
+        key = tmp_path / "keys.json"
+        key.write_text("{}", encoding="utf-8")
+        monkeypatch.setenv("JOBS_SOURCE", "snapshot")
+        monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT", str(key))
+        monkeypatch.setenv("GOOGLE_SHEETS_ID", "some-real-id")
+        assert cache.sheets_configured() is False
+
+    def test_unpinned_process_still_honours_sheets(self, monkeypatch, tmp_path):
+        # The pin is opt-in: a normal run is completely unaffected.
+        key = tmp_path / "keys.json"
+        key.write_text("{}", encoding="utf-8")
+        monkeypatch.delenv("JOBS_SOURCE", raising=False)
+        assert cache.snapshot_pinned() is False
+        monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT", str(key))
+        monkeypatch.setenv("GOOGLE_SHEETS_ID", "some-real-id")
+        assert cache.sheets_configured() is True
+
+    @pytest.mark.parametrize("value", ["snapshot", "SNAPSHOT", " offline ", "local"])
+    def test_accepted_spellings(self, monkeypatch, value):
+        monkeypatch.setenv("JOBS_SOURCE", value)
+        assert cache.snapshot_pinned() is True
+
+    @pytest.mark.parametrize("value", ["", "sheets", "0", "false", "snapshots"])
+    def test_rejected_values_do_not_pin(self, monkeypatch, value):
+        monkeypatch.setenv("JOBS_SOURCE", value)
+        assert cache.snapshot_pinned() is False

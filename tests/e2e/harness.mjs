@@ -74,6 +74,17 @@ export async function startApi({ port = 8731, auth = false } = {}) {
   const env = {
     ...process.env,
     SNAPSHOT_FILE: SNAPSHOT,
+    // SNAPSHOT_FILE alone does NOT keep this suite off live Sheets — it only
+    // picks the offline FALLBACK, and _read_tab_values consults Google first
+    // whenever GOOGLE_SERVICE_ACCOUNT + keys.json resolve. Anyone running this
+    // on a machine with a real .env got their actual spreadsheet served
+    // instead of the fixture, so assertions like "fixture has 7 jobs" measured
+    // whatever their sheet happened to hold that day (observed: 44 real jobs,
+    // 3 failures, on a clean HEAD checkout). JOBS_SOURCE=snapshot makes the
+    // snapshot the SOURCE rather than the fallback, so the fixture is the only
+    // thing this suite can ever see. CI never had credentials, which is why
+    // the gap only ever showed up locally.
+    JOBS_SOURCE: 'snapshot',
     API_CACHE_TTL: '60',
     // Point auth at a throwaway file so the developer's real users/sessions are
     // neither read nor written.
