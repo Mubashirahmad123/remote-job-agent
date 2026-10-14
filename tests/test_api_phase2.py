@@ -30,7 +30,17 @@ def client():
     return TestClient(create_app())
 
 
-def _wait_for(client, run_id, want=("done", "error"), timeout=10.0):
+def _wait_for(client, run_id, want=("done", "error"), timeout=30.0):
+    """Poll a background run until it settles.
+
+    The budget is generous on purpose. What is being asserted is "this run
+    reaches a terminal state", not "it does so within N seconds on an idle
+    machine" — the pipeline is mocked, so the only thing the timeout is really
+    measuring is how long the OS takes to schedule a daemon thread. On a
+    loaded full-suite run that exceeded 10s often enough to redden CI
+    intermittently, which is how a scheduling delay gets mistaken for a bug.
+    It still fails, and immediately, if the run never completes.
+    """
     deadline = time.monotonic() + timeout
     last = {}
     while time.monotonic() < deadline:
