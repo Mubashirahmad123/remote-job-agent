@@ -213,17 +213,21 @@ def fill_review(
         raise DreamTierForbidden("Dream-tier jobs require manual application")
 
     fingerprint = (job.get("job_fingerprint") or job_fingerprint).strip()
-    existing_package = get_package_record(fingerprint)
-    if existing_package is not None and not regenerate:
-        # Checked BEFORE material generation on purpose: this is the whole
-        # point of the fix — a repeat click must cost zero LLM calls and
-        # create no duplicate package folder.
-        raise AlreadyPackaged(fingerprint, existing_package.get("package_path", ""))
 
     # Claim-first, not record-last: record_package only runs after the slow
     # part (tailored resume + cover letter + package folder) completes, so
     # the package index cannot see an in-flight fill. This one atomic INSERT
     # is what decides "who generates" when two requests race.
+    #
+    # The claim must come BEFORE the already-packaged check, not after it.
+    # Checking first is a time-of-check/time-of-use hole: a second request can
+    # read "no package yet", lose the CPU, and by the time it reaches
+    # claim_fill the first request has finished AND released its claim — so it
+    # claims a job that is now packaged, and both generate. Claiming first
+    # closes it from both sides: if the other request is still running we get
+    # FillInProgress, and if it has already released, it recorded the package
+    # and the check below refuses us instead. Caught by
+    # TestConcurrentPostsForOneJob at roughly 1 run in 4.
     connection = connect()
     try:
         claim = claim_fill(connection, fingerprint, actor=actor)
@@ -248,6 +252,16 @@ def fill_review(
             beat_connection.close()
 
     try:
+        # Read under our own claim, so no one can slip a package in between.
+        existing_package = get_package_record(fingerprint)
+        if existing_package is not None and not regenerate:
+            # Checked BEFORE material generation on purpose: this is the whole
+            # point of the fix — a repeat click must cost zero LLM calls and
+            # create no duplicate package folder.
+            raise AlreadyPackaged(
+                fingerprint, existing_package.get("package_path", "")
+            )
+
         return _fill_review_claimed(
             job, fingerprint, tier, actor, regenerate, existing_package, heartbeat
         )

@@ -528,3 +528,49 @@ class TestConcurrentPostsForOneJob:
 
         # And the job is immediately queueable again.
         assert _fingerprints(_queue(client)) == ["fp-b", "fp-c", "fp-d"]
+
+    def test_the_claim_is_taken_before_the_already_packaged_check(
+        self, client, monkeypatch
+    ):
+        """Pin the ORDER, which the race above depends on.
+
+        Checking "already packaged?" before taking the claim is a
+        time-of-check/time-of-use hole. A second request can read "no package
+        yet", lose the CPU, and by the time it reaches claim_fill the first
+        request has finished AND released its claim — so it claims a job that
+        is now packaged and both generate. That is the original bug, and it
+        reproduced here roughly one run in four until the order was swapped.
+
+        Asserting it directly is deterministic; the race above only proves it
+        probabilistically, so this is the test that stops the regression from
+        quietly coming back.
+        """
+        _install(monkeypatch, _jobs()[:1])
+        order = []
+
+        import api.apply_state as AS
+
+        real_claim = apply_service.claim_fill
+        # fill_review imports get_package_record lazily inside the function,
+        # so it must be patched where it is defined, not on api.apply.
+        real_record = AS.get_package_record
+
+        def _claim(*args, **kwargs):
+            order.append("claim")
+            return real_claim(*args, **kwargs)
+
+        def _record(*args, **kwargs):
+            order.append("package_check")
+            return real_record(*args, **kwargs)
+
+        # claim_fill is bound at api.apply's import, so that is the binding the
+        # route actually calls; patching api.fill_claims would miss it.
+        monkeypatch.setattr(apply_service, "claim_fill", _claim)
+        monkeypatch.setattr(AS, "get_package_record", _record)
+
+        assert _prepare(client, "fp-a").status_code == 200
+
+        assert order[:2] == ["claim", "package_check"], (
+            "the packaged check must happen UNDER the claim; checked first it "
+            f"is a TOCTOU race (observed order: {order})"
+        )
