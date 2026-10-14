@@ -9,8 +9,22 @@ everything else must see a clean slate.
 """
 
 import os
+from pathlib import Path
 
 import pytest
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Captured at collection time, before any fixture has had the chance to patch
+# it. Anything that finds this object missing has replaced it globally.
+_ORIGINAL_AUTH_DB_PATH = None
+
+
+def pytest_configure(config):
+    global _ORIGINAL_AUTH_DB_PATH
+    from api.auth import db_path
+
+    _ORIGINAL_AUTH_DB_PATH = db_path
 
 
 @pytest.fixture(autouse=True)
@@ -117,3 +131,49 @@ def _forget_auth_schema_memo():
     forget_initialized()
     yield
     forget_initialized()
+
+
+@pytest.fixture(autouse=True)
+def _no_global_db_path_leak(tmp_path):
+    """Fail a test that inherited global DB state from the test before it.
+
+    Module globals outlive the test that assigns them. A fixture written as
+    `auth.db_path = lambda: Path(tmp_path / "auth.db")` — rather than
+    `monkeypatch.setattr(...)` — silently re-points the store at a tmp_path
+    pytest deletes at teardown. The damage never shows up in the test that
+    caused it: it surfaces in every LATER test as a bare ValueError from deep
+    inside api/auth.py, which points nowhere near the real culprit.
+
+    That is not hypothetical. Two lines in a `client` fixture did exactly this
+    and turned 116 unrelated tests red across eight files.
+
+    Checked at SETUP, not teardown, for two reasons:
+
+    * `monkeypatch` restores during its own finalisation, which happens after
+      this fixture's teardown — comparing values at teardown would flag every
+      correctly-written monkeypatch fixture as a false positive.
+    * `_isolate_apply_state_db` re-patches `apply_state.DB_PATH` at the start
+      of every test, so a leak there is invisible to any check. `api.auth
+      .db_path` is the one global nothing re-establishes: conftest sets the
+      AUTH_DB_PATH env var and lets `db_path()` read it lazily. So it is both
+      the leak that actually bites and the one that can be observed.
+    """
+    from api import apply_state
+    from api.auth import db_path
+
+    if db_path is not _ORIGINAL_AUTH_DB_PATH:
+        pytest.fail(
+            "api.auth.db_path was replaced by a previous test and never "
+            "restored (use monkeypatch.setattr, not a plain assignment). "
+            "Every test from here on would read a deleted tmp_path."
+        )
+    if REPO_ROOT in apply_state.DB_PATH.parents:
+        pytest.fail(
+            f"api.apply_state.DB_PATH escaped test isolation: "
+            f"{apply_state.DB_PATH}"
+        )
+    if tmp_path not in apply_state.DB_PATH.parents:
+        pytest.fail(
+            f"api.apply_state.DB_PATH is outside this test's tmp_path: "
+            f"{apply_state.DB_PATH}"
+        )
