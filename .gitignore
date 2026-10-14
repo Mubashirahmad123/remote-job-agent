@@ -28,6 +28,7 @@ email_drafts/
 screenshots/
 cache/
 data/
+archive/
 
 # Optional semantic embeddings
 *.pkl
