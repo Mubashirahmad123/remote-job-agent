@@ -7,8 +7,8 @@ Living plan for the remote-job-agent build. Status reconciled 2026-10-15. Sectio
 ## 1. Current status and checklist (2026-10-15)
 
 **Legend:** checked = implementation exists, not necessarily merged or deployed.
-Pending verification is listed separately. Current-session work is still on the
-working branch, not committed/pushed/merged. `phase 3` work is user-reported and
+Pending verification is listed separately. Current-session code is committed
+and pushed to `arena/393bb940-remote-job-agent`; it is not merged or deployed. `phase 3` work is user-reported and
 has not been integrated or independently checked in this checkout.
 
 ### Done / implemented
@@ -31,8 +31,10 @@ has not been integrated or independently checked in this checkout.
 - [x] Per-CV semantic scoring, content/model/schema cache invalidation, safe
       keyword-only fallback and regression tests (current working branch).
 - [x] Docker installation from the existing universal lock, dependency consistency
-      check, native x86-64/ARM64 CI configuration and regression guards (working
-      branch). **Native image/runtime checks have not run here.**
+      check and regression guards. **Native x86-64/ARM64 image builds/runtime
+      checks passed in GitHub CI run 38743655019 at code commit `0971322`.**
+      Job/step metadata reviewed; raw log download blocked in this sandbox.
+      Evidence/limits: `deploy/DOCKER_CI_VERIFICATION.md`.
 - [x] Docker/Compose/Caddy and Oracle deployment preparation; this is not proof
       of an actual live VM deployment.
 - [x] Tracker/Kanban interaction coverage: 22 jsdom tests over real routes and
@@ -52,13 +54,9 @@ has not been integrated or independently checked in this checkout.
 
 ### Not done — integration and personal-agent work
 
-- [ ] Review, commit/push and merge the current working-branch changes only
-      after approval and checks. Review/integrate `phase 3` separately; verify
+- [ ] Review and merge the published working-branch changes only after approval;
+      CI passed, but no merge is authorized here. Review `phase 3` separately; verify
       its portability patch on the integrated revision rather than duplicating it.
-- [ ] Execute native **x86-64 and ARM64 Docker CI**: image build, installed pins,
-      dependency consistency, non-root API startup, Chromium launch, API/auth
-      suites and image-leak checks. Configuration/dry-run resolution is done;
-      runtime verification is not. See `deploy/DEPLOY_ORACLE.md` §7a.
 - [ ] Diagnose the reported Democorp fill timeout and missing screenshot record:
       a PNG was written but the API returned `Timed out waiting for ATS review
       form to fill` after 90 seconds; screenshot URL returned 404. Exact slow
@@ -101,18 +99,22 @@ by this checklist.
 
 | Environment | Pytest | Frontend E2E |
 |---|---|---|
-| Current lock-only Linux x86-64, including tracker/environment regressions | 1004 passed, 8 skipped | 64 passed |
+| Current local lock-only Linux x86-64, including fail-closed image-inventory guards | 1007 passed, 8 skipped | 64 passed |
+| GitHub CI run 38743655019, code commit 0971322 | Full API suite passed; raw counts not downloaded | Job passed |
+| Native Docker CI in that run, x86-64 + ARM64 | Build/pins/API/auth/Chromium/leak steps passed | Not a dashboard-browser pass |
 | Earlier development, before tracker tests, with optional FAISS available | 988 passed, 2 skipped | 36 passed |
 | Earlier lock-only Linux x86-64, before tracker tests | 982 passed, 8 skipped | 36 passed |
 
-Current full run: 1004 passed, 8 skipped, 32 warnings; frontend 64 passed
+Current local full run: 1007 passed, 8 skipped, 32 warnings; frontend 64 passed
 (36 existing + 22 tracker + 6 environment tests). Lock-only skips: Lever confirmation copy and
 seven optional FAISS-dependent cases. Earlier development skips: Lever and the
 optional crawl4ai/playwright-stealth import check. `uv pip check` passes in the
 current locked environment. Earlier pin auditing and x86-64/ARM64 dry-run
-resolution passed; Docker is unavailable, so no native image/ARM runtime pass is
-recorded. These are local runs, not observed GitHub CI/deployment results.
-Earlier counts in the dated sections below are historical.
+resolution passed. Docker is unavailable locally, but both native Docker jobs
+now passed on GitHub at `0971322`; all five CI jobs are green. Step conclusions
+and runner notices were reviewed via the API; raw-log download was blocked.
+Oracle deployment remains unverified. Evidence: `deploy/DOCKER_CI_VERIFICATION.md`.
+Earlier counts in dated sections below are historical.
 
 ## 2. Implemented Phase 2 — Action API reference
 
@@ -262,7 +264,7 @@ zero, numerical FAISS and real DOCX extraction with a deterministic encoder).
 Sentence-transformer model download/live model quality is not validated here.
 At semantic-feature completion: **976 pytest passed, 2 skipped; 36 frontend E2E passed**. Later Docker guards brought development verification to **988 passed, 2 skipped**; see §1.
 
-### Docker locked dependencies — implementation complete, native checks pending (2026-10-15)
+### Docker locked dependencies — native CI passed (2026-10-15)
 
 Docker now installs `requirements.lock.txt` and checks dependency consistency.
 Native x86-64/ARM64 CI matrix builds the image, verifies active installed pins,
@@ -273,9 +275,12 @@ Local checks: a fresh Linux x86-64 locked Python environment installed all 179
 active pins and passed `uv pip check`; **982 pytest passed, 8 skipped; 36 frontend
 E2E passed**. Seven skips require optional FAISS, absent from the lock; one is
 Lever's deliberate confirmation-copy skip. `uv` dry-run resolution passed for
-Linux x86-64 and ARM64. **Docker is unavailable here: neither native image build
-nor ARM runtime verification was performed.** Native CI/Oracle VM verification
-remains a release gate, not a completed task. See `deploy/DEPLOY_ORACLE.md` §7a.
+Linux x86-64 and ARM64. Those were pre-CI results. Native image builds,
+lock/dependency checks, non-root API/Chromium, API/auth suites and leak checks
+subsequently passed on both architectures in GitHub run 38743655019 at `0971322`.
+The leak inventory now fails closed, with three additional local guards. Oracle
+VM operational verification remains pending. See `deploy/DOCKER_CI_VERIFICATION.md`
+for exact scope, raw-log limitations and the Ubuntu runner migration notice.
 
 ## 3. Backlog
 

@@ -181,11 +181,13 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
   the line to the baseline and own the decision. The `Dockerfile` now installs
   `requirements.lock.txt` and runs `uv pip check --system`, aligning application
   package versions with the audited lock. Native x86-64/ARM64 Docker CI checks
-  installed pins, API startup, Chromium and API/auth behavior; successful native
-  runs are still required before claiming platform readiness. Local verification
-  covered a locked x86-64 Python environment and cross-platform resolution, not
-  an image build or ARM runtime. See `deploy/DEPLOY_ORACLE.md` §7a. Base/uv image
-  tags and unhashed artifacts are not made immutable by this change.
+  installed pins, API startup, Chromium and API/auth behavior. Both native image
+  jobs passed in GitHub run 38743655019 at `0971322`; the whole CI run was green.
+  Review used job/step metadata and notices, not raw logs (download blocked).
+  See `deploy/DOCKER_CI_VERIFICATION.md` for evidence/limits and
+  `deploy/DEPLOY_ORACLE.md` §7b for actual VM operational verification, still
+  pending. Base/uv image tags and unhashed artifacts remain mutable; a green
+  baseline audit does not mean all recorded vulnerabilities were removed.
 - Login does not reveal which usernames exist. Both failures return the same
   401 body, both are audited, and both now cost one Argon2id verify — a missing
   username is checked against a decoy hash so the response times are

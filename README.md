@@ -41,7 +41,7 @@ is scheduled. See [USER_PRODUCT.md](USER_PRODUCT.md) for scope and design gates.
 | JobSpy integration | ✅ | Scrapes LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter |
 | Scheduled automation | ✅ | Cron-based scheduler (Mon/Thu full scrape, daily quick checks) |
 | Universal run script | ✅ | `Run.py` works on Windows / Mac / Linux with `--setup` flag |
-| Docker support | ✅ | Docker + compose: `api`, `scheduler`, `caddy`, Playwright, persistent volumes and secrets isolation. Installs the universal dependency lock; native x86-64/ARM64 build/runtime CI configured (ARM pass still pending). Oracle deployment guide: `deploy/DEPLOY_ORACLE.md` |
+| Docker support | ✅ | Docker + compose: `api`, `scheduler`, `caddy`, Playwright, persistent volumes and secrets isolation. Installs the universal dependency lock; native x86-64/ARM64 build/runtime CI passed at `0971322` (evidence: `deploy/DOCKER_CI_VERIFICATION.md`; not a VM deployment). Oracle deployment guide: `deploy/DEPLOY_ORACLE.md` |
 | FastAPI backend (reads + actions) | ✅ | `api/` — jobs, stats, tracker, refresh, scrape runs, tailored materials, CV profile endpoints over the Sheets cache (see below) |
 | Command Center dashboard | ✅ | `frontend/` — live UI served same-origin at `http://127.0.0.1:8000/` (no CORS issues) |
 
@@ -609,7 +609,7 @@ npm ci --prefix tests/e2e
 npm test --prefix tests/e2e       # or ./tests/e2e/run.sh
 ```
 
-Latest local locked Linux run (2026-10-15): **1004 pytest passed, 8 skipped**
+Latest local locked Linux run (2026-10-15): **1007 pytest passed, 8 skipped**
 and **64 frontend E2E passed**. Includes 22 tracker interactions (transitions,
 review columns, reload persistence, URL-keyed applications, failures and manual
 add) plus 22 Python API/runner contracts. The tracker fixture uses fake Sheets
@@ -617,6 +617,12 @@ behind real routes/services, never personal resources. Six targeted environment
 checks also reproduce the old late-`.env` auth failure and prove the current
 harness already prevents it; the stale warning is retired. These are jsdom/API
 tests, not native-browser, live-Sheets, Docker/ARM or deployment verification.
+Separately, [GitHub CI run 38743655019](https://github.com/Mubashirahmad123/remote-job-agent/actions/runs/38743655019)
+passed native x86-64/ARM64 image builds, locked dependency/pin checks, non-root
+API/Chromium smoke, in-image regressions and leak checks, plus all other CI jobs.
+This does not verify Oracle deployment or full dashboard-browser behavior.
+Job/step metadata was reviewed; raw log download was blocked. Evidence/limits:
+[deploy/DOCKER_CI_VERIFICATION.md](deploy/DOCKER_CI_VERIFICATION.md).
 Details and optional-dependency skips: [TESTER.md](TESTER.md).
 
 ## Live submit status

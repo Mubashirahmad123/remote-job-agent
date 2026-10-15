@@ -1,13 +1,15 @@
 # TESTER.md — Testing Guide
 
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Latest local Linux
-lock-only verification (2026-10-15), including tracker and environment regressions: **1004 pytest
+lock-only verification (2026-10-15), including tracker and environment regressions: **1007 pytest
 passed, 8 skipped, 32 warnings** and **64 frontend E2E tests passed**. Skips:
 seven optional FAISS-dependent cases and deferred Lever confirmation copy.
 Earlier development/lock-only results below predate tracker coverage; optional
-dependency availability changes skip counts. See `PM.md` §1. Native Docker/ARM
-CI is configured but has not run here. These are local results, not newly
-observed GitHub CI results. Historical CI counts are in `CHANGELOG.md`.
+dependency availability changes skip counts. See `PM.md` §1. Native Docker
+x86-64/ARM64 jobs and all other jobs passed in GitHub CI run 38743655019 at
+`0971322`. GitHub job/step metadata and notices were reviewed; raw-log download
+was blocked. Local numeric totals above are not inferred CI log counts.
+Evidence: `deploy/DOCKER_CI_VERIFICATION.md`; historical counts: `CHANGELOG.md`.
 
 Coverage includes `test_api_phase1.py`,
 `test_api_phase2.py`, `test_api_cv.py`, `test_api_materials.py`,
@@ -104,8 +106,14 @@ behavior and image leaks. Full source-scanning tests remain in the API CI job:
 At Docker-lock completion, before tracker regressions, the fresh local lock-only
 environment passed **982 pytest, 8 skipped; 36 frontend E2E**. All 179 active x86-64 pins match installed distributions. Seven skips
 are optional FAISS checks (not installed by the lock), plus the deferred Lever
-confirmation-copy test. Native image builds/ARM runtime remain unverified here
-because Docker is unavailable. Cross-platform resolution alone is not proof.
+confirmation-copy test. These were pre-CI results. Native Docker x86-64 and
+ARM64 build/pin/dependency/API/auth/Chromium/leak steps subsequently passed in
+[GitHub run 38743655019](https://github.com/Mubashirahmad123/remote-job-agent/actions/runs/38743655019)
+at `0971322`. The image inventory now fails closed on export/listing errors or
+empty output; three injected-failure tests pass. Current local Docker-related
+preflight: 63 passed; full suite: 1007 passed, 8 skipped. Raw CI logs could not
+be downloaded; reviewed step metadata and scope/limits are recorded in
+`deploy/DOCKER_CI_VERIFICATION.md`. Oracle VM deployment remains unverified.
 
 ## 1. Running tests
 

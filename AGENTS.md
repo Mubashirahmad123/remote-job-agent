@@ -83,10 +83,11 @@ change), then runs `uv pip check --system`. Keep direct requirements and the
 universal lock in sync; do not switch the image back to fresh transitive
 resolution. CI's Docker matrix builds on native x86-64 and ARM64 runners and
 checks active lock pins, non-root API startup, Chromium launch, dependency
-consistency, API/auth behavior and image leaks. This matrix is configured, not a
-claim that the current revision has already passed native ARM checks. Local
-Docker is unavailable; ARM readiness requires a successful native job or the VM
-verification in `deploy/DEPLOY_ORACLE.md` §7a.
+consistency, API/auth behavior and image leaks. Both native jobs passed in
+GitHub run 38743655019 at `0971322`; job/step metadata and notices were reviewed,
+but raw-log download was blocked here. See `deploy/DOCKER_CI_VERIFICATION.md`.
+Local Docker is unavailable; actual Oracle deployment still needs the separate
+operational verification in `deploy/DEPLOY_ORACLE.md` §7b.
 
 This pins application Python package versions, not every build input: the base
 image and uv bootstrap image still have mutable tags, and the lock does not

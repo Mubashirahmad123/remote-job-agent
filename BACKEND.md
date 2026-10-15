@@ -7,7 +7,7 @@ closed with 403 while `api/safety.py SUBMIT_ENABLED=False`; Lever has no submit
 path by design. See the gated 2b spec and current execution status in `PM.md`.
 
 Run: `venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000`
-Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (latest recorded local results: `TESTER.md`; native Docker/ARM verification pending)
+Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (latest recorded local results: `TESTER.md`; native Docker x86-64/ARM64 CI passed at `0971322`; Oracle deployment pending)
 
 ---
 
@@ -525,13 +525,15 @@ response explains why sign-in history is absent for a non-admin.
 ## 5. Testing
 
 Latest local results (2026-10-15), including tracker/environment regressions, with lock-only
-dependencies: **1004 pytest passed, 8 skipped; 64 frontend E2E passed**.
+dependencies: **1007 pytest passed, 8 skipped; 64 frontend E2E passed**.
 `test_api_tracker_contract.py` adds 22 routing/status/notes/auth/error and runner
 contracts; `tracker.test.mjs` adds 22 interaction cases against real services
 with fake Sheets only. Six environment checks reproduce missing auth pins
 causing late-dotenv 401s and prove the existing harness pins prevent them; no
 production auth changes were needed. Earlier counts predate these tests;
-see `TESTER.md` for skips and browser/runtime limits. The following describes
+see `TESTER.md` for skips and browser/runtime limits. Native Docker checks and
+all other GitHub CI jobs passed at `0971322` (run 38743655019); raw logs were not
+available in this sandbox. See `deploy/DOCKER_CI_VERIFICATION.md`. The following describes
 foundational coverage rather than current per-file test totals:
 (`venv\Scripts\python.exe -m pytest tests/ -q`):
 `test_api_phase1.py` (18: faked `cache._read_tab_values` +

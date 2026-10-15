@@ -109,11 +109,14 @@ takes several minutes on ARM.
 ### 7a. Verify the locked image on native ARM before deployment
 
 The image installs `requirements.lock.txt`, not a new transitive resolution from
-`requirements.txt`. Regeneration still requires `--universal`. Native ARM64 CI
-is configured; **a configured job or successful cross-platform resolution is not
-an ARM verification result**. Before treating this revision as deployment-ready,
-require green native x86-64/ARM64 Docker jobs, or run and retain equivalent build
-and smoke-test logs on this ARM VM. These commands do not mount personal data or
+`requirements.txt`. Regeneration still requires `--universal`. Native x86-64
+and ARM64 Docker jobs **passed in GitHub run 38743655019 at code commit `0971322`**,
+including build, lock/dependency checks, non-root API/Chromium startup, behavior
+suites and leak checks. Job/step metadata and notices were reviewed; raw-log
+download was blocked in the coding sandbox. See `DOCKER_CI_VERIFICATION.md`.
+This satisfies native CI verification for that code, not actual Oracle VM
+operational verification (§7b). For changed revisions require green native jobs
+or retain equivalent build/smoke evidence on the VM. These commands do not mount personal data or
 credentials and do not contact any job board:
 
 ```bash
@@ -149,10 +152,11 @@ docker run --rm remote-job-agent:arm-check python -m pytest -q \
 
 Do not skip dependency conflicts, missing ARM libraries or Chromium launch
 failures. Fix the actual incompatibility, regenerate the universal lock only if
-pins must change, and rerun both architectures. The locked Python environment
-has been tested locally on x86-64; Docker/native ARM checks were not available
-in that sandbox. Base/uv image digests and artifact hashes remain separate
-hardening work; this change locks application Python versions only.
+pins must change, and rerun both architectures. Local Docker was unavailable;
+both native jobs were executed successfully on GitHub. Base/uv image digests
+and artifact hashes remain separate hardening work; this change locks
+application Python versions only. Observe the `ubuntu-latest` migration notice
+in the verification record when rerunning on future hosted-runner images.
 
 ### 7b. Verify the deployed services
 

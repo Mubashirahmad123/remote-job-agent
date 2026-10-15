@@ -1,5 +1,26 @@
 # CHANGELOG.md
 
+## 2026-10-15 — native locked Docker CI executed and reviewed
+
+- Commit/push the completed session work to `arena/393bb940-remote-job-agent`;
+  no PR merge or deployment. CI run 38743655019 at code commit `0971322` passed
+  all five jobs, including native x86-64 and ARM64 Docker builds/runtime checks.
+- Both images passed active lock-pin/dependency checks, non-root API lifespan/
+  liveness and real Chromium launch, selected API/auth suites and filesystem
+  leak checks. Full API, frontend E2E and baseline audit jobs also passed.
+- Fix review finding: image inventory no longer masks export/listing failures
+  with `|| true`, and rejects empty output; cleanup is trapped. Three fake-tool
+  failure-injection guards pass. Local preflight: 63 passed; full locked Linux
+  pytest: 1007 passed, 8 skipped, 32 warnings. Prior local frontend: 64 passed.
+- Record exact run/job links and reviewed step conclusions in
+  `deploy/DOCKER_CI_VERIFICATION.md`. Raw-log archive download was blocked by the
+  sandbox host allowlist; no raw CI counts or image digests are claimed.
+- Review GitHub notice: `ubuntu-latest` begins migrating to Ubuntu 26 on
+  2026-10-19. This is not a failure; pin/retest deliberately in a follow-up.
+- Mark native CI complete, not Oracle deployment, dashboard-browser verification,
+  CV upload or submit verification. Baseline vulnerabilities and mutable image/
+  uv tags remain; no requirements, lock pins or audit baseline were changed.
+
 ## 2026-10-15 — record user-reported Democorp live fill-only smoke
 
 - Record the supplied real-Chrome/Playwright report and screenshot: visible
