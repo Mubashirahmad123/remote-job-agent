@@ -114,6 +114,32 @@ JobAgent.autoApply = {
     }
   },
 
+  toQueueResult(fingerprint, job, response) {
+    // Single response -> view-model mapping, shared by the bulk queue and the
+    // per-job regenerate action so the two can never drift.
+    return {
+      fingerprint,
+      jobTitle: response.job_title || (job && job.job_title) || 'Untitled job',
+      company: response.company || (job && job.company) || 'Unknown company',
+      status: response.status || 'filled_ready',
+      tier: response.tier || 'unknown',
+      packagePath: response.package_path || '',
+      applyUrl: response.apply_url || (job && job.apply_url) || '',
+      screenshotPath: response.screenshot_path || '',
+      // Backend is the source of truth: a null screenshot_url means
+      // package-only (no fill ran), so never fabricate a URL from the
+      // fingerprint here — that caused GET 404 pairs (img + fetch
+      // fallback) on every render for package-only results.
+      screenshotUrl: response.screenshot_url || '',
+      browserOpened: response.browser_opened === true,
+      error: response.fill_error || '',
+      fieldVerification: response.field_verification || '',
+      profileFieldsVerified: Array.isArray(response.profile_fields_verified)
+        ? response.profile_fields_verified
+        : [],
+    };
+  },
+
   async triggerQueue() {
     const threshold = JobAgent.store.state.autoApply.threshold;
     const cap = parseInt(JobAgent.store.state.autoApply.dailyCap, 10) || 0;
@@ -126,12 +152,34 @@ JobAgent.autoApply = {
       this.syncCapUI();
       return;
     }
-    let jobs = (JobAgent.store.state.jobs || []).filter(
-      (job) => (job.match_score || 0) >= threshold && (job.id || job.job_fingerprint)
-    ).sort((left, right) => (right.match_score || 0) - (left.match_score || 0)).slice(0, 3);
+    // The backend owns eligibility: it excludes jobs that already have a
+    // package, are already on the tracker, or are dream-tier. A second click
+    // therefore surfaces the NEXT-best matches (or nothing) instead of
+    // re-generating the same top three packages.
+    let queueMeta = null;
+    let jobs = [];
+    try {
+      queueMeta = await JobAgent.api.getApplyQueue({ threshold, limit: 3 });
+      jobs = (queueMeta && queueMeta.jobs) || [];
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      this.appendTerminalLine('[QUEUE] Could not load eligible jobs: ' + message, 'term-rose');
+      JobAgent.toast.show('Auto-apply queue unavailable: ' + message);
+      return;
+    }
     if (!jobs.length) {
-      this.appendTerminalLine('[QUEUE] No candidate jobs scoring >= ' + threshold + '% — nothing to fill.', 'term-amber');
-      JobAgent.toast.show('Auto-apply queue: no candidates at current threshold.');
+      const excluded = (queueMeta && queueMeta.excluded) || {};
+      const detail =
+        'already packaged=' + (excluded.packaged || 0)
+        + ', fill in progress=' + (excluded.in_progress || 0)
+        + ', already tracked=' + (excluded.tracked || 0)
+        + ', below ' + threshold + '%=' + (excluded.below_threshold || 0);
+      this.appendTerminalLine(
+        '[QUEUE] No new eligible jobs (' + detail + '). Nothing was regenerated — ' +
+        'run a fresh scrape for new matches, or use Regenerate on a specific packaged job.',
+        'term-amber'
+      );
+      JobAgent.toast.show('Auto-apply queue: no new eligible jobs at ' + threshold + '%.');
       return;
     }
     if (jobs.length > remaining) {
@@ -140,41 +188,29 @@ JobAgent.autoApply = {
     }
     this.latestQueueResults = [];
     if (this.btnRunAutoApplyQueue) this.btnRunAutoApplyQueue.disabled = true;
-    this.appendTerminalLine('[QUEUE] Preparing review packages for ' + jobs.length + ' job(s) scoring >= ' + threshold + '%. (' + used + '/' + cap + ' used today)', 'term-indigo');
+    this.appendTerminalLine('[QUEUE] Preparing review packages for ' + jobs.length + ' new job(s) scoring >= ' + threshold + '%. (' + used + '/' + cap + ' used today)', 'term-indigo');
 
     try {
       for (const [index, job] of jobs.entries()) {
-        const fingerprint = job.id || job.job_fingerprint;
+        const fingerprint = job.job_fingerprint || job.id;
         this.appendTerminalLine('[PACKAGE ' + (index + 1) + '/' + jobs.length + '] ' + (job.job_title || 'Untitled') + ' @ ' + (job.company || 'Unknown company'), 'term-cyan');
         try {
           const response = await JobAgent.api.applyReview(fingerprint);
-          const result = {
-            fingerprint,
-            jobTitle: response.job_title || job.job_title || 'Untitled job',
-            company: response.company || job.company || 'Unknown company',
-            status: response.status || 'filled_ready',
-            tier: response.tier || 'unknown',
-            packagePath: response.package_path || '',
-            applyUrl: response.apply_url || job.apply_url || '',
-            screenshotPath: response.screenshot_path || '',
-            // Backend is the source of truth: a null screenshot_url means
-            // package-only (no fill ran), so never fabricate a URL from the
-            // fingerprint here — that caused GET 404 pairs (img + fetch
-            // fallback) on every render for package-only results.
-            screenshotUrl: response.screenshot_url || '',
-            browserOpened: response.browser_opened === true,
-            error: response.fill_error || '',
-            fieldVerification: response.field_verification || '',
-            profileFieldsVerified: Array.isArray(response.profile_fields_verified)
-              ? response.profile_fields_verified
-              : [],
-          };
+          const result = this.toQueueResult(fingerprint, job, response);
           this.latestQueueResults.push(result);
           const needsReview = result.status === 'needs_review';
           const lineClass = result.error || result.status === 'error' ? 'term-rose' : (result.status === 'filled_ready' && !needsReview ? 'term-green' : 'term-amber');
           this.appendTerminalLine('[' + result.status.toUpperCase() + '] (' + result.tier + ') — ' + result.jobTitle + (result.error ? ': ' + result.error : ''), lineClass);
           if (result.packagePath) this.appendTerminalLine('[PACKAGE] ' + result.packagePath, 'term-amber');
         } catch (error) {
+          // A 409 here means the job was packaged or claimed between the
+          // queue call and this click (another tab, a rapid double-click, or
+          // a stale list). It is a skip, not a failure: do not count it
+          // against the cap or show it as an error.
+          if (error && error.status === 409) {
+            this.appendTerminalLine('[SKIP] ' + (job.job_title || 'Job') + ' already has a package or a fill for it is already in progress — use Regenerate to rebuild it deliberately.', 'term-amber');
+            continue;
+          }
           const message = error && error.message ? error.message : String(error);
           this.latestQueueResults.push({
             fingerprint,
@@ -194,12 +230,47 @@ JobAgent.autoApply = {
       const attempted = this.latestQueueResults.length;
       if (attempted > 0 && JobAgent.store.consumeDailyQuota) JobAgent.store.consumeDailyQuota(attempted);
       this.syncCapUI();
+      // Refresh the packaged list so the drawer's Regenerate affordance and any
+      // later run both reflect what was just built.
+      if (JobAgent.store.loadPackages) JobAgent.store.loadPackages();
       const packageCount = this.latestQueueResults.filter((result) => result.packagePath).length;
       const filledCount = this.latestQueueResults.filter((result) => result.status === 'filled_ready').length;
       const failedCount = this.latestQueueResults.filter((result) => result.error || result.status === 'error' || result.status === 'playwright_not_installed').length;
       const reviewWindowCount = this.latestQueueResults.filter((result) => result.browserOpened).length;
       this.renderQueueResults();
+      if (attempted === 0) {
+        JobAgent.toast.show('Review queue: those jobs were already packaged — nothing regenerated. Nothing was submitted.');
+        return;
+      }
       JobAgent.toast.show('Review queue finished: ' + packageCount + ' package(s), ' + filledCount + ' form(s) filled, ' + reviewWindowCount + ' review window(s) open, ' + failedCount + ' fill failure(s). Nothing was submitted.');
+    } finally {
+      if (this.btnRunAutoApplyQueue) this.btnRunAutoApplyQueue.disabled = false;
+    }
+  },
+
+  // Deliberate, per-job rebuild — the ONE path allowed to regenerate a job that
+  // already has a package (e.g. after editing the CV). Never wired to the bulk
+  // queue button.
+  async regeneratePackage(job) {
+    const fingerprint = job && (job.job_fingerprint || job.id);
+    if (!fingerprint) {
+      JobAgent.toast.show('Cannot regenerate: this job has no fingerprint.');
+      return;
+    }
+    const label = (job.job_title || 'job') + ' @ ' + (job.company || 'company');
+    this.appendTerminalLine('[REGENERATE] Rebuilding package for ' + label + ' with a fresh tailored resume + cover letter.', 'term-indigo');
+    if (this.btnRunAutoApplyQueue) this.btnRunAutoApplyQueue.disabled = true;
+    try {
+      const response = await JobAgent.api.applyReview(fingerprint, { regenerate: true });
+      const result = this.toQueueResult(fingerprint, job, response);
+      this.latestQueueResults = [result];
+      if (JobAgent.store.loadPackages) await JobAgent.store.loadPackages();
+      this.renderQueueResults();
+      JobAgent.toast.show('Package regenerated for ' + result.jobTitle + '. Nothing was submitted.');
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      this.appendTerminalLine('[REGENERATE] Failed for ' + label + ': ' + message, 'term-rose');
+      JobAgent.toast.show('Regenerate failed: ' + message);
     } finally {
       if (this.btnRunAutoApplyQueue) this.btnRunAutoApplyQueue.disabled = false;
     }

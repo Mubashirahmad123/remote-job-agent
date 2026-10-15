@@ -234,3 +234,80 @@ class TestRepoDataDirIsNotABuildArtifact:
         tracked = [line for line in result.stdout.splitlines() if line.strip()]
         databases = [t for t in tracked if t.endswith((".db", ".sqlite", ".sqlite3"))]
         assert not databases, f"databases are tracked by git: {databases}"
+
+
+class TestSourceIsNotSilentlyGitignored:
+    """A blanket ignore rule must never swallow a source tree.
+
+    An unanchored pattern like `data/` matches a directory of that name at ANY
+    depth. `frontend/js/data/mockData.js` was covered by one and nothing
+    surfaced: no diff, no review comment, no test failure. It only came to
+    light because a CSP test happened to grep every file under frontend/ and
+    trip over the absolute URLs in the dead file. A file nobody would ever have
+    committed, invisible until it caused an unrelated failure.
+
+    These assertions are cheap and would have caught it immediately.
+    """
+
+    SOURCE_DIRS = ("api", "agents", "tools", "tests", "frontend")
+    SOURCE_SUFFIXES = (".py", ".js", ".html", ".css", ".json", ".md")
+
+    def _ignored_source_files(self) -> list:
+        import subprocess
+
+        found = []
+        for directory in self.SOURCE_DIRS:
+            base = REPO_ROOT / directory
+            if not base.is_dir():
+                continue
+            for path in base.rglob("*"):
+                if not path.is_file() or path.suffix not in self.SOURCE_SUFFIXES:
+                    continue
+                if "node_modules" in path.parts or "__pycache__" in path.parts:
+                    continue
+                result = subprocess.run(
+                    ["git", "check-ignore", "-q", str(path)],
+                    cwd=REPO_ROOT,
+                    capture_output=True,
+                )
+                if result.returncode == 0:
+                    found.append(str(path.relative_to(REPO_ROOT)))
+        return found
+
+    def test_no_source_file_is_gitignored(self):
+        offenders = self._ignored_source_files()
+        assert not offenders, (
+            "these source files are invisible to git because a .gitignore "
+            "pattern matches their directory at depth. Anchor the pattern to "
+            f"the repo root (e.g. /data/ instead of data/): {offenders}"
+        )
+
+    def test_artifact_patterns_are_anchored_to_the_repo_root(self):
+        # The bug class is an UNANCHORED directory pattern. Each generated
+        # artifact dir lives at the root, so each rule should say so.
+        import re
+
+        lines = (REPO_ROOT / ".gitignore").read_text().splitlines()
+        unanchored = [
+            line
+            for line in lines
+            if re.fullmatch(r"(logs|resumes|cover_letters|apply_packages|"
+                            r"email_drafts|screenshots|cache|data|archive)/", line)
+        ]
+        assert not unanchored, (
+            "these artifact patterns match at any depth, so a same-named "
+            f"source directory would be silently ignored: {unanchored}"
+        )
+
+    def test_the_root_artifact_dirs_are_still_ignored(self):
+        # Anchoring must not accidentally un-ignore what it is meant to hide.
+        import subprocess
+
+        for relative in ("data/apply_submit.db", "logs/x.log", "cache/x.pkl",
+                         "resumes/x.pdf", "apply_packages/x/index.html"):
+            result = subprocess.run(
+                ["git", "check-ignore", "-q", relative],
+                cwd=REPO_ROOT,
+                capture_output=True,
+            )
+            assert result.returncode == 0, f"{relative} is no longer ignored"

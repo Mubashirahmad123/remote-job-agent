@@ -166,11 +166,22 @@ JobAgent.api = (() => {
     });
   }
 
-  async function applyReview(fingerprint) {
+  async function applyReview(fingerprint, options = {}) {
+    // `regenerate` is the deliberate per-job rebuild — the normal call leaves
+    // it false so a job that already has a package is refused (409) instead of
+    // silently building a duplicate folder.
     return request('/api/apply/' + encodeURIComponent(fingerprint), {
       method: 'POST',
-      body: JSON.stringify({ mode: 'review' }),
+      body: JSON.stringify({ mode: 'review', regenerate: options.regenerate === true }),
     });
+  }
+
+  async function getApplyQueue({ threshold = 0, limit = 3 } = {}) {
+    return request('/api/apply/queue' + query({ threshold, limit }));
+  }
+
+  async function getPackagedFingerprints() {
+    return request('/api/apply/packages');
   }
 
   // ---- auth (session cookie; no token in the browser) ----
@@ -272,6 +283,8 @@ JobAgent.api = (() => {
     createResume,
     createCoverLetter,
     applyReview,
+    getApplyQueue,
+    getPackagedFingerprints,
     getMe,
     logout,
     screenshotUrl,

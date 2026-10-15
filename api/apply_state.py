@@ -2,10 +2,12 @@
 
 import os
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from api.apply_claims import initialize_claim_store
+from api.fill_claims import initialize_fill_claim_store
 from api.apply_intents import initialize_intent_store
 
 
@@ -18,6 +20,7 @@ def connect() -> sqlite3.Connection:
     connection.row_factory = sqlite3.Row
     initialize_claim_store(connection)
     initialize_intent_store(connection)
+    initialize_fill_claim_store(connection)
     connection.execute(
         """CREATE TABLE IF NOT EXISTS apply_review_artifacts (
             job_fingerprint TEXT PRIMARY KEY,
@@ -67,6 +70,24 @@ def connect() -> sqlite3.Connection:
     # the columns above, so existing apply history is preserved.
     if "actor" not in columns:
         connection.execute("ALTER TABLE apply_review_artifacts ADD COLUMN actor TEXT")
+    # One row per packaged job: the memory the Fill & Review queue reads to
+    # avoid re-packaging the same top-N on every click. Kept separate from
+    # apply_review_artifacts, which only exists once an ATS fill produced a
+    # screenshot — a package-only job (unsupported ATS) needs to be remembered
+    # too, and conflating the two would let a package-only row masquerade as
+    # fill evidence to the Greenhouse submit gate.
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS apply_package_index (
+            job_fingerprint TEXT PRIMARY KEY,
+            job_title TEXT,
+            company TEXT,
+            apply_url TEXT,
+            package_path TEXT NOT NULL,
+            prepared_at TEXT NOT NULL,
+            source TEXT,
+            actor TEXT
+        )"""
+    )
     connection.commit()
     return connection
 
@@ -128,6 +149,90 @@ def save_review_artifact(artifact: dict[str, Any]) -> None:
             ),
         )
         connection.commit()
+    finally:
+        connection.close()
+
+
+def record_package(
+    job_fingerprint: str,
+    package_path: str,
+    *,
+    job_title: str = "",
+    company: str = "",
+    apply_url: str = "",
+    source: str = "review",
+    actor: str | None = None,
+) -> None:
+    """Upsert the one-row "this job already has a package" index entry.
+
+    Keyed by fingerprint with ON CONFLICT update, so the deliberate regenerate
+    action replaces its own row instead of adding a second one: "has this job
+    been packaged?" must stay answerable with a single lookup. `source` records
+    WHY the package exists ("review" from the bulk queue vs "regenerate" from
+    an explicit per-job rebuild) for the audit feed.
+    """
+    fp = (job_fingerprint or "").strip()
+    if not fp:
+        raise ValueError("record_package requires a job_fingerprint")
+    prepared_at = datetime.now(timezone.utc).isoformat()
+    connection = connect()
+    try:
+        connection.execute(
+            """INSERT INTO apply_package_index
+            (job_fingerprint, job_title, company, apply_url, package_path,
+             prepared_at, source, actor)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_fingerprint) DO UPDATE SET
+              job_title=excluded.job_title,
+              company=excluded.company,
+              apply_url=excluded.apply_url,
+              package_path=excluded.package_path,
+              prepared_at=excluded.prepared_at,
+              source=excluded.source,
+              actor=excluded.actor""",
+            (
+                fp,
+                job_title or "",
+                company or "",
+                apply_url or "",
+                str(package_path),
+                prepared_at,
+                (source or "review").strip() or "review",
+                (actor or "").strip() or None,
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def get_package_record(job_fingerprint: str) -> dict[str, Any] | None:
+    """Latest package record for a fingerprint, or None when never packaged."""
+    fp = (job_fingerprint or "").strip()
+    if not fp:
+        return None
+    connection = connect()
+    try:
+        row = connection.execute(
+            "SELECT * FROM apply_package_index WHERE job_fingerprint = ?",
+            (fp,),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        connection.close()
+
+
+def list_packaged_fingerprints() -> set[str]:
+    """Fingerprints that already have a package on disk (queue eligibility)."""
+    connection = connect()
+    try:
+        return {
+            row[0]
+            for row in connection.execute(
+                "SELECT job_fingerprint FROM apply_package_index"
+            ).fetchall()
+            if row[0]
+        }
     finally:
         connection.close()
 

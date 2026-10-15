@@ -33,6 +33,21 @@ from typing import Any, Dict, List, Optional
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CURATED_JOBS_PATH = PROJECT_ROOT / "curated_jobs.json"
 
+# --- Data-source pin (JOBS_SOURCE=snapshot) -----------------------------------
+# SNAPSHOT_FILE alone is NOT enough to keep a test off live Sheets: it only
+# chooses the offline FALLBACK, and _read_tab_values consults Google first
+# whenever credentials resolve. So any process that merely happens to have a
+# developer's .env + keys.json in the CWD silently reads their real
+# spreadsheet, and a fixture-seeded test asserts against whatever that
+# spreadsheet happens to hold today. JOBS_SOURCE=snapshot skips the Sheets
+# read outright, so the snapshot is the source rather than the fallback.
+_SNAPSHOT_ONLY = {"snapshot", "offline", "local"}
+
+
+def snapshot_pinned() -> bool:
+    """True when JOBS_SOURCE pins this process to the local snapshot."""
+    return (os.getenv("JOBS_SOURCE") or "").strip().lower() in _SNAPSHOT_ONLY
+
 # --- TTL (60-120s window, default 90s; see module docstring) ------------------
 _TTL_MIN = 60
 _TTL_MAX = 120
@@ -84,6 +99,11 @@ def _is_fresh(at: float) -> bool:
 
 def _read_tab_values(tab: str) -> List[List[str]]:
     """Fetch raw values for one tab; [] on any error (never crash)."""
+    if snapshot_pinned():
+        # Deliberate, not an error: the operator (or a test harness) has pinned
+        # this process to the local snapshot. Returning [] here is what routes
+        # get_tab_rows down the offline fallback below.
+        return []
     try:
         from tools.sheet_writer import get_or_create_worksheet, get_sheet
     except Exception:
@@ -955,6 +975,10 @@ def list_cv_variants() -> List[Dict[str, Any]]:
 
 def sheets_configured() -> bool:
     """Presence-only check for Sheets wiring (never reads secret values)."""
+    if snapshot_pinned():
+        # Pinned to the snapshot, so Sheets is not the source regardless of
+        # what credentials happen to be lying around.
+        return False
     service_account = (os.getenv("GOOGLE_SERVICE_ACCOUNT") or "").strip()
     sheets_id = (os.getenv("GOOGLE_SHEETS_ID") or "").strip()
     if not service_account or not sheets_id:

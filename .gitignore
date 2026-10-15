@@ -20,14 +20,26 @@ scrape_save_tmp.py
 *_tmp.py
 
 # Generated artifacts
-logs/
-resumes/
-cover_letters/
-apply_packages/
-email_drafts/
-screenshots/
-cache/
-data/
+# Anchored with a leading / on purpose. An unanchored "data/" (or "cache/",
+# "resumes/", ...) matches a directory of that name at ANY depth, so a source
+# directory added later is silently ignored: no diff, no error, no clue. That
+# is not hypothetical - frontend/js/data/ held a file that no diff and no test
+# failure ever revealed. These directories are all generated at the repo root,
+# so root-only is both sufficient and safe.
+/logs/
+/resumes/
+/cover_letters/
+/apply_packages/
+/email_drafts/
+/screenshots/
+/cache/
+/data/
+/archive/
+# Scratch workspace for one-off PDF/layout experiments. Listed explicitly
+# because the anchored artifact rules above no longer cover nested dirs —
+# that is the point of anchoring them, so each real scratch/generated
+# location gets named instead of hiding behind a blanket pattern.
+/scratch/
 
 # Optional semantic embeddings
 *.pkl

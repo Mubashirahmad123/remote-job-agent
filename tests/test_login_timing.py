@@ -158,23 +158,56 @@ def test_the_decoy_uses_the_production_parameters():
     )
 
 
+def _measure_verify_ratio(rounds: int = 5) -> tuple:
+    """Median decoy/real verify-cost ratio, sampled INTERLEAVED.
+
+    Interleaving is the point. Running all the decoy samples and then all the
+    real ones means a load spike — another test hogging the CPU, an antivirus
+    scan — lands on one block and skews the comparison, which is exactly how
+    this test went red intermittently in a full-suite run while passing in
+    isolation. Alternating makes any transient hit both sides equally.
+
+    CPU time rather than wall clock for the same reason: preemption by other
+    processes shows up in perf_counter but not in process_time, and this
+    assertion is about how much work the decoy does, not how long the machine
+    took to schedule it.
+    """
+    real = hash_password("a-real-password")
+    decoy_samples: list = []
+    real_samples: list = []
+    for _ in range(rounds):
+        for label, target, sink in (
+            ("decoy", _DECOY_PASSWORD_HASH, decoy_samples),
+            ("real", real, real_samples),
+        ):
+            start = time.process_time()
+            verify_password(target, "some-guess")
+            sink.append(time.process_time() - start)
+    decoy = statistics.median(decoy_samples)
+    real_time = statistics.median(real_samples)
+    return (decoy / real_time if real_time else 0.0), decoy, real_time
+
+
 def test_a_single_verify_costs_what_a_single_verify_costs():
     """Guard against the decoy being, say, a deliberately cheap hash. Two
     verifications — one against the decoy, one against a freshly hashed password
-    — must land in the same ballpark."""
-    real = hash_password("a-real-password")
-    timings = {}
-    for label, target in (("decoy", _DECOY_PASSWORD_HASH), ("real", real)):
-        samples = []
-        for _ in range(3):
-            start = time.perf_counter()
-            verify_password(target, "some-guess")
-            samples.append(time.perf_counter() - start)
-        timings[label] = statistics.median(samples)
-    ratio = timings["decoy"] / timings["real"] if timings["real"] else 0
-    assert 0.5 < ratio < 2.0, (
-        f"decoy verify {timings['decoy']*1000:.0f} ms vs real "
-        f"{timings['real']*1000:.0f} ms — a ratio of {ratio:.2f} is itself an "
+    — must land in the same ballpark.
+
+    The bounds are deliberately loose. A decoy that actually leaked would be
+    an order of magnitude off (a non-Argon2id check runs in microseconds, not
+    the ~100ms this costs), so anything inside 0.4x–2.5x is indistinguishable
+    from Argon2id by timing. The old 0.5x–2.0x was tight enough to fail on a
+    busy machine while adding no detection power, which is how a timing test
+    ends up marked flaky and then ignored.
+    """
+    ratio, decoy, real_time = _measure_verify_ratio()
+    if not 0.4 < ratio < 2.5:
+        # One re-measure before failing: a single unlucky sample should not
+        # redden CI, but a genuinely cheap decoy fails again immediately.
+        ratio, decoy, real_time = _measure_verify_ratio()
+    assert 0.4 < ratio < 2.5, (
+        f"decoy verify {decoy*1000:.0f} ms vs real "
+        f"{real_time*1000:.0f} ms — a ratio of {ratio:.2f} is itself an "
         "oracle"
     )
 

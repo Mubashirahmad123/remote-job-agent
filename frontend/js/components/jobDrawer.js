@@ -12,6 +12,7 @@ JobAgent.jobDrawer = {
     this.drawerBody = document.getElementById('drawerBody');
     this.btnDrawerApplyNow = document.getElementById('btnDrawerApplyNow');
     this.btnDrawerSave = document.getElementById('btnDrawerSave');
+    this.btnDrawerRegenerate = document.getElementById('btnDrawerRegenerate');
 
     this.bindEvents();
   },
@@ -28,6 +29,19 @@ JobAgent.jobDrawer = {
     if (this.btnDrawerSave) {
       this.btnDrawerSave.addEventListener('click', () => {
         JobAgent.toast.show('Job bookmarked in your saved list.');
+      });
+    }
+
+    // Deliberate per-job rebuild. Only visible for a job that already has a
+    // package (see open()), and it is the sole path that regenerates one — the
+    // bulk Fill & Review button skips packaged jobs entirely.
+    if (this.btnDrawerRegenerate) {
+      this.btnDrawerRegenerate.addEventListener('click', () => {
+        const job = JobAgent.store.state.selectedJob;
+        if (!job) return;
+        if (JobAgent.autoApply && JobAgent.autoApply.regeneratePackage) {
+          JobAgent.autoApply.regeneratePackage(job);
+        }
       });
     }
   },
@@ -123,6 +137,15 @@ Role Requirements:
         this.btnDrawerApplyNow.setAttribute('aria-disabled', 'true');
         this.btnDrawerApplyNow.title = 'Posting link unavailable';
       }
+    }
+
+    if (this.btnDrawerRegenerate) {
+      const fp = job.job_fingerprint || job.id || '';
+      const packaged = JobAgent.store.isPackaged ? JobAgent.store.isPackaged(fp) : false;
+      this.btnDrawerRegenerate.classList.toggle('hidden', !packaged);
+      this.btnDrawerRegenerate.title = packaged
+        ? "This job already has a package — rebuild it with a fresh tailored resume + cover letter"
+        : '';
     }
 
     this.drawerOverlay.classList.add('open');

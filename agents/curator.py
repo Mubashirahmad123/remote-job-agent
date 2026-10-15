@@ -18,7 +18,7 @@ load_dotenv()
 
 from agents.scrapper import is_allowed_location
 from tools.sheet_writer import append_rows, get_all_rows, get_sheet, get_or_create_worksheet
-from tools.cv_parser import parse_cv
+from tools.cv_parser import parse_cv, CVParseError
 from tools.deduplicator import load_seen_hashes, save_seen_hashes
 from tools.yield_tracker import YieldTracker, count_by_source
 from tools.cv_library import get_library as _get_cv_library
@@ -73,6 +73,12 @@ if cv_path:
                         print(f"⚠️ Semantic matching disabled: no embeddings file at {CV_EMBEDDINGS_PATH}")
                 except Exception as e:
                     print(f"⚠️ Semantic matching disabled: {e}")
+        except CVParseError:
+            # A configured CV that fails to parse is a hard stop, not a
+            # degraded run. "Matching disabled" here would waste a full
+            # scrape and silently drop every job with score 0 — the exact
+            # 2026-10-03 incident pattern. Fail loudly at startup instead.
+            raise
         except Exception as e:
             print(f"⚠️ CV matching disabled: {e}")
     else:

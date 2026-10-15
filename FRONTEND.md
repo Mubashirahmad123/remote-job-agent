@@ -147,7 +147,7 @@ live: `jobs[], tracker[], stats, skills, health, usingLive, dataSource(sheets|sn
 | `jobDesk.js` | filters, grid/table views, count, newest-first ordering | `store.state.jobs` (client-side filter + `posted_date_iso` desc sort with `scraped_at` fallback, undated last; backend handles `q/source/tab/limit`) | `jobFilterSearch`, `rolePillGroup`, `scoreRange`, `location/source/statusFilter`, `jobsGridContainer/TableBody`, `filteredJobCount` (`(source: N)` suffix) |
 | `jobDrawer.js` | slide-over detail | receives job object (defensive: string-or-array stack, missing skills/CV) | `jobDetailDrawer`, `drawerBody`, `btnDrawerApplyNow/Save` |
 | `tracker.js` | kanban + status cycling + professional manual-add modal | `GET/POST/PATCH /api/tracker`; fill-only/package statuses render in Review; active cards cycle via backend-valid statuses `applied/review→interviewing→offer→rejected`; terminal archive statuses (`rejected/withdrawn/ghosted`) stay archived on click; manual adds use an in-app validated modal | `kanbanColApplied/Review/Interview/Offer/Rejected`, `count*`, `btnSyncTrackerSheets`, `btnNewTrackedJob`, `manualApplicationModal` |
-| `resumeStudio.js` | CV upload (local demo), tailor engine, profile edit + variants panels, Resume/Cover-Letter preview tabs + Open-PDF | `POST /api/resume` + `/api/cover-letter`, `GET` + `PUT /api/cv/profile`, `GET /api/cv/variants` (quiet fallback to dynamic demo preview when 404/501/unreachable) | `tailorJobSelect`, `btnGenerateTailored`, `cvVariantList`, `btnEditProfile`, `profSkills`, `generatedPreviewCard`, `tabPreviewResume`, `tabPreviewCover`, `btnOpenPdf` |
+| `resumeStudio.js` | CV upload (local demo), tailor engine, profile edit + variants panels, Resume/Cover-Letter preview tabs + Open-PDF | `POST /api/resume` (renders the returned `resume_markdown` — escaped first — in the scrollable preview pane; demo sheet only when no real markdown) + `/api/cover-letter`, `GET` + `PUT /api/cv/profile`, `GET /api/cv/variants` (quiet fallback to dynamic demo preview when 404/501/unreachable) | `tailorJobSelect`, `btnGenerateTailored`, `cvVariantList`, `btnEditProfile`, `profSkills`, `generatedPreviewCard`, `tabPreviewResume`, `tabPreviewCover`, `btnOpenPdf` |
 | `autoApply.js` | fill-and-review queue, safety lock, activity and latest results | API fills supported Greenhouse/Lever forms in visible windows and captures screenshot paths; unsupported ATSs remain package-only; `needs_review` fills render amber and are never counted as filled; per-job failures do not stop later jobs | `btnModeReview/Submit`, `autoApplyThreshold`, `dailyCapSlider` (enforced), `btnRunAutoApplyQueue`, `btnViewScreenshots`, `terminalLog`, `reviewQueueResults` |
 | `toast.js` | notifications | `JobAgent.toast.show(msg)` | — |
 | `app.js` | boot: `init()` all → `store.loadAll()` → wire Sync Sheets | `/api/jobs/refresh` | `btnSyncSheets`, `btnScrapeNow` (Phase 2: scrape trigger) |
@@ -160,8 +160,13 @@ live: `jobs[], tracker[], stats, skills, health, usingLive, dataSource(sheets|sn
 - `job.id` is a **string fingerprint**, not a number — compare with `String()`
   and escape it into `data-id` (fingerprints are hex-safe, URLs are not).
 - Keep API-shape defense in the drawer/normalizers, not in templates.
-- Resume Studio is live (profile/variants/tailor wired); its offline fallback is
-  a *dynamic* preview built from the selected job + parsed profile — never
+- Resume Studio is live (profile/variants/tailor wired). After a live
+  generate, the preview pane renders the **real resume markdown** the PDF
+  was built from (every input character escaped before the markdown
+  transforms, so LLM output can never inject markup; `Keywords:`/`---`
+  footers dropped), inside a taller scrollable pane (`.doc-mock-preview`,
+  max-height `min(600px, 70vh)`). Its offline fallback is a *dynamic*
+  preview built from the selected job + parsed profile — never
   hardcoded fixture HTML. The preview card starts hidden until first generate.
 - Skills cloud is still a static demo until `GET /api/skills` lands — don't mistake it
   for live data. Auto-Apply opens visible review windows for supported ATS forms,

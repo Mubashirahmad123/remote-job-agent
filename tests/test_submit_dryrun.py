@@ -23,9 +23,9 @@ from api import safety
 from api.app import create_app
 
 from tests.test_api_apply import (  # reuse the submit scaffolding
+    _AUTH_HEADERS,
     FP_SUBMIT,
     GREENHOUSE_SUBMIT_JOB,
-    _apply_auth,
     _issue_intent,
     _seed_greenhouse_submit,
     _submit_body,
@@ -86,7 +86,7 @@ class TestRoutesStillFailClosed:
         response = client.post(
             f"/api/apply/{FP_SUBMIT}/submit",
             json={"confirm": True},
-            headers=_apply_auth(),
+            headers=_AUTH_HEADERS,
         )
         assert response.status_code == 403
 
@@ -96,7 +96,7 @@ class TestRoutesStillFailClosed:
         response = client.post(
             f"/api/apply/{FP_SUBMIT}/intent",
             json={"mode": "review"},
-            headers=_apply_auth(),
+            headers=_AUTH_HEADERS,
         )
         assert response.status_code == 403
 
@@ -322,7 +322,7 @@ class TestDryRunOverHttp:
         response = client.post(
             f"/api/apply/{FP_SUBMIT}/submit",
             json=_submit_body(token),
-            headers=_apply_auth(),
+            headers=_AUTH_HEADERS,
         )
         assert response.status_code == 200
         payload = response.json()
@@ -341,10 +341,10 @@ class TestDryRunOverHttp:
 
         token = _issue_intent(client).json()["intent_token"]
         first = client.post(
-            f"/api/apply/{FP_SUBMIT}/submit", json=_submit_body(token), headers=_apply_auth()
+            f"/api/apply/{FP_SUBMIT}/submit", json=_submit_body(token), headers=_AUTH_HEADERS
         )
         second = client.post(
-            f"/api/apply/{FP_SUBMIT}/submit", json=_submit_body(token), headers=_apply_auth()
+            f"/api/apply/{FP_SUBMIT}/submit", json=_submit_body(token), headers=_AUTH_HEADERS
         )
         assert first.status_code == 200
         assert second.status_code == 200, "the first dry run consumed the intent"
@@ -361,7 +361,7 @@ class TestDryRunOverHttp:
         wrong_title = client.post(
             f"/api/apply/{FP_SUBMIT}/submit",
             json=_submit_body(token, typed_title="Totally Different Role"),
-            headers=_apply_auth(),
+            headers=_AUTH_HEADERS,
         )
         assert wrong_title.status_code == 422
 

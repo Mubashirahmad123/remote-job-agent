@@ -36,10 +36,33 @@ import time
 from urllib.parse import urlparse
 
 from api.deps import AUTOMATION_ACTOR
+from api.fill_claims import (
+    FillInProgress,
+    claim_fill,
+    list_active_fill_fingerprints,
+    refresh_fill_claim,
+    release_fill_claim,
+)
 
 
 class DreamTierForbidden(Exception):
     """Raised when a fill is requested for a dream-tier job (422)."""
+
+
+class AlreadyPackaged(Exception):
+    """Raised when a fill is requested for a job that already has a package.
+
+    The bulk "Fill & Review" button must surface the NEXT best unprocessed
+    matches, not rebuild the same top-3 on every click. The API is the source
+    of truth for that (a stale dashboard or a script cannot silently burn LLM
+    calls and drop a duplicate timestamped folder). The explicit, per-job
+    `regenerate=True` override is the one intended way to rebuild a package.
+    """
+
+    def __init__(self, job_fingerprint: str, package_path: str = ""):
+        super().__init__(f"A package already exists for '{job_fingerprint}'")
+        self.job_fingerprint = job_fingerprint
+        self.package_path = package_path
 
 
 class SubmitRejected(Exception):
@@ -146,8 +169,28 @@ def _fill_ats_form(
     return results.get_nowait()
 
 
-def fill_review(job_fingerprint: str, actor: str = AUTOMATION_ACTOR) -> Dict[str, Any]:
+def fill_review(
+    job_fingerprint: str,
+    actor: str = AUTOMATION_ACTOR,
+    regenerate: bool = False,
+) -> Dict[str, Any]:
     """Build a review package and fill supported ATS fields, never submit.
+
+    `regenerate=False` (the normal path) refuses a job that already has a
+    package — a repeat click must neither burn an LLM resume/cover-letter pass
+    nor drop a second timestamped folder. The per-job `regenerate=True`
+    override is the deliberate "rebuild after editing my CV" action.
+
+    Concurrency: the package index only learns about a job AFTER generation
+    finishes (minutes later), so two overlapping fills for the same job both
+    used to pass the "no package yet" check and double-generated everything
+    (2026-10-13 live session: duplicate Bling + Wheely packages). An atomic
+    in-progress claim (api.fill_claims) is therefore taken BEFORE any
+    generation starts; a second fill for the same fingerprint while one is
+    in flight raises FillInProgress (router: 409) costing zero LLM calls.
+    The claim is ownership-scoped (claimed_at) and released when the fill
+    ends either way; a crashed process leaves at most a claim that
+    self-expires after api.fill_claims.STALE_FILL_CLAIM_MINUTES.
 
     `actor` defaults to "automation" because the only non-HTTP caller is the
     CLI/scheduler. HTTP routes MUST pass the resolved actor explicitly
@@ -155,6 +198,7 @@ def fill_review(job_fingerprint: str, actor: str = AUTOMATION_ACTOR) -> Dict[str
     fails if a route stops threading it.
     """
     from api import cache
+    from api.apply_state import connect, get_package_record
 
     job = cache.get_job(job_fingerprint)
     if job is None:
@@ -162,11 +206,85 @@ def fill_review(job_fingerprint: str, actor: str = AUTOMATION_ACTOR) -> Dict[str
 
     # Lazy pipeline import (lazy-import rule: api/* must never import
     # agents.* at startup).
-    from agents.auto_applier import classify_tier, detect_ats_platform, generate_apply_package
+    from agents.auto_applier import classify_tier
 
     tier = classify_tier(job)
     if tier == "dream":
         raise DreamTierForbidden("Dream-tier jobs require manual application")
+
+    fingerprint = (job.get("job_fingerprint") or job_fingerprint).strip()
+
+    # Claim-first, not record-last: record_package only runs after the slow
+    # part (tailored resume + cover letter + package folder) completes, so
+    # the package index cannot see an in-flight fill. This one atomic INSERT
+    # is what decides "who generates" when two requests race.
+    #
+    # The claim must come BEFORE the already-packaged check, not after it.
+    # Checking first is a time-of-check/time-of-use hole: a second request can
+    # read "no package yet", lose the CPU, and by the time it reaches
+    # claim_fill the first request has finished AND released its claim — so it
+    # claims a job that is now packaged, and both generate. Claiming first
+    # closes it from both sides: if the other request is still running we get
+    # FillInProgress, and if it has already released, it recorded the package
+    # and the check below refuses us instead. Caught by
+    # TestConcurrentPostsForOneJob at roughly 1 run in 4.
+    connection = connect()
+    try:
+        claim = claim_fill(connection, fingerprint, actor=actor)
+    finally:
+        connection.close()
+
+    def heartbeat() -> None:
+        """Prove this worker is still alive between pipeline stages.
+
+        Without this the claim's stale window is measured from the start of
+        the fill, and a legitimately slow generation (two LLM passes plus a
+        browser fill) can outlive it — at which point the next request
+        reclaims the job and both generate. Best-effort: a heartbeat that
+        fails must not abort a fill that is otherwise succeeding.
+        """
+        beat_connection = connect()
+        try:
+            refresh_fill_claim(beat_connection, fingerprint, claim["claimed_at"])
+        except Exception:
+            pass
+        finally:
+            beat_connection.close()
+
+    try:
+        # Read under our own claim, so no one can slip a package in between.
+        existing_package = get_package_record(fingerprint)
+        if existing_package is not None and not regenerate:
+            # Checked BEFORE material generation on purpose: this is the whole
+            # point of the fix — a repeat click must cost zero LLM calls and
+            # create no duplicate package folder.
+            raise AlreadyPackaged(
+                fingerprint, existing_package.get("package_path", "")
+            )
+
+        return _fill_review_claimed(
+            job, fingerprint, tier, actor, regenerate, existing_package, heartbeat
+        )
+    finally:
+        connection = connect()
+        try:
+            release_fill_claim(connection, fingerprint, claim["claimed_at"])
+        finally:
+            connection.close()
+
+
+def _fill_review_claimed(
+    job: Dict[str, Any],
+    fingerprint: str,
+    tier: str,
+    actor: str,
+    regenerate: bool,
+    existing_package: Dict[str, Any] | None,
+    heartbeat=lambda: None,
+) -> Dict[str, Any]:
+    """Generate, package, and fill — already under this request's own claim."""
+    from agents.auto_applier import detect_ats_platform, generate_apply_package
+    from api.apply_state import record_package
 
     # Generate the final submit materials FIRST so the visible review form
     # carries exactly what a later submit would send (never blank placeholders
@@ -183,9 +301,30 @@ def fill_review(job_fingerprint: str, actor: str = AUTOMATION_ACTOR) -> Dict[str
         review_cover = ""
         materials_note = f"fallback-empty: {error}"
 
+    # Longest single stage is behind us; keep the claim provably alive before
+    # the next slow one (packaging, then the ATS fill that waits up to 90s).
+    heartbeat()
+
     package_path = generate_apply_package(job, review_resume, review_cover)
     if not package_path:
         raise RuntimeError("Apply package generation returned no path")
+
+    # Heartbeat again: record_package below is the point at which this job
+    # stops being "in flight" for everyone else's purposes, but the ATS fill
+    # still has to run.
+    heartbeat()
+
+    # Remember the package (one row per fingerprint) so the bulk queue can
+    # select the next best UNPROCESSED matches instead of repeating this job.
+    record_package(
+        fingerprint,
+        str(package_path),
+        job_title=job.get("job_title", ""),
+        company=job.get("company", ""),
+        apply_url=job.get("apply_url", ""),
+        source="regenerate" if regenerate else "review",
+        actor=actor,
+    )
 
     fill_result = _fill_ats_form(job, review_resume, review_cover)
     apply_url = job.get("apply_url", "")
@@ -216,7 +355,7 @@ def fill_review(job_fingerprint: str, actor: str = AUTOMATION_ACTOR) -> Dict[str
         score = float(job.get("match_score", job.get("score", 0)) or 0)
         match_ratio = score / 100 if score > 1 else score
         save_review_artifact({
-            "job_fingerprint": (job.get("job_fingerprint") or job_fingerprint).strip(),
+            "job_fingerprint": fingerprint,
             "platform": platform,
             "job_title": job.get("job_title", ""),
             "apply_url": apply_url,
@@ -238,7 +377,7 @@ def fill_review(job_fingerprint: str, actor: str = AUTOMATION_ACTOR) -> Dict[str
     return {
         "status": effective_status,
         "mode": "review",
-        "job_fingerprint": (job.get("job_fingerprint") or job_fingerprint).strip(),
+        "job_fingerprint": fingerprint,
         "job_title": job.get("job_title", ""),
         "company": job.get("company", ""),
         "apply_url": job.get("apply_url", ""),
@@ -246,7 +385,7 @@ def fill_review(job_fingerprint: str, actor: str = AUTOMATION_ACTOR) -> Dict[str
         "package_path": str(package_path),
         "screenshot_path": fill_result.get("screenshot_path") if fill_result else None,
         "screenshot_url": (
-            f"/api/apply/{(job.get('job_fingerprint') or job_fingerprint).strip()}/screenshot"
+            f"/api/apply/{fingerprint}/screenshot"
             if fill_result and fill_result.get("screenshot_path")
             else None
         ),
@@ -254,6 +393,10 @@ def fill_review(job_fingerprint: str, actor: str = AUTOMATION_ACTOR) -> Dict[str
         "field_verification": field_verification,
         "profile_fields_verified": profile_fields_verified,
         "materials_note": materials_note,
+        "regenerated": bool(regenerate),
+        "previous_package_path": (
+            (existing_package or {}).get("package_path") if regenerate else None
+        ),
         "confirmation_metadata_available": bool(
             fill_result
             and fill_result.get("confirmation_path")
@@ -261,6 +404,113 @@ def fill_review(job_fingerprint: str, actor: str = AUTOMATION_ACTOR) -> Dict[str
         ),
         "browser_opened": fill_result.get("browser_opened", False) if fill_result else False,
         "submit_enabled": False,
+    }
+
+
+def _tracker_exclusion_keys() -> tuple[set[str], set[str]]:
+    """Fingerprints + apply_urls already on the APPLIED tracker.
+
+    A job the operator applied to (or triaged on the tracker) must never come
+    back through the bulk queue. APPLIED rows are keyed by apply_url in the
+    sheet and may or may not carry a fingerprint, so both are collected and a
+    candidate is excluded when EITHER matches.
+    """
+    from api import cache
+
+    fingerprints: set[str] = set()
+    urls: set[str] = set()
+    try:
+        rows = cache.get_tracker_rows()
+    except Exception:
+        # A tracker read failure must not break package selection; it only
+        # means the queue cannot rule out already-applied jobs this time.
+        return fingerprints, urls
+    for row in rows or []:
+        fp = (row.get("job_fingerprint") or "").strip()
+        if fp:
+            fingerprints.add(fp)
+        url = (row.get("apply_url") or "").strip()
+        if url:
+            urls.add(url)
+    return fingerprints, urls
+
+
+def select_queue_jobs(
+    threshold: float = 0.0, limit: int = 3, tab: str = "ALL JOBS"
+) -> Dict[str, Any]:
+    """Pick the next best UNPROCESSED jobs for the Fill & Review queue.
+
+    "Unprocessed" = no package in the index AND no fill currently in flight
+    AND not on the tracker AND not a dream-tier job (which fill_review
+    refuses with 422). Selecting here rather than in the browser keeps the
+    answer identical for every client and lets a stale dashboard be corrected
+    server-side. Returns the chosen jobs plus exclusion counts so the UI can
+    explain an empty queue instead of silently re-packaging the same top
+    three.
+    """
+    from api import cache
+    from api.apply_state import connect, list_packaged_fingerprints
+    from agents.auto_applier import _safe_score, classify_tier
+
+    packaged = list_packaged_fingerprints()
+    tracked_fps, tracked_urls = _tracker_exclusion_keys()
+    # A fill claimed by a concurrent request is mid-generation right now.
+    # Skipping it here is what lets a rapid second click move on to the
+    # NEXT-best jobs instead of re-selecting (and double-generating) the
+    # same top three — the package index cannot see an in-flight fill,
+    # only the claim table can.
+    connection = connect()
+    try:
+        in_progress = list_active_fill_fingerprints(connection)
+    finally:
+        connection.close()
+    try:
+        threshold = float(threshold)
+    except (TypeError, ValueError):
+        threshold = 0.0
+    limit = max(1, int(limit))
+
+    eligible: list[Dict[str, Any]] = []
+    excluded = {
+        "packaged": 0,
+        "in_progress": 0,
+        "tracked": 0,
+        "below_threshold": 0,
+        "dream": 0,
+        "no_fingerprint": 0,
+    }
+    for job in cache.get_jobs(tab=tab):
+        fp = (job.get("job_fingerprint") or "").strip()
+        if not fp:
+            excluded["no_fingerprint"] += 1
+            continue
+        if fp in packaged:
+            excluded["packaged"] += 1
+            continue
+        if fp in in_progress:
+            excluded["in_progress"] += 1
+            continue
+        url = (job.get("apply_url") or "").strip()
+        if fp in tracked_fps or (url and url in tracked_urls):
+            excluded["tracked"] += 1
+            continue
+        if _safe_score(job) < threshold:
+            excluded["below_threshold"] += 1
+            continue
+        if classify_tier(job) == "dream":
+            # Dream jobs are manual-only; fill_review would 422 them, so never
+            # waste one of the three queue slots on a guaranteed failure.
+            excluded["dream"] += 1
+            continue
+        eligible.append(job)
+
+    eligible.sort(key=_safe_score, reverse=True)
+    return {
+        "jobs": eligible[:limit],
+        "eligible_total": len(eligible),
+        "excluded": excluded,
+        "threshold": threshold,
+        "limit": limit,
     }
 
 
