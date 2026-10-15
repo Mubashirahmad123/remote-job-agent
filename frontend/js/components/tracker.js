@@ -36,6 +36,8 @@ JobAgent.tracker = {
     notes: 'manualNotes',
   },
 
+  _pendingUpdates: new Set(),
+  _syncing: false,
   _manualSaving: false,
   _manualModalOpen: false,
   _manualLastFocus: null,
@@ -186,13 +188,19 @@ JobAgent.tracker = {
   bindEvents() {
     if (this.btnSyncTrackerSheets) {
       this.btnSyncTrackerSheets.addEventListener('click', async () => {
+        if (this._syncing) return;
+        this._syncing = true;
+        this.btnSyncTrackerSheets.disabled = true;
         JobAgent.toast.show('Refreshing tracker from /api/tracker…');
         try {
           await JobAgent.api.refreshJobs('APPLIED');
-          await JobAgent.store.loadTracker();
+          await JobAgent.store.loadTracker({ throwOnError: true });
           JobAgent.toast.show('Tracker synced with APPLIED sheet tab.');
         } catch (e) {
-          JobAgent.toast.show('Sync failed: ' + e.message);
+          JobAgent.toast.show('Sync failed: ' + e.message, 'error');
+        } finally {
+          this._syncing = false;
+          this.btnSyncTrackerSheets.disabled = false;
         }
       });
     }
@@ -407,14 +415,17 @@ JobAgent.tracker = {
     this._setManualStatus('Saving manual application…', 'info');
     try {
       await JobAgent.api.createTracker(payload);
-      await JobAgent.store.loadTracker();
-      saved = true;
+      saved = true; // POST committed even if the following GET fails.
+      await JobAgent.store.loadTracker({ throwOnError: true });
       this._setManualStatus('Manual application saved.', 'success');
       JobAgent.toast.show('Manual application added to the APPLIED tracker.');
     } catch (e) {
       const message = e && e.message ? e.message : String(e);
-      this._setManualStatus('Add failed: ' + message, 'error');
-      JobAgent.toast.show('Add failed: ' + message);
+      const detail = saved
+        ? 'Application saved, but tracker refresh failed: ' + message + ' Use Sync to reload; do not resubmit.'
+        : 'Add failed: ' + message;
+      this._setManualStatus(detail, 'error');
+      JobAgent.toast.show(detail, 'error');
     } finally {
       this._setManualSaving(false);
     }
@@ -467,7 +478,10 @@ JobAgent.tracker = {
       cardEl.className = 'kanban-card';
       if (!nextStatus) cardEl.classList.add('kanban-card-archived');
       cardEl.dataset.fp = fp;
-      cardEl.title = nextStatus
+      const updating = this._pendingUpdates.has(String(fp));
+      cardEl.setAttribute('aria-busy', String(updating));
+      cardEl.classList.toggle('kanban-card-updating', updating);
+      cardEl.title = updating ? 'Saving status…' : nextStatus
         ? 'Click to move to ' + this._statusLabel(nextStatus)
         : 'Archived status: this application will not move back to Applied on click.';
       cardEl.innerHTML = `
@@ -506,27 +520,41 @@ JobAgent.tracker = {
   },
 
   async cycleCardStatus(card) {
+    const fp = String(this._patchKey(card));
+    // Each card is serialized through PATCH + reload. No optimistic/local-only
+    // cycle: a real tracker row must never appear saved after a refused write.
+    if (this._pendingUpdates.has(fp) || JobAgent.store.state.loading.tracker) return;
     const next = this._nextBackendStatus(card.status);
     if (!next) {
       JobAgent.toast.show('Archived status: this application will not move back to Applied on click.');
       return;
     }
-
-    const fp = this._patchKey(card);
-    if (JobAgent.store.state.usingLive && this._canPatchKey(fp) && JobAgent.api) {
-      try {
-        const updated = await JobAgent.api.patchTracker(fp, next, card.notes || '');
-        await JobAgent.store.loadTracker();
-        JobAgent.toast.show(`Updated ${card.company} status to: ${String(updated.status || next).toUpperCase()}`);
-        return;
-      } catch (e) {
-        // Fall through to local update so the UI never dead-ends offline.
-        console.warn('[tracker] PATCH failed, local cycle:', e.message);
-        JobAgent.toast.show('API update failed (' + e.message + ') — cycled locally.');
-      }
+    if (!this._canPatchKey(fp) || typeof JobAgent.api?.patchTracker !== 'function') {
+      JobAgent.toast.show('Tracker update failed: a valid saved application and online API are required.', 'error');
+      return;
     }
-    card.status = next;
+
+    let saved = false;
+    this._pendingUpdates.add(fp);
     this.render();
-    JobAgent.toast.show(`Updated ${card.company} status to: ${this._statusLabel(card.status).toUpperCase()}`);
+    try {
+      // Notes are append-only on the server. Resending the old notes on a
+      // status-only click would duplicate them on every transition.
+      const updated = await JobAgent.api.patchTracker(fp, next);
+      saved = true;
+      await JobAgent.store.loadTracker({ throwOnError: true });
+      JobAgent.toast.show(`Updated ${card.company} status to: ${String(updated.status || next).toUpperCase()}`);
+    } catch (e) {
+      const message = e && e.message ? e.message : String(e);
+      if (saved) {
+        JobAgent.toast.show('Status saved, but tracker refresh failed: ' + message + ' Use Sync to reload.', 'error');
+      } else {
+        console.warn('[tracker] PATCH failed:', message);
+        JobAgent.toast.show('Tracker update failed: ' + message + ' Use Sync to check the saved status.', 'error');
+      }
+    } finally {
+      this._pendingUpdates.delete(fp);
+      this.render();
+    }
   },
 };

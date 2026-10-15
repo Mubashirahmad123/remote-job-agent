@@ -48,4 +48,4 @@ fi
 
 echo "interpreter: $PY"
 cd "$HERE"
-RJA_PYTHON="$PY" exec node --test smoke.test.mjs
+RJA_PYTHON="$PY" exec npm test --silent

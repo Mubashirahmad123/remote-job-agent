@@ -4,6 +4,14 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 
 ---
 
+## Product scope
+
+`main` is the owner's personal, software-development-focused agent. CV upload
+and support for other professions/users are **deferred together** to a future
+`user` product branch, with user-owned data, LLM keys and optional Sheets
+configuration—not a merge into personal `main`. No target date or implementation
+is scheduled. See [USER_PRODUCT.md](USER_PRODUCT.md) for scope and design gates.
+
 ## Features
 
 | Feature | Status | Description |
@@ -11,9 +19,9 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | Multi-source scraping | ✅ | 45+ job boards via APIs, HTML parsing, Playwright stealth, JobSpy, and Crawl4AI |
 | **Smart job filters** | ✅ | Only web/software dev roles — excludes ML, AI, Network, DevOps, SRE, Security, QA, Game, Blockchain, Embedded, Salesforce, and senior/lead roles |
 | CV-based job matching | ✅ | Parses your PDF/DOCX CV via LLM fallback chain, local keyword scoring (no API calls per job) |
-| **Multi-CV matching** | 🟡 Partial | `CV_DIR=cvs/` — auto-picks the best CV per job (keyword-based); pick recorded as `selected_cv`/`selected_cv_path` per job and used for scoring, resume + cover-letter generation. Semantic scoring still uses the primary CV only |
+| **Multi-CV matching** | ✅ | `CV_DIR=cvs/` — keyword matching picks the best CV per job; optional semantic scoring uses that same selected CV, as do resume/cover-letter generation and apply. Selection remains keyword-based, not semantic reranking of CVs |
 | **ATS 1-page resume + cover letter** | ✅ | Multi-pass shrink engine guarantees exactly 1 page; slate/navy styled header, section rules, hanging-indent bullets (verified with pdfplumber) |
-| **Semantic job matching** | ✅ | Optional FAISS + sentence-transformers for cosine-similarity scoring (catches synonyms) — `pip install sentence-transformers faiss-cpu`, then build the index with `python -m tools.embedding_matcher` (required — without `cv_embeddings.json` scoring silently stays keyword-only) |
+| **Semantic job matching** | ✅ | Optional FAISS + sentence-transformers cosine scoring — `pip install sentence-transformers faiss-cpu`. Selected-CV embeddings are built lazily and cached per file/content/model; failures explicitly fall back to keyword-only scoring |
 | Duplicate detection | ✅ | MD5 fingerprinting prevents duplicate entries across runs |
 | Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS — with colored score bands, hyperlinks, frozen headers |
 | **AI cover letters with role detection** | ✅ | Detects backend/frontend/fullstack/mobile role from job title and tailors tone, skills, and experience accordingly |
@@ -22,7 +30,7 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | **Tailored resume generation** | ✅ | Generates ATS-optimized resume PDF matched to each job's tech stack — grounded strictly in the actual CV (prompt forbids invented employers/projects; rejected pre-web entries filtered before the LLM sees them; LLM keyword footers stripped) `python main.py resume` |
 | **Country/location filter** | ✅ | 452-country detection — blocks jobs from non-whitelisted countries, allows 198 whitelisted terms |
 | **Cross-platform Unicode PDFs** | ✅ | Auto-downloads DejaVu fonts — works on Windows/macOS/Linux; covers accents, Arabic, Cyrillic |
-| Application tracker | ✅ | `track.py` CLI + live Pipeline Tracker kanban — APPLIED sheet rows, fill-review/package statuses, status cycling, follow-up reminders |
+| Application tracker | ✅ | `track.py` CLI + live Pipeline Tracker kanban — APPLIED sheet rows, review/package statuses, persisted-only status cycling, URL-keyed manual rows, failure/retry handling and interaction tests |
 | Auto-cleanup old jobs | ✅ | Removes jobs older than 30 days from all sheets (including legacy `LIVE Remote Jobs Tracker`) |
 | Sheet formatting (Google Sheets) | ✅ | Auto-applies colored score bands, clickable hyperlinks, wrapped text, column widths via Google Sheets API |
 | Sheet formatting (xlsx export) | ✅ | `format_jobs_xlsx.py` — professional Excel formatting with same visual style |
@@ -33,11 +41,40 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 | JobSpy integration | ✅ | Scrapes LinkedIn, Indeed, Glassdoor, Google Jobs, ZipRecruiter |
 | Scheduled automation | ✅ | Cron-based scheduler (Mon/Thu full scrape, daily quick checks) |
 | Universal run script | ✅ | `Run.py` works on Windows / Mac / Linux with `--setup` flag |
-| Docker support | ✅ | Production-grade Docker + compose: `api`, `scheduler`, `caddy` (HTTPS reverse proxy) with Playwright, persistent volumes & secrets isolation — $0 Oracle Cloud deployment guide in `deploy/DEPLOY_ORACLE.md` |
+| Docker support | ✅ | Docker + compose: `api`, `scheduler`, `caddy`, Playwright, persistent volumes and secrets isolation. Installs the universal dependency lock; native x86-64/ARM64 build/runtime CI configured (ARM pass still pending). Oracle deployment guide: `deploy/DEPLOY_ORACLE.md` |
 | FastAPI backend (reads + actions) | ✅ | `api/` — jobs, stats, tracker, refresh, scrape runs, tailored materials, CV profile endpoints over the Sheets cache (see below) |
 | Command Center dashboard | ✅ | `frontend/` — live UI served same-origin at `http://127.0.0.1:8000/` (no CORS issues) |
 
 ---
+
+## Per-CV semantic scoring
+
+With `CV_DIR`, keyword matching still chooses the CV. Semantic matching then
+scores the job against **that selected file**, never the primary CV's embeddings.
+With a single `CV_PATH`, both scores use that file. No CV upload, new account or
+frontend setup is involved.
+
+- Install the optional `sentence-transformers` and `faiss-cpu` packages to enable
+  semantic scoring. First use may need to download `EMBEDDING_MODEL`; preload it
+  on a network-enabled machine for offline operation.
+- Embeddings are extracted locally from PDF/DOCX text and cached as JSON in
+  `cache/cv_embeddings/` (gitignored and excluded from Docker images). Source
+  contents (SHA-256), model name and schema version invalidate stale entries;
+  same-size edits are detected, and the old per-path slot is replaced.
+- Parsed library profiles, selection results and keyword matchers are also
+  invalidated when a registered CV changes, avoiding old keyword-profile reuse.
+- Missing dependencies, unreadable CVs or encoding/scoring failures produce an
+  explicit keyword-only fallback with full keyword weight. They never substitute
+  another CV's vectors. A genuinely computed semantic zero still blends in.
+- `python -m tools.embedding_matcher path/to/cv.pdf` can prewarm one CV's managed
+  cache. It also writes the legacy `CV_EMBEDDINGS_PATH` export for compatibility;
+  curation does not trust old bare-vector files without CV/model provenance.
+- To force a rebuild, remove the derived files under `cache/cv_embeddings/` before
+  the next run. Treat these vectors as sensitive CV-derived data.
+
+Existing frontend match scores/rankings consume the updated curation results;
+there is no new UI control. **Already saved job scores are not rewritten** by
+this change and deduplicated jobs are not automatically rescored.
 
 ## Prerequisites
 
@@ -152,7 +189,7 @@ remote-job-agent/
 │   ├── cv_parser.py           # PDF/DOCX CV → structured profile via LLM fallback chain
 │   ├── cv_matcher.py          # Local keyword job scoring (no API calls)
 │   ├── deduplicator.py        # MD5 fingerprint duplicate detection
-│   ├── embedding_matcher.py   # Optional FAISS semantic scoring (Phase 2; primary CV only)
+│   ├── embedding_matcher.py   # Optional FAISS semantic scoring with per-CV validated caches
 │   ├── font_utils.py          # UnicodePDF ATS layout engine (headers, sections, bullets, page_count) + DejaVu resolution
 │   ├── sheet_writer.py        # Google Sheets dashboard (5 tabs) + 30-day auto-cleanup
 │   ├── resume_generator.py    # AI-tailored ATS 1-page resume PDF per job (3-pass shrink fit)
@@ -184,7 +221,7 @@ remote-job-agent/
 │       ├── store.js          # Reactive state + backend→UI normalization (no mock layer)
 │       └── components/       # dashboard, jobDesk, jobDrawer, tracker, resumeStudio, autoApply
 ├── tests/
-│   └── test_*.py etc.        # ~900 isolated tests (faked Sheets, no network) — see TESTER.md; CI is the release gate
+│   └── test_*.py etc.        # Isolated tests (faked Sheets, no network) — current results in TESTER.md
 ├── apply_packages/           # Auto-generated apply packages (resume + cover letter + form data)
 ├── cover_letters/            # Generated PDF cover letters
 ├── resumes/                  # Generated tailored PDF resumes
@@ -399,7 +436,7 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `GET /api/skills?tab=&limit=` | `{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name,count,pct}]}` — canonicalized `tech_stack` demand (powers the dashboard skill cloud) |
 | `GET /api/tracker?status=` | APPLIED-tab rows; supports both tracker CLI header and auto-apply APPLIED header fork (`job_fingerprint`, `applied_at`, fill-review statuses) |
 | `POST /api/tracker` | Add a manual application row to APPLIED (`apply_url`, optional title/company/notes/source/salary/contact/follow-up). `created_by` is set **server-side** from the resolved actor — a client-supplied value in the row is ignored |
-| `PATCH /api/tracker/{fp}` | `{status, notes}` — status whitelist: applied, interviewing, offer, rejected, withdrawn, ghosted. Status changes are **not** attributed: the APPLIED tab keeps no change history |
+| `PATCH /api/tracker/{fp}` | Encoded fingerprint or full apply URL; `{status, notes}` (`notes` is append-only; omit for status-only updates) — status whitelist: applied, interviewing, offer, rejected, withdrawn, ghosted. Status changes are **not** attributed: the APPLIED tab keeps no change history |
 | `POST /api/jobs/refresh` | `{tab?}` — invalidate the sheet cache on demand |
 | `POST /api/scrape` | Start a background scrape run → `202 {run_id, status}` (409 if one is active) |
 | `GET /api/scrape` / `GET /api/scrape/{run_id}` | List runs / poll `{status, phase, scraped, curated, error}` |
@@ -557,12 +594,30 @@ python -c "from tools.cv_parser import parse_cv; profile = parse_cv('my_cv.pdf')
 # Test cover letter
 python -c "from agents.gemini_tools import generate_cover_letter; cl = generate_cover_letter('Full Stack Developer', 'Acme Corp', 'Node.js React role', 'Mubashir'); print(cl[:200])"
 
-# Build CV embeddings for semantic matching (correct PDF text extraction)
+# Prewarm one CV cache (optional; curation builds selected-CV caches lazily)
 python -m tools.embedding_matcher
 # or: python -c "from tools.embedding_matcher import build_cv_index_from_file; build_cv_index_from_file('my_cv.pdf')"
 ```
 
 ---
+
+## Automated verification
+
+```bash
+python -m pytest tests/ -q
+npm ci --prefix tests/e2e
+npm test --prefix tests/e2e       # or ./tests/e2e/run.sh
+```
+
+Latest local locked Linux run (2026-10-15): **1004 pytest passed, 8 skipped**
+and **64 frontend E2E passed**. Includes 22 tracker interactions (transitions,
+review columns, reload persistence, URL-keyed applications, failures and manual
+add) plus 22 Python API/runner contracts. The tracker fixture uses fake Sheets
+behind real routes/services, never personal resources. Six targeted environment
+checks also reproduce the old late-`.env` auth failure and prove the current
+harness already prevents it; the stale warning is retired. These are jsdom/API
+tests, not native-browser, live-Sheets, Docker/ARM or deployment verification.
+Details and optional-dependency skips: [TESTER.md](TESTER.md).
 
 ## Live submit status
 
@@ -578,8 +633,14 @@ then stop. No intent consumed, no claim taken.
   (Democorp "Full Stack Engineer", job 83446) for a no-real-employer rehearsal.
 - **[`LIVE_SUBMIT.md`](LIVE_SUBMIT.md)** — the supervised live-run procedure.
 
-No live submission has been performed. Known blocker on the demo board: the
-Greenhouse form is reCAPTCHA-protected.
+No live submission has been performed. The user reported a real-Chrome
+Democorp **fill-only** run on 2026-10-15; the supplied screenshot shows populated
+contact fields and resume/cover-letter attachments. However, the API timed out
+after 90 seconds and its screenshot URL returned 404 despite a reported PNG on
+disk. Filling is partially evidenced; API completion/artifact persistence and
+submit-path verification remain unresolved. No intent/submit calls, submit
+click or reCAPTCHA bypass were reported. The demo form is reCAPTCHA-protected.
+See the `LIVE_SUBMIT.md` run log; submit stays disabled.
 
 ## License
 

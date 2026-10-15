@@ -11,6 +11,7 @@ but individual CVs are cached to disk via cv_parser's md5-hash caching).
 """
 
 import os
+import hashlib
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -94,7 +95,8 @@ class CVLibrary:
         """
         self.cvs: List[Dict] = []
         self._pick_cache: Dict[str, Dict] = {}  # job_fingerprint -> result
-        self._matcher_cache: Dict[str, object] = {}  # cv path -> CVMatcher (profiles are immutable after parse)
+        self._matcher_cache: Dict[str, object] = {}  # cv path -> CVMatcher
+        self._source_hashes: Dict[str, Optional[str]] = {}
         self._cv_dir: Optional[Path] = None
 
         self._load(cv_dir)
@@ -146,6 +148,7 @@ class CVLibrary:
     def _register(self, path: Path):
         """Add a CV file to the registry."""
         tags = _extract_domain_tags(path.name)
+        self._source_hashes[str(path)] = self._source_hash(path)
         self.cvs.append({
             "path":    str(path),
             "name":    path.name,
@@ -157,6 +160,28 @@ class CVLibrary:
     # ------------------------------------------------------------------
     # Parsing
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _source_hash(path) -> Optional[str]:
+        try:
+            return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        except OSError:
+            return None
+
+    def _refresh_changed(self):
+        """Invalidate selection, profiles and matchers after edits/deletions.
+
+        A fresh embedding with an old parsed keyword profile would mix two CV
+        versions. Check before the pick-cache lookup, including same-size edits.
+        """
+        for entry in self.cvs:
+            path = entry["path"]
+            digest = self._source_hash(path)
+            if self._source_hashes.get(path) != digest:
+                self._source_hashes[path] = digest
+                entry["profile"] = None
+                self._matcher_cache.pop(path, None)
+                self._pick_cache.clear()
 
     def _ensure_parsed(self, entry: Dict):
         """Parse and cache profile for a single CV entry (idempotent)."""
@@ -170,6 +195,7 @@ class CVLibrary:
 
     def parse_all(self):
         """Pre-parse all registered CVs (optional -- pick_best also does this lazily)."""
+        self._refresh_changed()
         for entry in self.cvs:
             self._ensure_parsed(entry)
 
@@ -191,7 +217,9 @@ class CVLibrary:
         if not self.cvs:
             return None, None, 0
 
-        # Cache hit (within a single pipeline run)
+        self._refresh_changed()
+
+        # Cache hit (while the source CVs are unchanged)
         cache_key = job.get("job_fingerprint") or job.get("apply_url") or ""
         if cache_key and cache_key in self._pick_cache:
             cached = self._pick_cache[cache_key]

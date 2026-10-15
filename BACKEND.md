@@ -7,7 +7,7 @@ closed with 403 while `api/safety.py SUBMIT_ENABLED=False`; Lever has no submit
 path by design. See the gated 2b spec and current execution status in `PM.md`.
 
 Run: `venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000`
-Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified 2026-10-01: 291 passed, 1 skipped)
+Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (latest recorded local results: `TESTER.md`; native Docker/ARM verification pending)
 
 ---
 
@@ -91,20 +91,34 @@ were written under the old keys; a write-only fix would stay split until the
 sheet was rebuilt. Unknown board names pass through untouched, so a genuinely
 new board is never absorbed into an existing one.
 
-### Planned — Phase 2.1 (not implemented yet)
+### Per-CV semantic scoring (2026-10-15)
 
-- `POST /api/cv/upload` (multipart) — validate type (content-sniffed) + size,
-  parse through the existing CV chain, return the structured profile. The
-  uploaded profile becomes the active matching profile; `GET /api/cv/profile`
-  gains a field saying **which** CV is active (uploaded vs on-disk) plus a
-  reset path. Token-gated like every write route. Uploaded files are PII —
-  storage rules in `PRODUCTION.md` §8a.
-- Gap analysis reuses `cache.extract_skills` so job-side skills are
-  canonicalized identically to `/api/skills` (role nouns already purged) —
-  no second definition of "skill".
-- Cache backend seam (2.1b): the TTL store moves behind a small interface,
-  in-process stays default, and a `--workers > 1` startup warning is added.
-  Redis is explicitly **not** being added yet. See `PM.md` §2.1.
+This is a pipeline correction, not a new HTTP endpoint. `agents/curator.py`
+passes the keyword-selected CV path to `tools.embedding_matcher.CVEmbeddingCache`
+and then scores that CV's vectors. Missing/failed vectors leave
+`semantic_computed=false`, `semantic_score=""` (mapped to nullable API output),
+and full keyword weight. A real computed zero is retained and blended.
+`selected_cv`/`selected_cv_path` continue through existing enrichment contracts;
+no API schema or frontend change is required. Managed cache provenance is checked
+against CV content/model/schema; old primary bare JSON is not used as a fallback.
+Read endpoints do not generate embeddings; new scoring occurs during curation,
+not when opening the dashboard. Tests: `tests/test_multi_cv_semantic.py`.
+
+### Deferred user product / independent cache work (2026-10-15)
+
+- CV upload and gap analysis are **not scheduled for personal `main`**. The
+  former Phase 2.1a proposal is superseded by the future `user` product in
+  `USER_PRODUCT.md` (deferred, no target date).
+- That product needs profession-aware filters/scoring/prompts, ownership-aware
+  DB persistence and background tasks, isolated profiles/artifacts/caches, and
+  each user's own provider keys and optional Sheets integration. Existing
+  auth/apply SQLite and actor attribution do not provide that isolation.
+- Do not add a shared-profile upload endpoint or silently fall back to the
+  owner's `.env`, CV, Sheet or provider quota. Choose credential custody and
+  deployment model before finalizing the API contracts.
+- Cache backend seam (2.1b) remains independent low-priority work: wrap the TTL
+  store, retain in-process default, and add a multi-worker warning. No Redis
+  now. See `PM.md` §2.1.
 
 ### `GET /api/skills?tab=&limit=` → `SkillsOut`
 `{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name, count, pct}]}`
@@ -152,7 +166,13 @@ refreshes the tracker cache, and returns the created `TrackerEntry`.
 ### `PATCH /api/tracker/{fp}` ← `{status, notes}`
 Status must be in `applied|interviewing|offer|rejected|withdrawn|ghosted` (400 otherwise).
 Resolves fingerprint **or** raw `apply_url` → `tools.application_tracker.update_status`
-→ refreshes APPLIED cache → returns the fresh row. 404 unknown, 502 sheet-write failure.
+→ refreshes APPLIED cache → returns the fresh row. URL keys must be encoded as
+one parameter (`encodeURIComponent`); the route uses `{job_fingerprint:path}`
+because ASGI decodes slashes before routing. Paths, queries, fragments and
+already-encoded URL components are covered by real HTTP tests. 404 unknown,
+502 sheet-write failure. `notes` appends to existing notes; a status-only client
+must omit notes or send an empty string, never resend the saved note. Existing
+auth/reconciliation gates remain unchanged.
 
 ### `POST /api/jobs/refresh` ← `{tab?}`
 Clears cache (+ enrichment map), re-warms, returns `{status, cleared[], warmed{tab:count}}`.
@@ -222,6 +242,16 @@ Any `mode` other than `"review"` → 400. `AUTO_APPLY_CONFIRM` is ignored
 everywhere (legacy CLI blind submit permanently removed) — env cannot
 re-enable submit over HTTP (`api/safety.py` `SUBMIT_ENABLED=False` fails
 `/intent` + `/submit` closed with 403). Never writes `status:"submitted"`.
+
+**Reported live limitation (2026-10-15):** a user-run real-Chrome Democorp
+fill-only smoke produced visible filled fields and attachments, but the API
+returned `Timed out waiting for ATS review form to fill` after 90 seconds and
+its screenshot endpoint returned 404 despite a reported PNG on disk. Inspection
+shows the wrapper's timeout result has no screenshot path, while review-artifact
+persistence requires one; the exact blocking step is not confirmed. Track
+completion/late-result and screenshot-persistence diagnosis in `PM.md`, rather
+than claiming the API flow passed or simply increasing the timeout. No code fix
+or live rerun is included in this documentation update. See `LIVE_SUBMIT.md`.
 
 The cockpit calls this endpoint sequentially for up to three highest-scoring
 eligible jobs per trigger (enforced daily cap with per-day persisted count),
@@ -494,7 +524,15 @@ response explains why sign-in history is absent for a non-admin.
 
 ## 5. Testing
 
-The suite was last fully verified 2026-10-01 at 291 passed, 1 skipped
+Latest local results (2026-10-15), including tracker/environment regressions, with lock-only
+dependencies: **1004 pytest passed, 8 skipped; 64 frontend E2E passed**.
+`test_api_tracker_contract.py` adds 22 routing/status/notes/auth/error and runner
+contracts; `tracker.test.mjs` adds 22 interaction cases against real services
+with fake Sheets only. Six environment checks reproduce missing auth pins
+causing late-dotenv 401s and prove the existing harness pins prevent them; no
+production auth changes were needed. Earlier counts predate these tests;
+see `TESTER.md` for skips and browser/runtime limits. The following describes
+foundational coverage rather than current per-file test totals:
 (`venv\Scripts\python.exe -m pytest tests/ -q`):
 `test_api_phase1.py` (18: faked `cache._read_tab_values` +
 `_load_enrichment_map` — no credentials, no network; covers list/tab-400,

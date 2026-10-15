@@ -1,6 +1,6 @@
 # LIVE_SUBMIT.md — supervised live submit runbook
 
-The one thing 379 passing tests cannot prove: that a real click on a real
+The thing automated tests cannot prove: that a real click on a real
 Greenhouse form produces a real, verifiable submission. This runbook is how
 that gets proven, once, under supervision.
 
@@ -11,9 +11,10 @@ inbox. It is served by the same `job-boards.greenhouse.io` infrastructure
 that hosts real postings, so the DOM, the embedded confirmation metadata and
 the submit control are the real thing.
 
-**This runbook is executed by the operator, on the operator's machine.** The
-build sandbox has no browser binary and no network egress to job boards, so
-Playwright cannot run there — every step below needs a real desktop.
+**This runbook is executed by the operator in an authorized browser environment.**
+This coding sandbox cannot reach job boards/browser downloads, so a live run
+cannot be reproduced here. A user-reported real-Chrome fill-only run is recorded
+below; it does not establish submit-path verification or change these gates.
 
 ---
 
@@ -232,3 +233,40 @@ Lever remains deferred — no trial account, documented skip.
   controls clicked.
 - **Evidence:** `recon-democorp.json`; no `data/submit_runs/` evidence
   directory exists because the browser submission path was never entered.
+
+
+### 2026-10-15 — Democorp real-Chrome fill only (user-reported; API timeout)
+
+- **Source/evidence:** the user supplied a run report and full-page screenshot
+  in the conversation. The image visibly shows the applicant name/email/phone
+  populated and a resume PDF plus cover-letter text file listed as attached.
+  Personal field values and the screenshot are not copied into Git. Runtime
+  logs, browser trace and API database were not independently examined here;
+  this is not a live rerun by the current coding session.
+- **Target:** the public Greenhouse Democorp "Full Stack Engineer" demo job
+  (`https://job-boards.greenhouse.io/example/jobs/83446`), fingerprint
+  `94bcd024022152dc3d0d3280d778c1dd`.
+- **Reported scope:** Playwright against real Chrome and the public form, not a
+  mock. External AI provider keys disabled. No intent/submit endpoint calls,
+  submit-button click, application submission or reCAPTCHA bypass attempted.
+  This was fill-and-review, **not** the full-path submit dry run in §1b.
+- **Partial outcome:** visible filling and attachment presence are supported
+  by the supplied image. This does not verify file contents, all field readback,
+  a successful API completion, confirmation metadata or submission handling.
+- **Unresolved failure:** the fill endpoint returned
+  `Timed out waiting for ATS review form to fill` after 90 seconds. The report
+  says a PNG existed on disk, but no API screenshot record was saved and
+  `GET /api/apply/94bcd024022152dc3d0d3280d778c1dd/screenshot` returned 404.
+  Do not treat the standalone PNG as proof the API review-artifact flow passed.
+- **Code-inspection context, not a confirmed root cause:** the review wrapper
+  in `api/apply.py` waits 90 seconds and returns `screenshot_path=None` on
+  timeout; review-artifact persistence requires a returned screenshot path.
+  The Greenhouse helper can write its screenshot before finishing later checks.
+  This is consistent with the report, but the exact slow step is not isolated.
+- **Reported local state:** demo seeded in local `scraped_jobs.json`, generated
+  files ignored by Git, test server stopped, no code fix made for this run.
+  Those local artifacts/server state were not recreated or verified here.
+- **Next:** diagnose completion timing and artifact handoff/persistence, add
+  regression coverage, then repeat only an authorized fill-only smoke. Do not
+  merely increase the timeout and declare success. Submit remains disabled;
+  confirmation/reCAPTCHA and full-path submission verification remain pending.

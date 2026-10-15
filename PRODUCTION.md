@@ -41,7 +41,7 @@ duplicate Sheet reads and can exceed quota.
 > you get four independent refresh timers: up to **4× the Google Sheets calls**
 > (a real quota risk), and two requests landing on different workers can return
 > **different data** — one worker refreshed, another is still serving an older
-> cache. A shared-cache seam is scheduled as Phase 2.1b (§8); until it lands,
+> cache. A shared-cache seam is low-priority planned work (Phase 2.1b, §9); until it lands,
 > `--workers 1` is the supported configuration.
 
 Dashboard Scrape Now needs no Docker: `POST /api/scrape` runs the scrape in a
@@ -71,7 +71,7 @@ secrets stay read-only mounts, never baked into the image):
     container_name: job-agent-api
     restart: unless-stopped
     # --workers 1 is required, not cosmetic: the sheet cache is per-process.
-    # See §2 and the Phase 2.1b cache seam in §8b before changing this.
+    # See §2 and the Phase 2.1b cache seam in §9b before changing this.
     command: ["python", "-m", "uvicorn", "api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
     env_file:
       - .env
@@ -178,9 +178,14 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
   there — clearing those is a porting project (`crawl4ai` fixes start five
   minors on, `pillow` two majors on, `chromadb` has no fix published), and a job
   red from day one gets switched off. On a new finding: upgrade past it, or add
-  the line to the baseline and own the decision. Caveat: the `Dockerfile`
-  installs `requirements.txt`, not the lock, so transitive versions can drift
-  between builds and the audit checks the best available record of what ships.
+  the line to the baseline and own the decision. The `Dockerfile` now installs
+  `requirements.lock.txt` and runs `uv pip check --system`, aligning application
+  package versions with the audited lock. Native x86-64/ARM64 Docker CI checks
+  installed pins, API startup, Chromium and API/auth behavior; successful native
+  runs are still required before claiming platform readiness. Local verification
+  covered a locked x86-64 Python environment and cross-platform resolution, not
+  an image build or ARM runtime. See `deploy/DEPLOY_ORACLE.md` §7a. Base/uv image
+  tags and unhashed artifacts are not made immutable by this change.
 - Login does not reveal which usernames exist. Both failures return the same
   401 body, both are audited, and both now cost one Argon2id verify — a missing
   username is checked against a decoy hash so the response times are
@@ -195,9 +200,10 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
   `operator`. Changing a password revokes that user's sessions.
 - `GET /api/activity` exposes who did what, and its login events carry client
   IPs, so they are returned to admins only.
-- **Phase 2.1a (planned):** uploaded CVs are PII. Gitignored upload dir,
-  content-sniffed type validation, server-side size cap, token-gated endpoint,
-  never logged, never baked into an image. Full rules in §8a.
+- **Future user product (deferred, not personal main):** uploaded CVs are PII.
+  Require ownership-aware storage/auth, content and size validation, retention
+  and deletion policies; never log contents or bake uploads into images.
+  See §9 and `USER_PRODUCT.md`; the old short-term Phase 2.1a plan is superseded.
 
 ---
 
@@ -354,34 +360,61 @@ clicks or fills).
 
 ---
 
-## 9. Planned — Phase 2.1 (operational impact)
+### Per-CV semantic cache operations (2026-10-15)
 
-Two items scheduled for the next 3–4 days (spec and acceptance criteria in
-`PM.md` §2.1). Both change how this thing is *operated*, so the ops-relevant
-parts are here rather than only in the product tracker.
+- Optional sentence-transformers + FAISS are required; first model use may need
+  network/model preloading. No provider API keys or CV parsing LLM calls are
+  needed to extract text and build these embeddings.
+- New curation runs lazily build only selected-CV embeddings. Managed JSON files
+  live under `cache/cv_embeddings/`, excluded by existing Git/Docker rules.
+  Source hashes/model/schema validate entries, and atomic per-path replacement
+  prevents partial reads and unbounded accumulation on edits. Deleted/moved CV
+  slots can be removed manually; no automatic retention service is introduced.
+- Keep the directory private: embeddings are CV-derived personal data, even
+  though raw CV text is not stored. Missing/unwritable cache storage does not
+  stop scoring: valid newly computed vectors can be used in memory for that run.
+- A new run retries failed embedding work; repeated failures for the same
+  source/model are memoized within a run. Another CV or the legacy primary export
+  is never a fallback. Logs explicitly name keyword-only degradation.
+- `CV_EMBEDDINGS_PATH` remains a compatibility export from the build command,
+  not the curator's managed cache location. Delete managed cache files before
+  the next run to force regeneration. Existing saved scores are not migrated.
 
-### 8a. CV-upload-first flow — handling uploaded CVs (PII)
+## 9. Deferred user product and independent cache work
 
-Today the CV is a file an operator places on disk (`CV_PATH` / `CV_DIR`).
-Phase 2.1a adds an upload path through the dashboard, which means the server
-starts **receiving personal data over HTTP**. Operational rules to apply when
-it lands:
+Decision updated 2026-10-15: no 3–4 day upload commitment. Personal `main`
+keeps its existing CV/Sheets/environment setup. CV upload is deferred with the
+broader profession-agnostic, user-isolated product on a future `user` branch;
+no implementation, branch creation or merge into `main` is planned now.
+Canonical scope: `USER_PRODUCT.md`; tracker: `PM.md` §2.1.
 
-| Concern | Rule |
-|---|---|
-| Storage location | A dedicated upload dir (e.g. `uploads/cv/`), **gitignored** — same treatment as `my_cv.pdf` today |
-| Accepted types | PDF/DOCX only, validated by content sniffing, not just the filename extension |
-| Size cap | Enforced server-side (reject oversize before parsing, not after) |
-| Retention | Uploads are PII: define a retention/cleanup policy before enabling, and never log CV contents or parsed personal fields |
-| Auth | The upload endpoint must sit behind the same `API_TOKEN` gate as every other write route; never expose it on a non-local bind without a token (the existing bind guard already refuses this) |
-| Backups/images | Never bake an uploaded CV into a Docker image or a snapshot artifact |
+### 9a. Future user product — operations, credentials and CV privacy
 
-Operator-visible behaviour: the dashboard must always show **which CV is
-active** (uploaded vs on-disk) and offer a reset to the on-disk default.
-Ambiguity here would mean applying with the wrong CV — the one failure mode
-that actually matters in this flow.
+- Decide isolated self-hosted vs shared hosted deployment and DB/storage model
+  before implementation. Existing shared state and global `.env` are not
+  per-user configuration or isolation.
+- Each user brings their own supported LLM credentials and optional Sheets
+  destination/Google authorization. Never fall back to the owner's Sheet,
+  service-account file, profile or provider key/quota.
+- Classify environment settings: deployment-only, per-user preferences,
+  integrations, secrets. Use private secret mounts for isolated instances or
+  encrypted server-side storage with deployment-managed keys for hosted mode;
+  never expose secrets in API responses, browser storage, logs or artifacts.
+- Enforce ownership in API routes, background jobs, caches, artifacts and
+  downloads. A shared API token alone is not tenant isolation.
+- Accept PDF/DOCX only with content validation and server-side size limits;
+  return explicit parse failures. Store CVs privately with ownership, retention,
+  deletion and backup policies. Gitignore uploads and exclude them from images.
+- Define per-user provider routing, budgets and failure reporting. Missing or
+  revoked credentials must block affected work with a setup error, not reuse
+  another user's configuration.
+- Surface active CV, readiness and reset/delete actions in the UI. Test
+  cross-user access denials, credential handling and deletion end to end.
 
-### 8b. Multi-worker cache — what will and will not be built
+No database vendor, secret service or deployment model is selected yet. These
+are design/release gates, not claims of implemented protection.
+
+### 9b. Multi-worker cache — independent, low-priority planned work
 
 **The problem:** the cache is per-process (see §2). `--workers 4` ⇒ four caches
 ⇒ up to 4× Sheet reads and cross-worker inconsistency.
@@ -410,7 +443,6 @@ Checklist before anyone ever raises worker count:
 
 ---
 
-> Note: CV-upload-first flow is **scheduled as Phase 2.1a** — product spec and
-> acceptance criteria in `PM.md` §2.1, operational/PII rules in §8a above.
-> Current behavior until it ships: the CV must pre-exist in the repo
-> (`my_cv.pdf` / `CV_PATH`, or a folder via `CV_DIR`).
+> CV-upload-first is **deferred with the future user product**, not scheduled
+> for personal `main`. See `USER_PRODUCT.md` and `PM.md` §2.1a. Current personal
+> behavior remains an on-disk CV (`my_cv.pdf` / `CV_PATH`, or `CV_DIR`).

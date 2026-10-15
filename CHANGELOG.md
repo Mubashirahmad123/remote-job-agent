@@ -1,5 +1,133 @@
 # CHANGELOG.md
 
+## 2026-10-15 — record user-reported Democorp live fill-only smoke
+
+- Record the supplied real-Chrome/Playwright report and screenshot: visible
+  contact-field filling and resume/cover-letter attachment presence on the
+  public Greenhouse demo. Do not copy personal field values or the image to Git.
+- Keep the result partial: the API returned its 90-second fill timeout; a PNG
+  reportedly existed, but the API screenshot record was missing and its URL
+  returned 404. Exact slow step/root cause remains unconfirmed; add a diagnostic/
+  artifact-persistence follow-up, not a timeout-only fix or success claim.
+- Distinguish this from full-path submit dry-run, submission, or dashboard
+  browser coverage. No intent/submit calls, submit click or captcha bypass
+  reported; external AI provider keys were disabled for the run.
+- Update PM, live run log, tester/backend/frontend guidance and README. This
+  records user-supplied evidence, not an independently repeated live run. No
+  runtime code changes, new test runs, submit enablement, push or merge.
+
+## 2026-10-15 — retire stale E2E `.env`/auth warning with targeted evidence
+
+- Add 6 environment checks over plain-token and blank/trailing-comment dummy
+  `.env` files in disposable source copies. A synthetic cached CV guarantees
+  the real CV parser/dotenv import runs, rather than a missing-CV early exit.
+- Reproduce the documented failure with missing auth pins: stats 200 → cached
+  CV profile 200 → stats 401. Confirm both dummy auth tokens load at import.
+- Prove the existing empty-string pins prevent that failure under real uvicorn,
+  inherited shell tokens and real dashboard boot. Login mode still rejects
+  anonymous/dummy-token requests and accepts its isolated session. Apply-token
+  probes fail authentication without creating intents; submit stays disarmed.
+- Retire the pending warning/checklist item; no production auth/dotenv logic
+  needed changing. Keep the empty-vs-missing rationale in the harness.
+- Allow the harness to launch copied source with an explicit environment while
+  keeping safety pins authoritative. Resolve relative interpreter paths against
+  the real repo so disposable working directories cannot break RJA_PYTHON.
+- Wire environment tests into canonical npm/shell/CI execution and guard the
+  suite list. Use source-only copies, no real .env/CVs/credentials, and verify
+  temporary DB cleanup. Negative controls report statuses/booleans only.
+- Local Linux verification: **6 targeted checks passed; 64 total frontend E2E
+  passed; 1004 pytest passed, 8 skipped, 32 warnings**. Native Windows/browser,
+  Docker/ARM and deployment checks remain pending. No push or merge.
+
+## 2026-10-15 — tracker/Kanban interaction coverage and persistence fixes
+
+- Add 22 jsdom interactions over real dashboard scripts, tracker routes, cache
+  resolution and tracker services, using an opt-in fake-Sheets subprocess. Cover
+  transitions, all review/archive mappings, counts, notes preservation, reload,
+  encoded URL keys, double clicks, HTTP/network/write/refresh failures, escaping
+  and manual-add validation/save/retry. No personal Sheet or CV access.
+- Add 22 Python HTTP/runner contracts for status whitelist/normalization, URL and
+  fingerprint keys, notes, auth, errors, test-control isolation and CI wiring.
+- First observe red regressions: a failed write moves a card locally, and a
+  URL-only row appears moved while the server still has its old status.
+- Remove local-success fallback; serialize each card's PATCH + refresh with a
+  visible pending state; stop resending old append-only notes. Accept full URL
+  keys with a path converter without changing auth or submit-reconciliation gates.
+- Make tracker refresh errors opt-in throwable. Tracker Sync reports failures;
+  confirmed writes followed by failed GETs report saved-but-not-refreshed. Close
+  a successfully saved manual modal even when refresh fails to avoid resubmission.
+- Run smoke + tracker from npm, shell runner and frontend CI; wait for fixture
+  process exit before temporary DB cleanup. Test submit switches stay disarmed.
+- Local locked Linux verification: **1004 pytest passed, 8 skipped, 32 warnings;
+  58 frontend E2E passed**. Seven skips need optional FAISS; Lever confirmation
+  copy remains deferred. `uv pip check` passed. Real-browser/live-Sheets,
+  Docker/native ARM and deployment validation remain pending. No push or merge;
+  submit stays disabled and CV upload stays deferred.
+
+## 2026-10-15 — reconcile completion and remaining-work documentation
+
+- Make `PM.md` §1 the current checked/unchecked status list. Mark semantic
+  scoring and Docker lock installation implemented, while keeping native image/
+  ARM checks, real-browser coverage and deployment verification pending.
+- Record Windows fixes as reported complete on `phase 3`, not integrated here;
+  distinguish the investigated flake from a confirmed root-cause fix.
+- Keep form-structure snapshot comparison explicitly unchecked; typed-value
+  readback/repair is a different, completed protection. Live submit stays gated.
+- Remove duplicate/outdated top-level status entries and mock script guidance;
+  reconcile test counts and label old submit specs/`CODEX_TASK.md` historical.
+- Keep the documented tokenized-`.env` E2E caveat as a revalidation task rather
+  than claiming a current failure or a fix without scenario-specific evidence.
+- Documentation only; no new code, tests, native runtime validation or merge.
+
+## 2026-10-15 — Docker installs the universal dependency lock
+
+- Copy/install `requirements.lock.txt` before copying application source, and run
+  `uv pip check --system`. No dependency pins or vulnerability baseline changed.
+- Configure native x86-64/ARM64 Docker CI builds with active-pin checks, non-root
+  API startup, Chromium launch, API/auth suites and existing image-leak checks.
+  No image is pushed by these jobs. Native CI results are pending.
+- Add offline Docker/CI regression guards and native ARM VM verification steps.
+- Local fresh locked x86-64 environment: 179 active pins match; dependency checks
+  pass; **982 pytest passed, 8 skipped; 36 frontend E2E passed**. Seven skips
+  need optional FAISS (outside the lock); Lever confirmation-copy is deferred.
+- `uv` dry-run dependency resolution passed for Linux x86-64 and ARM64. Docker is
+  unavailable in the sandbox: no image build, Chromium launch inside an image or
+  native ARM runtime check was performed. Do not label ARM deployment verified.
+- Locking packages does not clear advisories or pin base/uv image digests and
+  artifact hashes. Submit behavior, credentials and personal CV scope unchanged.
+
+## 2026-10-15 — selected-CV semantic scoring and validated caches
+
+- Replace primary-only semantic scoring with the embeddings for the CV selected
+  by keyword matching; retain single-CV fallback. CV selection remains keyword-based.
+- Add lazy per-file managed JSON caches with CV-content SHA-256, model and schema
+  validation, atomic writes and in-run memoization. Source edits invalidate library
+  profiles/picks and keyword matchers too. No cross-CV fallback on errors.
+- Keep full keyword weight when semantics cannot run; distinguish unavailable
+  from a genuine computed zero. Only compared sections contribute weight.
+- Keep the legacy JSON loader/export interface for compatibility; curation does
+  not trust bare-vector exports without source/model provenance.
+- Add offline regression tests, including real FAISS calculations and DOCX text
+  extraction using a deterministic encoder, not a downloaded transformer model.
+- No frontend/API contract, upload, tenancy, dependency manifest or submit-safety
+  changes. Existing saved scores are not rewritten.
+- Verification in this working branch: **976 pytest passed, 2 skipped**;
+  **36 frontend E2E passed**. The 52 new tests ran with FAISS and python-docx
+  available; sentence-transformer model downloads/quality were not tested.
+
+## 2026-10-15 — defer CV upload to the future user product (docs only)
+
+- Supersede the short-term Phase 2.1a upload plan: personal `main` remains
+  software-development-focused with its existing on-disk CV/Sheets configuration.
+- Group CV upload with profession-aware matching, database-backed user ownership,
+  user-supplied provider/Sheets credentials and frontend onboarding on a future
+  `user` branch. No target date or planned merge of that redesign into `main`.
+- Add `USER_PRODUCT.md` as the canonical deferred scope and design/release gates;
+  align PM, architecture, backend, frontend, production and README guidance.
+- Keep the cache seam independent and low priority. Existing Scenario A
+  attribution and submit safety gates are unchanged.
+- No code, DB migration, upload, branch creation or live submission performed.
+
 ## 2026-10-09 — resume CV fidelity + the PR #28 CI root cause (PR #29)
 
 Two related things: the resume tailoring work landed on main, and the CI

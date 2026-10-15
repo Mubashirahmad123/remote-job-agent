@@ -25,11 +25,12 @@ from tools.cv_library import get_library as _get_cv_library
 
 # Try to import semantic matcher (Phase 2 feature)
 try:
-    from tools.embedding_matcher import score_semantic, load_cv_embeddings, CV_EMBEDDINGS_PATH
-    SEMANTIC_AVAILABLE = True
+    from tools.embedding_matcher import (
+        score_semantic, CVEmbeddingCache, SENTENCE_AVAILABLE, FAISS_AVAILABLE,
+    )
+    SEMANTIC_AVAILABLE = SENTENCE_AVAILABLE and FAISS_AVAILABLE
 except ImportError:
     SEMANTIC_AVAILABLE = False
-    CV_EMBEDDINGS_PATH = None
 
 # =============================================================================
 # CONFIGURATION
@@ -52,7 +53,6 @@ FRESHNESS_BOOST = {
 
 CV_PROFILE = None
 CV_MATCHING_ENABLED = False
-CV_EMBEDDINGS = None
 
 cv_path = os.getenv("CV_PATH", "").strip()
 if cv_path:
@@ -64,15 +64,6 @@ if cv_path:
             CV_PROFILE = parse_cv(str(resolved_cv_path))
             CV_MATCHING_ENABLED = True
             print(f"✅ CV matching enabled (min score: {MIN_SCORE})")
-            if SEMANTIC_AVAILABLE:
-                try:
-                    CV_EMBEDDINGS = load_cv_embeddings()
-                    if CV_EMBEDDINGS:
-                        print("✅ Semantic matching enabled")
-                    else:
-                        print(f"⚠️ Semantic matching disabled: no embeddings file at {CV_EMBEDDINGS_PATH}")
-                except Exception as e:
-                    print(f"⚠️ Semantic matching disabled: {e}")
         except CVParseError:
             # A configured CV that fails to parse is a hard stop, not a
             # degraded run. "Matching disabled" here would waste a full
@@ -129,7 +120,7 @@ def _get_cv_matcher():
 def _get_matcher_for_profile(scoring_profile, cache_key):
     """Return a cached CVMatcher for the given profile (keyed by CV path)."""
     matcher = _MATCHER_CACHE.get(cache_key)
-    if matcher is None:
+    if matcher is None or matcher.cv_profile != scoring_profile:
         from tools.cv_matcher import CVMatcher as _CVMatcher
         matcher = _CVMatcher(scoring_profile)
         _MATCHER_CACHE[cache_key] = matcher
@@ -405,6 +396,11 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     # ── Step 4: Rejection engine + scoring ──
     print(f"\n🔍 Rejection engine + CV scoring (min: {MIN_SCORE})...")
     
+    # New run = retry prior failures; successful embeddings persist on disk.
+    embedding_cache = CVEmbeddingCache() if SEMANTIC_AVAILABLE else None
+    if not SEMANTIC_AVAILABLE and CV_MATCHING_ENABLED:
+        print("   Semantic matching unavailable (optional dependencies missing); using keyword-only scoring")
+
     rejected = 0
     rejected_reasons = {}
     low_match = 0
@@ -448,11 +444,22 @@ def curate(raw_jobs: list, tracker=None) -> dict:
             keyword_score = score_result.get("score", 0)
             match_reason = score_result.get("match_reason", "")
 
-            # Semantic scoring (Phase 2) — always uses the primary CV embeddings
-            if SEMANTIC_AVAILABLE and CV_EMBEDDINGS:
+            # Use the very same CV selected above, never another CV's cache.
+            # With no library selection, only the configured primary is valid.
+            semantic_cv_path = selected_cv_path or cv_path
+            if embedding_cache is not None and semantic_cv_path:
                 try:
-                    semantic_score = score_semantic(job, CV_EMBEDDINGS)
-                    semantic_computed = True
+                    embeddings = embedding_cache.get(semantic_cv_path)
+                    if embeddings:
+                        computed_score = score_semantic(job, embeddings)
+                        if computed_score is not None:
+                            semantic_score = computed_score
+                            semantic_computed = True
+                        else:
+                            embedding_cache.warn_once(
+                                Path(semantic_cv_path),
+                                "scoring unavailable; using keyword-only scoring",
+                            )
                 except Exception as e:
                     print(f"   ⚠️ Semantic scoring failed for {job.get('job_title', '')[:40]}: {e}")
 
@@ -463,7 +470,7 @@ def curate(raw_jobs: list, tracker=None) -> dict:
         # (disabled, no embeddings, or exception), keyword score carries
         # full weight instead of being dragged down by 0.4 * 0. A real
         # computed 0.0 still blends in — it's informative, not missing.
-        semantic_active = bool(SEMANTIC_AVAILABLE and CV_EMBEDDINGS and semantic_computed)
+        semantic_active = semantic_computed
         if semantic_active:
             total_w = KEYWORD_WEIGHT + SEMANTIC_WEIGHT
             base_score = ((KEYWORD_WEIGHT * keyword_score) + (SEMANTIC_WEIGHT * semantic_score)) / total_w if total_w else keyword_score

@@ -106,6 +106,56 @@ takes several minutes on ARM.
 
 ## 7. Verify
 
+### 7a. Verify the locked image on native ARM before deployment
+
+The image installs `requirements.lock.txt`, not a new transitive resolution from
+`requirements.txt`. Regeneration still requires `--universal`. Native ARM64 CI
+is configured; **a configured job or successful cross-platform resolution is not
+an ARM verification result**. Before treating this revision as deployment-ready,
+require green native x86-64/ARM64 Docker jobs, or run and retain equivalent build
+and smoke-test logs on this ARM VM. These commands do not mount personal data or
+credentials and do not contact any job board:
+
+```bash
+cd ~/remote-job-agent
+docker build -t remote-job-agent:arm-check .
+docker run --rm remote-job-agent:arm-check uv pip check --system
+docker run --rm -i remote-job-agent:arm-check python - <<'PY'
+import os
+import platform
+assert platform.machine() == "aarch64", platform.machine()
+assert os.geteuid() != 0, "must run as the unprivileged agent user"
+os.environ["API_TOKEN"] = "container-smoke-only"
+from fastapi.testclient import TestClient
+from api.app import create_app
+with TestClient(create_app()) as client:
+    response = client.get("/api/health/live")
+    assert response.status_code == 200, response.text
+    assert response.json() == {"status": "ok"}, response.text
+from playwright.sync_api import sync_playwright
+with sync_playwright() as playwright:
+    browser = playwright.chromium.launch(headless=True)
+    page = browser.new_page()
+    page.set_content("<title>ARM smoke</title>")
+    assert page.title() == "ARM smoke"
+    browser.close()
+print("OK: native ARM, non-root API startup, Chromium launch")
+PY
+docker run --rm remote-job-agent:arm-check python -m pytest -q \
+  tests/test_api_phase1.py tests/test_api_auth.py \
+  tests/test_api_auth_hardening.py tests/test_api_actor_attribution.py \
+  tests/test_country_filter.py tests/test_auto_applier.py
+```
+
+Do not skip dependency conflicts, missing ARM libraries or Chromium launch
+failures. Fix the actual incompatibility, regenerate the universal lock only if
+pins must change, and rerun both architectures. The locked Python environment
+has been tested locally on x86-64; Docker/native ARM checks were not available
+in that sandbox. Base/uv image digests and artifact hashes remain separate
+hardening work; this change locks application Python versions only.
+
+### 7b. Verify the deployed services
+
 ```bash
 docker compose ps
 docker compose logs -f api

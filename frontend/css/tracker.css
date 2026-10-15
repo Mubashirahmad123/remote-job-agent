@@ -103,6 +103,13 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+.kanban-card-updating,
+.kanban-card-updating:hover {
+  cursor: wait;
+  opacity: 0.65;
+  transform: none;
+}
+
 .kanban-card-archived {
   border-color: rgba(239, 68, 68, 0.28);
   cursor: default;
