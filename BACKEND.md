@@ -301,7 +301,12 @@ The modules `api/apply_claims.py`, `api/apply_intents.py`,
 authenticated Greenhouse pair `POST /api/apply/{fp}/intent` +
 `POST /api/apply/{fp}/submit`, which are mounted but fail closed with 403
 while the kill-switch `api/safety.py SUBMIT_ENABLED=False` holds. Lever has
-no submit path by design.
+no submit path by design. Greenhouse confirmation verification requires the
+exact configured URL path and case-sensitive containment of the full expected
+copy after markup stripping, entity decoding, and whitespace normalization;
+empty normalized copy fails closed. These checks are fixture-tested, but the
+real post-submit page has not yet been observed. The demo-board metadata
+discovery fix and current run status are recorded in `LIVE_SUBMIT.md`.
 
 ## 3. Cache (`cache.py`)
 

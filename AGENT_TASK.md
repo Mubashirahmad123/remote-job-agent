@@ -1,5 +1,13 @@
 # Task brief — resolve why Greenhouse confirmation metadata is "not found"
 
+> **Status (2026-10-16):** This was a historical investigation brief, not a
+> current execution checklist. The metadata was found in the demo board's
+> `window.__remixContext`; extraction and HTML confirmation-text normalization
+> have since been fixed and fixture-tested. The full submit path was not run:
+> no fill, dry run, intent, click or submission occurred. reCAPTCHA remains
+> present and post-submit confirmation is still unobserved. See
+> `LIVE_SUBMIT.md`, `CHANGELOG.md`, and `TESTER.md` for the actual evidence.
+
 ## Where to run this
 
 **Part 1A needs real network egress to `job-boards.greenhouse.io`.** A cloud

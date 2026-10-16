@@ -7,6 +7,13 @@
 > current auth. Commands/branch names below are historical, not instructions to
 > switch branches, arm submit, push or merge now. Current session work remains
 > on its assigned branch. Keep `SUBMIT_ENABLED=False` and human approval gates.
+>
+> **Superseding evidence (2026-10-16):** a read-only probe found the metadata in
+> Greenhouse's `window.__remixContext`, and the extractor plus strict rendered-
+> text verifier have fixture regressions. The full submit path and real
+> post-submit confirmation remain unverified; no fill, dry run, intent or
+> submission occurred. See `LIVE_SUBMIT.md` and `TESTER.md`. The archived
+> missing-metadata diagnosis below is not the current finding.
 
 Two jobs, **in this order**:
 

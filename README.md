@@ -638,7 +638,9 @@ A live-Chrome rerun is still pending. Details/skips: [TESTER.md](TESTER.md).
 `disarmed` / `dry_run` / `armed` (`api.safety.submit_mode()`) — so the submit
 path can be rehearsed end-to-end against a real posting *without clicking*:
 real browser, real fill, real readback, every gate, submit-button lookup,
-then stop. No intent consumed, no claim taken.
+then stop. This prevents submission, but still fills applicant data in the
+target form and may upload the resume; it is not a zero-data-transmission test.
+No intent is consumed and no claim is taken.
 
 - `python -m tools.submit_recon <url>` — read-only posting scan (confirmation
   metadata, required fields, captcha, submit control).
@@ -651,11 +653,15 @@ Democorp **fill-only** run on 2026-10-15; the supplied screenshot shows populate
 contact fields and resume/cover-letter attachments. However, the API timed out
 after 90 seconds and its screenshot URL returned 404 despite a reported PNG on
 disk. Filling is partially evidenced; API completion/artifact persistence and
-submit-path verification remain unresolved. No intent/submit calls, submit
-click or reCAPTCHA bypass were reported. The demo form is reCAPTCHA-protected.
-The local repair now retains late results and polls instead of abandoning them;
-it still needs a fresh authorized Chrome fill-only rerun. Old lost metadata is
-not reconstructed from the PNG. See `LIVE_SUBMIT.md`; submit stays disabled.
+submit-path verification remain unresolved. A separate read-only desktop probe
+on 2026-10-16 found the demo board's confirmation metadata in
+`window.__remixContext`; the extractor now reads it. The confirmation verifier
+normalizes the captured HTML copy before strict case-sensitive matching, with
+fixture regressions. Recon still detects reCAPTCHA. No form fill, dry run,
+intent call, submit click or submission occurred in that probe. Thus metadata
+discovery and the verifier logic are tested, but the real post-submit result
+and end-to-end submit path remain unverified. `SUBMIT_ENABLED` stays false.
+See `LIVE_SUBMIT.md` and `TESTER.md` for evidence and test limitations.
 
 ## License
 

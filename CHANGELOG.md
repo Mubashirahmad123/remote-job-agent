@@ -1,5 +1,28 @@
 # CHANGELOG.md
 
+## 2026-10-16 — fix Greenhouse confirmation discovery and visible-copy verification
+
+- Supersede the 2026-10-03 Democorp recon result below: the original extractor
+  missed metadata in Greenhouse's bare `window.__remixContext` bootstrap/runtime
+  state. The 2026-10-16 read-only probe found `/example/jobs/83446/confirmation`
+  and the job's HTML-formatted `confirmation_message`. Greenhouse removes the
+  bootstrap script from the DOM shortly after startup, but runtime loader data
+  was still available; immediate and 10-second extractions agreed.
+- `_greenhouse_confirmation_data` now reads the Remix runtime and script
+  fallback. `verify_greenhouse_confirmation` strips markup, unescapes entities,
+  and collapses whitespace on expected and actual text; it retains exact path
+  and case-sensitive full-message containment, and rejects empty normalized
+  copy. Fixture regressions were mutation-checked: both new cases failed
+  before the verifier change and passed after it.
+- Read-only recon now finds confirmation metadata, the submit button and no
+  unhandled required fields; it continues to detect reCAPTCHA. No form fill,
+  dry run, intent, submit click, or submission occurred. Post-submit matching
+  remains unobserved; `SUBMIT_ENABLED` remains false.
+- Targeted tests: **101 passed, 1 skipped**. The full Windows run reported
+  **22 failed, 1028 passed, 4 skipped, 1 teardown error**; environment failures
+  are itemized in `TESTER.md`. The full-suite gate is not green on this Windows
+  environment. No commit, push, or live-submit claim is made.
+
 ## 2026-10-16 — remediate PR #31 CI and MCP security finding
 
 - Fix CVE-2026-59951 with MCP 1.30.0, not an audit exception or metadata override.
