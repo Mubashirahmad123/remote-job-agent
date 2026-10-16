@@ -113,8 +113,10 @@ jobs:
           # (except the Node e2e suite) is an offline unit test: none of them
           # performs an HTTP call and none needs the Playwright browser binaries.
           # 514 pass on a plain `pytest tests/` once requirements.txt is
-          # installed, so anything red here is a real regression, not flake.
-          python -m pytest tests/ -q --ignore=tests/e2e
+          # installed. Failures need investigation, including scheduling races.
+          # Keep the original exit status and expose the failure tail through
+          # Checks API annotations even when raw-log download is unavailable.
+          python deploy/ci_failure_report.py python -m pytest tests/ -q --ignore=tests/e2e
 
       # Split out so a failure elsewhere in the suite cannot hide an auth or
       # attribution regression, and so that contract is legible in the log as a
@@ -345,4 +347,4 @@ jobs:
       # decision in review. The rationale and the per-package remediation cost
       # are in the docstring of deploy/dependency_audit.py.
       - name: Audit the dependency tree against the recorded baseline
-        run: python deploy/dependency_audit.py
+        run: python deploy/ci_failure_report.py python deploy/dependency_audit.py
