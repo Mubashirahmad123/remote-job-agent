@@ -123,6 +123,7 @@ def test_all_e2e_entrypoints_execute_the_tracker_suite():
     assert "smoke.test.mjs" in package["scripts"]["test"]
     assert "tracker.test.mjs" in package["scripts"]["test"]
     assert "environment.test.mjs" in package["scripts"]["test"]
+    assert "review.test.mjs" in package["scripts"]["test"]
     shell = (ROOT / "tests/e2e/run.sh").read_text(encoding="utf-8")
     assert 'exec npm test' in shell
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))

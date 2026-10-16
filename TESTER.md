@@ -1,8 +1,8 @@
 # TESTER.md — Testing Guide
 
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Latest local Linux
-lock-only verification (2026-10-15), including tracker and environment regressions: **1007 pytest
-passed, 8 skipped, 32 warnings** and **64 frontend E2E tests passed**. Skips:
+lock-only verification (2026-10-15), including tracker/environment/review handoff regressions: **1027 pytest
+passed, 8 skipped, 32 warnings** and **68 frontend E2E tests passed**. Skips:
 seven optional FAISS-dependent cases and deferred Lever confirmation copy.
 Earlier development/lock-only results below predate tracker coverage; optional
 dependency availability changes skip counts. See `PM.md` §1. Native Docker
@@ -24,6 +24,32 @@ consumer wiring), `test_api_auth.py`, `test_api_auth_hardening.py`,
 (`test_content_security_policy.py`, `test_embedding_cache.py`,
 `test_url_guard.py`, container-hardening, TLS-verification,
 proxy-header-trust, session-idle-timeout, login-timing).
+
+## Review timeout and late-result regression coverage (2026-10-15)
+
+`tests/test_review_handoff.py`: **20 cases** use real routes, worker threads,
+SQLite ownership and screenshot serving over fake material/browser boundaries.
+Event barriers force a foreground timeout without waiting 90/180 seconds. Tests
+prove that pending completion later serves the correct image with preserved
+confirmation/readback/material/actor metadata; duplicate/regenerate attempts
+cannot double-fill; different jobs and attempts cannot mix evidence. They cover
+claim renewal, stale/crashed runs, watchdog expiry/newer retry, persistence
+failure, auth, unavailable required-field verification and timeout configuration.
+Screenshot names use UUID suffixes to avoid simultaneous fills sharing a path.
+A deterministic completion/release interleaving proves status reads use a single
+SQLite snapshot (confirmed RED without the guard, GREEN with it), avoiding a
+false "worker stopped" result at successful completion.
+
+`tests/e2e/review.test.mjs`: **4 real-dashboard checks** over a fake review
+transport prove queue/Regenerate waits for the same run ID, late screenshot
+presentation, no automatic POST retry on polling failure, and bounded UI waits.
+Real route/SQLite handoff is covered by the Python cases, not claimed for these
+transport fakes. npm/shell/CI entrypoints include this file.
+
+Current local full suites: 1027 Python passed, 8 skipped; 68 frontend passed.
+No live ATS or native Docker rerun was performed for this local fix; previously
+recorded image CI applies to its named earlier commit, not these new edits.
+The reported original run's exact slow step and metadata remain unknown.
 
 ## User-reported live fill-only check (2026-10-15)
 
@@ -111,7 +137,8 @@ ARM64 build/pin/dependency/API/auth/Chromium/leak steps subsequently passed in
 [GitHub run 38743655019](https://github.com/Mubashirahmad123/remote-job-agent/actions/runs/38743655019)
 at `0971322`. The image inventory now fails closed on export/listing errors or
 empty output; three injected-failure tests pass. Current local Docker-related
-preflight: 63 passed; full suite: 1007 passed, 8 skipped. Raw CI logs could not
+preflight at that review: 63 passed; then-full suite: 1007 passed, 8 skipped.
+Raw CI logs could not
 be downloaded; reviewed step metadata and scope/limits are recorded in
 `deploy/DOCKER_CI_VERIFICATION.md`. Oracle VM deployment remains unverified.
 
@@ -135,7 +162,8 @@ real uvicorn seeded with `SNAPSHOT_FILE`):
 ```
 Ten suites — asset integrity, happy path, API-unreachable, login flow, header
 layout contracts, three tracker suites (rendering/persistence, failures, manual
-applications), and two environment-isolation suites. It catches the
+applications), and two environment-isolation suites, plus four standalone
+review-polling checks. It catches the
 class of bug the pytest suite structurally cannot: a `<script>` that 404s, a
 guard on an undefined global, an error state that is unreachable, a widget that
 renders empty everywhere. Mutation-tested against five real regressions from

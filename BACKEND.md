@@ -243,15 +243,45 @@ everywhere (legacy CLI blind submit permanently removed) — env cannot
 re-enable submit over HTTP (`api/safety.py` `SUBMIT_ENABLED=False` fails
 `/intent` + `/submit` closed with 403). Never writes `status:"submitted"`.
 
-**Reported live limitation (2026-10-15):** a user-run real-Chrome Democorp
-fill-only smoke produced visible filled fields and attachments, but the API
-returned `Timed out waiting for ATS review form to fill` after 90 seconds and
-its screenshot endpoint returned 404 despite a reported PNG on disk. Inspection
-shows the wrapper's timeout result has no screenshot path, while review-artifact
-persistence requires one; the exact blocking step is not confirmed. Track
-completion/late-result and screenshot-persistence diagnosis in `PM.md`, rather
-than claiming the API flow passed or simply increasing the timeout. No code fix
-or live rerun is included in this documentation update. See `LIVE_SUBMIT.md`.
+### Foreground wait and late-result handoff (local fix, 2026-10-15)
+
+The reported 90-second timeout returned a stub with no screenshot path and lost
+late browser results. That stub is removed. `APPLY_FILL_TIMEOUT` controls the
+HTTP foreground wait for the whole review operation, including material/package
+generation: default **180 seconds**, integer clamp **1–600**, malformed values
+fall back to 180. Lower it to receive a pending response sooner; this does not
+speed up the external form.
+
+Work now runs under `api/review_worker.py`. If not finished within that wait,
+POST returns HTTP 200 with `status: review_pending`, `review_run_id`,
+`review_status_url` and no screenshot URL. The client polls authenticated
+`GET /api/apply/{fp}/review-status?run_id=...` rather than issuing another POST.
+The real result, including screenshot, confirmation metadata, readback status,
+reviewed materials and actor, is saved when it completes. A screenshot URL is
+published only after artifact persistence succeeds. No filesystem glob guesses
+which image belongs to a job; concurrent screenshot names include UUIDs.
+
+`apply_review_runs` is an additive SQLite table for the pending/terminal handoff.
+GET returns pending or the durable terminal result; unknown run is 404 and an
+obsolete run ID is 409. Lost/expired claims produce an honest error instead of
+endless pending. Run/claim reads share a SQLite snapshot, avoiding a false
+error if completion and claim release happen between SELECTs. A crash loses in-memory execution, not a completed stored
+result; abandoned pending work becomes an error once its claim expires.
+
+Claims renew every 15 seconds (existing stale TTL remains 15 minutes), including
+across HTTP timeout, so pending work still blocks duplicate/regenerate requests.
+A 30-minute work watchdog records failure and atomically releases ownership.
+Python cannot forcibly kill an underlying stuck browser thread; its eventual
+artifact/package writes are ownership-fenced, so it cannot overwrite a newer
+retry. A new run invalidates old review evidence, not silently displays it.
+The successful desktop browser can still stay open for manual review as before.
+
+Material/package/browser stage elapsed times are logged by fingerprint. The
+exact slow step and metadata from the original Democorp run remain unknown.
+No live board was revisited for this fix. New tests: 20 Python handoff/ownership
+cases and 4 UI polling checks. Old orphan screenshots/metadata are not recovered
+retroactively; use an authorized fill-only Regenerate to create new evidence.
+Submit remains disabled and all intent/readback/material/auth gates stay intact.
 
 The cockpit calls this endpoint sequentially for up to three highest-scoring
 eligible jobs per trigger (enforced daily cap with per-day persisted count),
@@ -525,7 +555,7 @@ response explains why sign-in history is absent for a non-admin.
 ## 5. Testing
 
 Latest local results (2026-10-15), including tracker/environment regressions, with lock-only
-dependencies: **1007 pytest passed, 8 skipped; 64 frontend E2E passed**.
+dependencies: **1027 pytest passed, 8 skipped; 68 frontend E2E passed**.
 `test_api_tracker_contract.py` adds 22 routing/status/notes/auth/error and runner
 contracts; `tracker.test.mjs` adds 22 interaction cases against real services
 with fake Sheets only. Six environment checks reproduce missing auth pins

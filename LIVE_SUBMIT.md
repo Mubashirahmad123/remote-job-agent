@@ -258,8 +258,8 @@ Lever remains deferred — no trial account, documented skip.
   says a PNG existed on disk, but no API screenshot record was saved and
   `GET /api/apply/94bcd024022152dc3d0d3280d778c1dd/screenshot` returned 404.
   Do not treat the standalone PNG as proof the API review-artifact flow passed.
-- **Code-inspection context, not a confirmed root cause:** the review wrapper
-  in `api/apply.py` waits 90 seconds and returns `screenshot_path=None` on
+- **Pre-fix code-inspection context, not the exact slow-step diagnosis:** the
+  then-current review wrapper in `api/apply.py` waited 90 seconds and returned `screenshot_path=None` on
   timeout; review-artifact persistence requires a returned screenshot path.
   The Greenhouse helper can write its screenshot before finishing later checks.
   This is consistent with the report, but the exact slow step is not isolated.
@@ -270,3 +270,27 @@ Lever remains deferred — no trial account, documented skip.
   regression coverage, then repeat only an authorized fill-only smoke. Do not
   merely increase the timeout and declare success. Submit remains disabled;
   confirmation/reCAPTCHA and full-path submission verification remain pending.
+
+
+### 2026-10-15 — local timeout/handoff repair (not a new live run)
+
+- Replace the 90-second discard path with a configurable foreground wait and
+  durable pending/result handoff. Default wait 180s (1–600); the dashboard polls
+  a run ID if work is slower. Lower the setting for earlier pending feedback,
+  not to make the form fill faster.
+- Retain late screenshots, confirmation/readback metadata, reviewed materials
+  and actor; only publish a screenshot URL after persistence. Heartbeat claims
+  every 15s, fence stale workers and bound active ownership with a 30-minute
+  watchdog. A stuck Python/browser thread cannot be forcibly killed, but it
+  cannot overwrite a newer attempt's artifact. Screenshot names are unique.
+- Local tests: 20 Python handoff cases and 4 UI polling cases; full suites 1027
+  Python passed/8 skipped and 68 frontend passed. No public board, CAPTCHA,
+  intent, live submit or provider was contacted for this repair. No new native
+  Docker verification of these edits is recorded.
+- The original run's precise slow step, field-readback outcome and confirmation
+  metadata remain unknown. The old PNG cannot reconstruct its discarded result.
+- Next operator check: keep submit disarmed, preserve the run scope and use
+  **Regenerate** for an already-packaged demo. Observe pending → terminal, verify
+  the API screenshot returns 200, retain timing logs and inspect metadata before
+  considering any separately authorized submit-path work. Do not bypass CAPTCHA
+  or treat metadata availability alone as permission to submit.

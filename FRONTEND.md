@@ -59,9 +59,9 @@ the local demo dropzone is not a working backend upload. Scope and release gates
 
 `./tests/e2e/run.sh` — boots the real FastAPI app (seeded via `SNAPSHOT_FILE`
 with `tests/e2e/fixtures/jobs.snapshot.json`) and loads the real `index.html`
-plus the real `js/*` in jsdom over HTTP. Latest run (2026-10-15): **64 tests
-passed** across ten suites: 36 existing smoke tests, 22 tracker interactions
-and 6 environment-isolation checks. `npm test --prefix tests/e2e`, the shell runner and frontend
+plus the real `js/*` in jsdom over HTTP. Latest local run (2026-10-15): **68 tests
+passed**: 36 existing smoke tests, 22 tracker interactions, 6 environment-
+isolation checks and 4 review-polling checks (ten suites plus standalone cases). `npm test --prefix tests/e2e`, the shell runner and frontend
 CI use the same suite list. Layout contracts are static/jsdom checks, not a
 real browser layout/visual pass.
 
@@ -79,6 +79,16 @@ import → stats 401; current empty-string pins preserve 200s, and login mode
 still requires its session. Both plain-token and trailing-comment cases pass.
 The stale auth-isolation warning is retired; see `TESTER.md` for evidence and
 why empty values must not be replaced by deleting the environment keys.
+
+**Pending reviews:** queue and Regenerate now recognize `review_pending`, retain
+its run ID and poll `GET /api/apply/{fp}/review-status` every two seconds. They
+show a pending terminal line and keep controls busy until the final result;
+a polling failure does not automatically issue another POST. Screenshot URLs
+are used only from the completed, persisted result. UI polling is bounded at
+35 minutes; the worker watchdog is 30 minutes. A stale run ID/auth/network error
+warns that work may still be running rather than inviting blind resubmission.
+`review.test.mjs` checks this over a fake review transport; Python tests exercise
+real backend persistence. No live browser verification of the fix yet.
 
 **Separate live evidence (2026-10-15):** the user supplied a real-Chrome
 Democorp fill-only report/screenshot showing filled contact fields and attached

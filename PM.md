@@ -7,9 +7,12 @@ Living plan for the remote-job-agent build. Status reconciled 2026-10-15. Sectio
 ## 1. Current status and checklist (2026-10-15)
 
 **Legend:** checked = implementation exists, not necessarily merged or deployed.
-Pending verification is listed separately. Current-session code is committed
-and pushed to `arena/393bb940-remote-job-agent`; it is not merged or deployed. `phase 3` work is user-reported and
-has not been integrated or independently checked in this checkout.
+Pending verification is listed separately. The published baseline on
+`arena/393bb940-remote-job-agent` passed CI; the new fill-timeout/result-handoff
+fix is included on this working branch for PR review, with fresh image CI and
+live-browser verification still pending. Nothing is
+merged or deployed. `phase 3` work is user-reported and has not been integrated
+or independently checked in this checkout.
 
 ### Done / implemented
 
@@ -25,6 +28,10 @@ has not been integrated or independently checked in this checkout.
       listed as attached. No submission reported. Partial verification only:
       API fill timed out after 90 seconds and screenshot endpoint returned 404.
       See `LIVE_SUBMIT.md` run log; no live rerun performed in this session.
+- [x] Fill timeout/result-handoff fix implemented locally: configurable foreground
+      wait (default 180s), durable pending/result polling, periodic claim renewal,
+      late screenshot/metadata persistence and stale-worker fencing. 20 Python
+      handoff cases and 4 UI-polling cases pass. This is not a new live fill pass.
 - [x] Greenhouse intent/submit code and safety gates. **No verified live submit;
       kill-switch and UI submit toggle remain disabled.** Lever has no submit path.
 - [x] Resume CV-fidelity improvements and actual generated-markdown preview.
@@ -57,11 +64,12 @@ has not been integrated or independently checked in this checkout.
 - [ ] Review and merge the published working-branch changes only after approval;
       CI passed, but no merge is authorized here. Review `phase 3` separately; verify
       its portability patch on the integrated revision rather than duplicating it.
-- [ ] Diagnose the reported Democorp fill timeout and missing screenshot record:
-      a PNG was written but the API returned `Timed out waiting for ATS review
-      form to fill` after 90 seconds; screenshot URL returned 404. Exact slow
-      step/root cause unconfirmed. Add bounded-completion/artifact-persistence
-      regression coverage before claiming the API review flow verified.
+- [ ] Validate the new handoff fix in an authorized live Chrome fill-only rerun
+      and fresh image CI before release. Use Regenerate for the previously
+      packaged demo, retain step timings, confirm final status and screenshot
+      GET 200. The exact slow ATS operation remains unmeasured; do not infer
+      confirmation metadata or readback results from the original PNG. No
+      intent/submit calls or CAPTCHA bypass authorized by this task.
 - [ ] Run real-browser application checks for responsive layout, keyboard/pointer
       behavior, login and enforced CSP. The configured Docker Chromium launch
       smoke is not full application/browser coverage.
@@ -99,14 +107,14 @@ by this checklist.
 
 | Environment | Pytest | Frontend E2E |
 |---|---|---|
-| Current local lock-only Linux x86-64, including fail-closed image-inventory guards | 1007 passed, 8 skipped | 64 passed |
+| Current local lock-only Linux x86-64, including review handoff/polling fix | 1027 passed, 8 skipped | 68 passed |
 | GitHub CI run 38743655019, code commit 0971322 | Full API suite passed; raw counts not downloaded | Job passed |
 | Native Docker CI in that run, x86-64 + ARM64 | Build/pins/API/auth/Chromium/leak steps passed | Not a dashboard-browser pass |
 | Earlier development, before tracker tests, with optional FAISS available | 988 passed, 2 skipped | 36 passed |
 | Earlier lock-only Linux x86-64, before tracker tests | 982 passed, 8 skipped | 36 passed |
 
-Current local full run: 1007 passed, 8 skipped, 32 warnings; frontend 64 passed
-(36 existing + 22 tracker + 6 environment tests). Lock-only skips: Lever confirmation copy and
+Current local full run: 1027 passed, 8 skipped, 32 warnings; frontend 68 passed
+(36 existing + 22 tracker + 6 environment + 4 review polling tests). Lock-only skips: Lever confirmation copy and
 seven optional FAISS-dependent cases. Earlier development skips: Lever and the
 optional crawl4ai/playwright-stealth import check. `uv pip check` passes in the
 current locked environment. Earlier pin auditing and x86-64/ARM64 dry-run

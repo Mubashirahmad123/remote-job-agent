@@ -1,5 +1,28 @@
 # CHANGELOG.md
 
+## 2026-10-15 — preserve slow review results instead of discarding them at 90s
+
+- Replace the screenshot-less timeout stub with a bounded foreground wait
+  (`APPLY_FILL_TIMEOUT`, default 180s, integer clamp 1–600) plus a durable
+  SQLite review-run handoff. A slow request returns `review_pending`/run ID;
+  authenticated status polling retrieves its real terminal result.
+- Save late screenshot/confirmation/readback/material/actor evidence; only
+  advertise the image URL after persistence. Queue and Regenerate wait/poll
+  without repeating POST, and report status-read failures honestly.
+- Heartbeat claims periodically across foreground timeout, retain duplicate
+  blocking, fence package/artifact writes by ownership and reject stale run IDs.
+  A 30-minute watchdog fences an over-deadline worker; it does not forcibly kill
+  a Python/browser thread. New attempts invalidate old review evidence.
+- Make concurrent screenshot filenames UUID-unique and log stage elapsed times.
+  Exact live-board slowness and discarded metadata remain unconfirmed; no
+  retroactive recovery by globbing screenshots or new submit permission.
+- Add 20 real-thread/SQLite/route cases with fake browser/material boundaries
+  plus 4 dashboard polling checks over a fake transport. Full local results:
+  **1027 Python passed, 8 skipped, 32 warnings; 68 frontend passed**.
+- Update docs/config. This repair is prepared for PR review, not deployed or
+  live-Chrome/native-image verified. Earlier successful Docker CI applies to its
+  recorded commit. Submit remains disabled; no live ATS/provider work performed.
+
 ## 2026-10-15 — native locked Docker CI executed and reviewed
 
 - Commit/push the completed session work to `arena/393bb940-remote-job-agent`;

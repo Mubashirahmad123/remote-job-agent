@@ -24,6 +24,7 @@ What this NEVER does (by construction, not by flag):
 
 import json
 import hashlib
+import logging
 from typing import Any, Dict
 from queue import Queue
 from threading import Event, Thread
@@ -44,6 +45,8 @@ from api.fill_claims import (
     release_fill_claim,
 )
 
+
+logger = logging.getLogger(__name__)
 
 class DreamTierForbidden(Exception):
     """Raised when a fill is requested for a dream-tier job (422)."""
@@ -159,13 +162,9 @@ def _fill_ats_form(
                     pass
 
     Thread(target=run_review_session, name="apply-review-browser", daemon=True).start()
-    if not completed.wait(timeout=90):
-        return {
-            "status": "error",
-            "screenshot_path": None,
-            "error": "Timed out waiting for ATS review form to fill",
-            "browser_opened": False,
-        }
+    # The outer review worker owns the bounded HTTP wait and watchdog. Never
+    # synthesize a screenshot-less timeout stub and abandon the actual result.
+    completed.wait()
     return results.get_nowait()
 
 
@@ -188,8 +187,9 @@ def fill_review(
     in-progress claim (api.fill_claims) is therefore taken BEFORE any
     generation starts; a second fill for the same fingerprint while one is
     in flight raises FillInProgress (router: 409) costing zero LLM calls.
-    The claim is ownership-scoped (claimed_at) and released when the fill
-    ends either way; a crashed process leaves at most a claim that
+    The claim is ownership-scoped (claimed_at), periodically heartbeated and
+    released by the worker, not by an HTTP foreground-wait timeout. A crashed
+    process leaves at most a claim that
     self-expires after api.fill_claims.STALE_FILL_CLAIM_MINUTES.
 
     `actor` defaults to "automation" because the only non-HTTP caller is the
@@ -245,32 +245,39 @@ def fill_review(
         """
         beat_connection = connect()
         try:
-            refresh_fill_claim(beat_connection, fingerprint, claim["claimed_at"])
-        except Exception:
+            if not refresh_fill_claim(beat_connection, fingerprint, claim["claimed_at"]):
+                raise RuntimeError("Review worker no longer owns this fill claim")
+        except sqlite3.Error:
             pass
         finally:
             beat_connection.close()
 
+    from api.review_worker import run_review
+    handed_off = False
     try:
-        # Read under our own claim, so no one can slip a package in between.
+        # Keep the already-packaged check under the claim, before handing work
+        # to the background owner. This preserves duplicate-request semantics.
         existing_package = get_package_record(fingerprint)
         if existing_package is not None and not regenerate:
-            # Checked BEFORE material generation on purpose: this is the whole
-            # point of the fix — a repeat click must cost zero LLM calls and
-            # create no duplicate package folder.
-            raise AlreadyPackaged(
-                fingerprint, existing_package.get("package_path", "")
-            )
-
-        return _fill_review_claimed(
-            job, fingerprint, tier, actor, regenerate, existing_package, heartbeat
+            raise AlreadyPackaged(fingerprint, str(existing_package.get("package_path") or ""))
+        response = run_review(
+            fingerprint, claim["claimed_at"],
+            lambda: _fill_review_claimed(
+                job, fingerprint, tier, actor, regenerate, existing_package,
+                heartbeat, claim["claimed_at"],
+            ),
         )
+        handed_off = response.get("status") == "review_pending"
+        return response
     finally:
-        connection = connect()
-        try:
-            release_fill_claim(connection, fingerprint, claim["claimed_at"])
-        finally:
-            connection.close()
+        # Pending work still owns the claim. Its worker/watchdog releases it;
+        # setup failures and synchronous completion are safe to release here.
+        if not handed_off:
+            connection = connect()
+            try:
+                release_fill_claim(connection, fingerprint, claim["claimed_at"])
+            finally:
+                connection.close()
 
 
 def _fill_review_claimed(
@@ -281,6 +288,7 @@ def _fill_review_claimed(
     regenerate: bool,
     existing_package: Dict[str, Any] | None,
     heartbeat=lambda: None,
+    claimed_at: str | None = None,
 ) -> Dict[str, Any]:
     """Generate, package, and fill — already under this request's own claim."""
     from agents.auto_applier import detect_ats_platform, generate_apply_package
@@ -291,6 +299,7 @@ def _fill_review_claimed(
     # while submit uses different files). Falls back to empty materials when
     # generation is unavailable (no LLM keys in dev/test) — the response then
     # says so honestly via materials_note.
+    stage_started = time.monotonic()
     materials_note = "final"
     try:
         _materials = _prepare_submit_materials(job)
@@ -301,13 +310,16 @@ def _fill_review_claimed(
         review_cover = ""
         materials_note = f"fallback-empty: {error}"
 
-    # Longest single stage is behind us; keep the claim provably alive before
-    # the next slow one (packaging, then the ATS fill that waits up to 90s).
+    logger.info("Review %s materials stage finished in %.2fs", fingerprint, time.monotonic() - stage_started)
+    # Periodic heartbeats cover long stages; these checks also stop a worker
+    # which lost ownership before it starts more work.
     heartbeat()
+    stage_started = time.monotonic()
 
     package_path = generate_apply_package(job, review_resume, review_cover)
     if not package_path:
         raise RuntimeError("Apply package generation returned no path")
+    logger.info("Review %s package stage finished in %.2fs", fingerprint, time.monotonic() - stage_started)
 
     # Heartbeat again: record_package below is the point at which this job
     # stops being "in flight" for everyone else's purposes, but the ATS fill
@@ -324,9 +336,12 @@ def _fill_review_claimed(
         apply_url=job.get("apply_url", ""),
         source="regenerate" if regenerate else "review",
         actor=actor,
+        fill_claimed_at=claimed_at,
     )
 
+    stage_started = time.monotonic()
     fill_result = _fill_ats_form(job, review_resume, review_cover)
+    logger.info("Review %s browser fill finished in %.2fs", fingerprint, time.monotonic() - stage_started)
     apply_url = job.get("apply_url", "")
     platform = detect_ats_platform(apply_url) if apply_url else "unknown"
     field_verification = (fill_result or {}).get("field_verification")
@@ -356,6 +371,7 @@ def _fill_review_claimed(
         match_ratio = score / 100 if score > 1 else score
         save_review_artifact({
             "job_fingerprint": fingerprint,
+            "_fill_claimed_at": claimed_at,
             "platform": platform,
             "job_title": job.get("job_title", ""),
             "apply_url": apply_url,

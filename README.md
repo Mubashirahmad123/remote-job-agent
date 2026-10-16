@@ -445,7 +445,9 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `GET /api/cv/profile` | Cached parsed-CV profile → `CvProfileOut` (501 when no fresh `cache/cv_profile_*.json`; per-request LLM parsing disabled) |
 | `PUT /api/cv/profile` | Persist Resume Studio edits (contact + skills) into the profile cache → `CvProfileOut` (501 when uncached; never triggers LLM parsing) |
 | `GET /api/cv/variants` | CV variants `[{name, tags}]` via `CV_DIR`/`cvs/` discovery (missing dir → `[]`) |
-| `POST /api/apply/{fp}` | Phase 2a fill-and-review: `{mode:"review"}` → per-ATS fill status (`filled_ready`, or `needs_review` when Greenhouse required profile fields are missing/unverified), package path, and screenshot path for Greenhouse/Lever; unsupported ATSs return `package_only`. Other modes → 400, dream tier → 422, unknown → 404. The browser never submits. |
+| `POST /api/apply/{fp}` | Phase 2a fill-and-review: `{mode:"review"}` → per-ATS fill status (`filled_ready`, or `needs_review` when Greenhouse required profile fields are missing/unverified), package path, and screenshot path for Greenhouse/Lever; unsupported ATSs return `package_only`. Slow work returns `review_pending` after `APPLY_FILL_TIMEOUT` (default 180s, 1–600); the UI polls for the actual saved result. Other modes → 400, dream tier → 422, unknown → 404. The browser never submits. |
+| `GET /api/apply/{fp}/review-status?run_id=` | Authenticated pending/terminal fill-only result; late screenshots/metadata are retained; obsolete attempt ID → 409, unknown → 404. Queue/Regenerate poll this, never resubmit automatically. |
+| `GET /api/apply/{fp}/screenshot` | Serve the exact saved review image; no image guessing. URL is advertised only after artifact persistence. |
 | `POST /api/apply/{fp}/intent` + `POST /api/apply/{fp}/submit` | Greenhouse-only verified submit (kill-switched: 403 while `api/safety.py SUBMIT_ENABLED=False`; dedicated `APPLY_API_TOKEN` **or** an `admin` session required) |
 | `GET /api/activity?limit=N` | Merged, time-ordered audit feed of apply claims, intents, review artifacts and login events, each carrying the actor that produced it. Login events include client IPs, so they are returned to `admin` sessions only (`includes_login_events` says which you got) |
 
@@ -609,8 +611,8 @@ npm ci --prefix tests/e2e
 npm test --prefix tests/e2e       # or ./tests/e2e/run.sh
 ```
 
-Latest local locked Linux run (2026-10-15): **1007 pytest passed, 8 skipped**
-and **64 frontend E2E passed**. Includes 22 tracker interactions (transitions,
+Latest local locked Linux run (2026-10-15): **1027 pytest passed, 8 skipped**
+and **68 frontend E2E passed**. Includes 22 tracker interactions (transitions,
 review columns, reload persistence, URL-keyed applications, failures and manual
 add) plus 22 Python API/runner contracts. The tracker fixture uses fake Sheets
 behind real routes/services, never personal resources. Six targeted environment
@@ -623,7 +625,9 @@ API/Chromium smoke, in-image regressions and leak checks, plus all other CI jobs
 This does not verify Oracle deployment or full dashboard-browser behavior.
 Job/step metadata was reviewed; raw log download was blocked. Evidence/limits:
 [deploy/DOCKER_CI_VERIFICATION.md](deploy/DOCKER_CI_VERIFICATION.md).
-Details and optional-dependency skips: [TESTER.md](TESTER.md).
+The new review-handoff fix has 20 Python and 4 UI polling cases; it is local
+and has not had a fresh native-image or live-Chrome rerun. Earlier CI evidence
+above applies only to its recorded commit. Details/skips: [TESTER.md](TESTER.md).
 
 ## Live submit status
 
@@ -646,7 +650,9 @@ after 90 seconds and its screenshot URL returned 404 despite a reported PNG on
 disk. Filling is partially evidenced; API completion/artifact persistence and
 submit-path verification remain unresolved. No intent/submit calls, submit
 click or reCAPTCHA bypass were reported. The demo form is reCAPTCHA-protected.
-See the `LIVE_SUBMIT.md` run log; submit stays disabled.
+The local repair now retains late results and polls instead of abandoning them;
+it still needs a fresh authorized Chrome fill-only rerun. Old lost metadata is
+not reconstructed from the PNG. See `LIVE_SUBMIT.md`; submit stays disabled.
 
 ## License
 

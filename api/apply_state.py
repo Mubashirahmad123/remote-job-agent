@@ -21,6 +21,8 @@ def connect() -> sqlite3.Connection:
     initialize_claim_store(connection)
     initialize_intent_store(connection)
     initialize_fill_claim_store(connection)
+    from api.review_runs import initialize_review_run_store
+    initialize_review_run_store(connection)
     connection.execute(
         """CREATE TABLE IF NOT EXISTS apply_review_artifacts (
             job_fingerprint TEXT PRIMARY KEY,
@@ -106,6 +108,9 @@ def save_review_artifact(artifact: dict[str, Any]) -> None:
         profile_json = _json.dumps(list(profile_raw))
     connection = connect()
     try:
+        from api.review_runs import assert_fill_owner
+        connection.execute("BEGIN IMMEDIATE")
+        assert_fill_owner(connection, artifact["job_fingerprint"], artifact.get("_fill_claimed_at"))
         connection.execute(
             """INSERT INTO apply_review_artifacts
             (job_fingerprint, platform, job_title, apply_url, package_path,
@@ -162,6 +167,7 @@ def record_package(
     apply_url: str = "",
     source: str = "review",
     actor: str | None = None,
+    fill_claimed_at: str | None = None,
 ) -> None:
     """Upsert the one-row "this job already has a package" index entry.
 
@@ -177,6 +183,9 @@ def record_package(
     prepared_at = datetime.now(timezone.utc).isoformat()
     connection = connect()
     try:
+        from api.review_runs import assert_fill_owner
+        connection.execute("BEGIN IMMEDIATE")
+        assert_fill_owner(connection, fp, fill_claimed_at)
         connection.execute(
             """INSERT INTO apply_package_index
             (job_fingerprint, job_title, company, apply_url, package_path,

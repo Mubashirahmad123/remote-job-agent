@@ -25,7 +25,7 @@ python scheduler.py                                         # scheduled scraping
 python -m pytest tests/                                     # run offline Python tests; current counts/status in TESTER.md
 
 # Dashboard e2e (boots a real uvicorn; needs Node 20+ and a venv the harness can find)
-npm ci --prefix tests/e2e && npm test --prefix tests/e2e    # smoke + tracker + environment; or ./tests/e2e/run.sh
+npm ci --prefix tests/e2e && npm test --prefix tests/e2e    # smoke + tracker + environment + review; or ./tests/e2e/run.sh
 
 # Docker workflow
 docker compose up -d --build                                 # full stack: api + scheduler + caddy (needs API_TOKEN)
