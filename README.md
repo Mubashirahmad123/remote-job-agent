@@ -611,7 +611,7 @@ npm ci --prefix tests/e2e
 npm test --prefix tests/e2e       # or ./tests/e2e/run.sh
 ```
 
-Latest local locked Linux run (2026-10-15): **1027 pytest passed, 8 skipped**
+Latest local locked Linux run (2026-10-16): **1042 pytest passed, 8 skipped**
 and **68 frontend E2E passed**. Includes 22 tracker interactions (transitions,
 review columns, reload persistence, URL-keyed applications, failures and manual
 add) plus 22 Python API/runner contracts. The tracker fixture uses fake Sheets
@@ -625,9 +625,12 @@ API/Chromium smoke, in-image regressions and leak checks, plus all other CI jobs
 This does not verify Oracle deployment or full dashboard-browser behavior.
 Job/step metadata was reviewed; raw log download was blocked. Evidence/limits:
 [deploy/DOCKER_CI_VERIFICATION.md](deploy/DOCKER_CI_VERIFICATION.md).
-The new review-handoff fix has 20 Python and 4 UI polling cases; it is local
-and has not had a fresh native-image or live-Chrome rerun. Earlier CI evidence
-above applies only to its recorded commit. Details/skips: [TESTER.md](TESTER.md).
+The review handoff has 20 Python and 4 UI polling cases. PR #31 includes the
+CI/security follow-up: a deliberate CrewAI rollback to 1.6.1 permits patched
+MCP 1.30.0; one existing JSON-repair advisory remains on its required 0.25.2.
+Audit reports 43 known findings and no new findings, not zero vulnerabilities.
+See [remediation details](deploy/CI_FAILURE_REMEDIATION.md) and current PR checks.
+A live-Chrome rerun is still pending. Details/skips: [TESTER.md](TESTER.md).
 
 ## Live submit status
 

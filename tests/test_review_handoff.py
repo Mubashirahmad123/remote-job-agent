@@ -138,6 +138,8 @@ def test_late_completion_saves_owned_image_metadata_actor_and_real_screenshot_ro
 def test_pending_work_keeps_claim_and_duplicate_regenerate_does_not_launch_browser(setup):
     run = setup.client.post(f'/api/apply/{FP}', json={}).json()
     assert run['status'] == 'review_pending'
+    # HTTP timeout/heartbeat does not imply the fake browser has been scheduled.
+    assert setup.entered.wait(5)
     conn = apply_state.connect()
     try:
         before = conn.execute('SELECT heartbeat_at FROM apply_fill_claims WHERE job_fingerprint=?', (FP,)).fetchone()[0]
@@ -200,6 +202,9 @@ def test_watchdog_fences_old_result_without_overwriting_a_newer_retry(setup, mon
 
 def test_two_fingerprints_never_share_a_result_or_image(setup):
     first = setup.client.post(f'/api/apply/{FP}', json={}).json()
+    # Name image-0 by first browser entry, not by HTTP admission order. A busy
+    # runner may otherwise schedule the second job's browser first.
+    assert setup.entered.wait(5)
     second = setup.client.post('/api/apply/other-job', json={}).json()
     if second['status'] == 'review_pending':
         second = terminal(setup.client, second)

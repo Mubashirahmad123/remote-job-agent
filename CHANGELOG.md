@@ -1,5 +1,25 @@
 # CHANGELOG.md
 
+## 2026-10-16 — remediate PR #31 CI and MCP security finding
+
+- Fix CVE-2026-59951 with MCP 1.30.0, not an audit exception or metadata override.
+  Deliberately roll CrewAI back from 1.14.7 to 1.6.1, whose declared MCP bounds
+  permit the fix. Real SDK tests build the production factory, run an offline
+  kickoff and construct configured provider adapters without network access.
+- Retain the existing JSON-repair advisory on required 0.25.2 (previously 0.25.3);
+  document that risk migration explicitly. Remove the three fixed MCP baseline
+  entries. Audit passes with 43 known findings; it does not mean no vulnerabilities.
+- Install the same universal lock in API/dashboard CI and Docker, with a static
+  regression guard. Run SDK compatibility tests in both native image jobs.
+- Surface escaped/bounded failure details in GitHub check annotations without
+  changing failing exit codes. Fix two fake-browser scheduling assumptions in
+  handoff tests; the original inaccessible pytest/frontend tracebacks remain
+  unconfirmed, not retroactively attributed to these assumptions.
+- Fresh local locked environment: 168 compatible packages; **1042 Python passed,
+  8 skipped, 32 warnings; 68 frontend passed**. See
+  `deploy/CI_FAILURE_REMEDIATION.md` for evidence, tradeoffs and current CI scope.
+- No merge, deployment, live provider/ATS, CAPTCHA bypass or submission.
+
 ## 2026-10-15 — preserve slow review results instead of discarding them at 90s
 
 - Replace the screenshot-less timeout stub with a bounded foreground wait

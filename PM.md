@@ -4,14 +4,15 @@ Living plan for the remote-job-agent build. Status reconciled 2026-10-15. Sectio
 
 ---
 
-## 1. Current status and checklist (2026-10-15)
+## 1. Current status and checklist (2026-10-16)
 
 **Legend:** checked = implementation exists, not necessarily merged or deployed.
 Pending verification is listed separately. The published baseline on
 `arena/393bb940-remote-job-agent` passed CI; the new fill-timeout/result-handoff
-fix is included on this working branch for PR review, with fresh image CI and
-live-browser verification still pending. Nothing is
-merged or deployed. `phase 3` work is user-reported and has not been integrated
+fix is included in PR #31. See its latest checks for hosted CI status; the
+live-browser rerun remains pending. The 2026-10-16 dependency remediation uses
+CrewAI 1.6.1 with patched MCP 1.30.0 (a deliberate compatibility rollback);
+see `deploy/CI_FAILURE_REMEDIATION.md`. Nothing is merged or deployed. `phase 3` work is user-reported and has not been integrated
 or independently checked in this checkout.
 
 ### Done / implemented
@@ -107,13 +108,13 @@ by this checklist.
 
 | Environment | Pytest | Frontend E2E |
 |---|---|---|
-| Current local lock-only Linux x86-64, including review handoff/polling fix | 1027 passed, 8 skipped | 68 passed |
+| Current local lock-only Linux x86-64, including review handoff/polling fix | 1042 passed, 8 skipped | 68 passed |
 | GitHub CI run 38743655019, code commit 0971322 | Full API suite passed; raw counts not downloaded | Job passed |
 | Native Docker CI in that run, x86-64 + ARM64 | Build/pins/API/auth/Chromium/leak steps passed | Not a dashboard-browser pass |
 | Earlier development, before tracker tests, with optional FAISS available | 988 passed, 2 skipped | 36 passed |
 | Earlier lock-only Linux x86-64, before tracker tests | 982 passed, 8 skipped | 36 passed |
 
-Current local full run: 1027 passed, 8 skipped, 32 warnings; frontend 68 passed
+Current local full run: 1042 passed, 8 skipped, 32 warnings; frontend 68 passed
 (36 existing + 22 tracker + 6 environment + 4 review polling tests). Lock-only skips: Lever confirmation copy and
 seven optional FAISS-dependent cases. Earlier development skips: Lever and the
 optional crawl4ai/playwright-stealth import check. `uv pip check` passes in the

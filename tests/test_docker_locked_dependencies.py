@@ -121,3 +121,15 @@ def test_docker_ci_shell_commands_and_python_heredoc_parse(step):
     if "<<'PY'" in script:
         python = script.split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
         ast.parse(python)
+
+
+def test_host_python_and_dashboard_ci_install_the_same_audited_lock():
+    workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+    for name in ('api-tests', 'frontend-e2e'):
+        steps = workflow['jobs'][name]['steps']
+        installs = [step['run'] for step in steps if 'pip install -r ' in step.get('run', '')]
+        assert installs
+        assert all('-r requirements.lock.txt' in command for command in installs)
+        assert all('--no-deps' not in command for command in installs)
+        setup = next(step for step in steps if step.get('uses', '').startswith('actions/setup-python@'))
+        assert setup['with']['cache-dependency-path'] == 'requirements.lock.txt'

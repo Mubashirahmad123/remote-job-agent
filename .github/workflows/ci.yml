@@ -37,9 +37,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock.txt
 
-      # Full requirements, not a subset: tests/test_source_naming.py and
+      # Full locked requirements, not a subset: tests/test_source_naming.py and
       # test_api_skills.py import tools.sheet_writer and agents.scrapper, which
       # need gspread/requests. Installing less makes those files fail at
       # COLLECTION, which reads like a code regression but is only a missing dep.
@@ -51,7 +51,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.lock.txt
 
       - name: Verify the lock file matches requirements.txt
         run: |
@@ -144,7 +144,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock.txt
 
       - uses: actions/setup-node@v7
         with:
@@ -159,7 +159,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m venv .venv
           ./.venv/bin/pip install --upgrade pip
-          ./.venv/bin/pip install -r requirements.txt
+          ./.venv/bin/pip install -r requirements.lock.txt
 
       # `npm ci`, not `npm install`: tests/e2e/package-lock.json is committed, so
       # CI must install exactly that tree and fail loudly if package.json has
@@ -168,7 +168,7 @@ jobs:
         run: npm ci --prefix tests/e2e
 
       - name: Run the dashboard e2e suite
-        run: npm test --prefix tests/e2e
+        run: python deploy/ci_failure_report.py npm test --prefix tests/e2e
         env:
           # The suite boots a real uvicorn; keep it off the developer's data.
           CI: true
@@ -254,7 +254,8 @@ jobs:
             tests/test_api_auth_hardening.py \
             tests/test_api_actor_attribution.py \
             tests/test_country_filter.py \
-            tests/test_auto_applier.py
+            tests/test_auto_applier.py \
+            tests/test_crewai_security_compat.py
 
       - name: Verify no secret, database or local venv is baked into the image
         run: |

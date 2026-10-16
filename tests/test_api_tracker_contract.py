@@ -128,4 +128,6 @@ def test_all_e2e_entrypoints_execute_the_tracker_suite():
     assert 'exec npm test' in shell
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
     steps = workflow["jobs"]["frontend-e2e"]["steps"]
-    assert any(step.get("run", "").strip() == "npm test --prefix tests/e2e" for step in steps)
+    allowed = {"npm test --prefix tests/e2e",
+               "python deploy/ci_failure_report.py npm test --prefix tests/e2e"}
+    assert any(step.get("run", "").strip() in allowed for step in steps)

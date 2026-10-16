@@ -554,8 +554,8 @@ response explains why sign-in history is absent for a non-admin.
 
 ## 5. Testing
 
-Latest local results (2026-10-15), including tracker/environment regressions, with lock-only
-dependencies: **1027 pytest passed, 8 skipped; 68 frontend E2E passed**.
+Latest local results (2026-10-16), including tracker/environment regressions, with lock-only
+dependencies: **1042 pytest passed, 8 skipped; 68 frontend E2E passed**.
 `test_api_tracker_contract.py` adds 22 routing/status/notes/auth/error and runner
 contracts; `tracker.test.mjs` adds 22 interaction cases against real services
 with fake Sheets only. Six environment checks reproduce missing auth pins
@@ -606,3 +606,15 @@ status codes, never hit live Sheets).
    fails the build on a new leak.
 5. Tests in `tests/test_api_<group>.py` following the Phase 1 fake pattern.
 6. Frontend fn in `js/api.js` + row in README endpoint table.
+
+
+### 2026-10-16 CI/security follow-up
+
+Host API/dashboard CI now install the same lock as Docker and pip-audit. The
+new MCP finding is fixed with MCP 1.30.0, using a deliberate CrewAI rollback
+to 1.6.1 whose declared bounds permit it. Real offline SDK factory/kickoff/
+provider-construction tests guard the application's APIs, including native-image
+jobs. The existing JSON-repair risk remains on required 0.25.2; it is not fixed
+or silently represented as a clean dependency tree. Audit: 43 known findings,
+none new. Failure annotations preserve command exit status. Full tradeoffs and
+limits: `deploy/CI_FAILURE_REMEDIATION.md`; latest hosted status: PR #31.

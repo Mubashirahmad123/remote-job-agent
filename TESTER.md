@@ -1,7 +1,7 @@
 # TESTER.md — Testing Guide
 
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Latest local Linux
-lock-only verification (2026-10-15), including tracker/environment/review handoff regressions: **1027 pytest
+lock-only verification (2026-10-16), including tracker/environment/review handoff regressions: **1042 pytest
 passed, 8 skipped, 32 warnings** and **68 frontend E2E tests passed**. Skips:
 seven optional FAISS-dependent cases and deferred Lever confirmation copy.
 Earlier development/lock-only results below predate tracker coverage; optional
@@ -10,6 +10,14 @@ x86-64/ARM64 jobs and all other jobs passed in GitHub CI run 38743655019 at
 `0971322`. GitHub job/step metadata and notices were reviewed; raw-log download
 was blocked. Local numeric totals above are not inferred CI log counts.
 Evidence: `deploy/DOCKER_CI_VERIFICATION.md`; historical counts: `CHANGELOG.md`.
+
+Security/CI remediation: `deploy/CI_FAILURE_REMEDIATION.md`. A fresh **168-package**
+locked installation passes dependency consistency. CrewAI is deliberately rolled
+back to 1.6.1 so patched MCP 1.30.0 satisfies its real metadata. Seven offline
+SDK checks cover factory construction, kickoff, provider-adapter construction
+and security pins; six failure-reporting checks preserve failed gates. The
+existing JSON-repair advisory is retained on 0.25.2, not claimed fixed. Live
+provider behavior is not verified by these offline checks.
 
 Coverage includes `test_api_phase1.py`,
 `test_api_phase2.py`, `test_api_cv.py`, `test_api_materials.py`,
@@ -46,7 +54,7 @@ presentation, no automatic POST retry on polling failure, and bounded UI waits.
 Real route/SQLite handoff is covered by the Python cases, not claimed for these
 transport fakes. npm/shell/CI entrypoints include this file.
 
-Current local full suites: 1027 Python passed, 8 skipped; 68 frontend passed.
+Current local full suites: 1042 Python passed, 8 skipped; 68 frontend passed.
 No live ATS or native Docker rerun was performed for this local fix; previously
 recorded image CI applies to its named earlier commit, not these new edits.
 The reported original run's exact slow step and metadata remain unknown.
