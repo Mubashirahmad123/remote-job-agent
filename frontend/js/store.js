@@ -254,7 +254,7 @@ JobAgent.store = {
     }
   },
 
-  async loadTracker() {
+  async loadTracker({ throwOnError = false } = {}) {
     this.state.loading.tracker = true;
     this.state.errors.tracker = '';
     this.notify();
@@ -267,6 +267,9 @@ JobAgent.store = {
       // No MOCK_KANBAN corpus exists; an empty board + error banner is honest.
       this.state.tracker = [];
       console.warn('[store] tracker unavailable:', e.message);
+      // Boot remains non-fatal, but write/sync callers must not report a
+      // successful refresh after the GET failed. finally still clears loading.
+      if (throwOnError) throw e;
     } finally {
       this.state.loading.tracker = false;
       this.notify();

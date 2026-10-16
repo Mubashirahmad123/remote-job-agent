@@ -31,7 +31,11 @@ const VENV_CANDIDATES = process.platform === 'win32'
 // An explicit interpreter always wins. run.sh resolves the same candidate list
 // and exports its choice, so the script that fails fast with a readable message
 // and the harness that actually spawns uvicorn can never disagree.
-const PYTHON = process.env.RJA_PYTHON
+const requestedPython = process.env.RJA_PYTHON;
+// A relative interpreter path is relative to the real repo, not a disposable
+// projectRoot selected by an isolation test. Bare PATH commands stay bare.
+export const PYTHON = (requestedPython && existsSync(resolve(REPO, requestedPython))
+  ? resolve(REPO, requestedPython) : requestedPython)
   || VENV_CANDIDATES
     .map((rel) => resolve(REPO, rel))
     .find((candidate) => existsSync(candidate))
@@ -57,7 +61,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * /api/health/live (unauthenticated by design) precisely because /api/health is
  * 401 in that mode.
  */
-export async function startApi({ port = 8731, auth = false } = {}) {
+// tracker=true selects the isolated fake-APPLIED entry point, never live Sheets.
+// projectRoot/environment let isolation tests use copied source + a dummy .env,
+// never overwrite the developer's .env. Safety pins below always win.
+export async function startApi({
+  port = 8731, auth = false, tracker = false,
+  projectRoot = REPO, environment = process.env,
+} = {}) {
   const authDb = resolve(
     os.tmpdir(),
     `rja-e2e-auth-${port}-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
@@ -72,7 +82,7 @@ export async function startApi({ port = 8731, auth = false } = {}) {
   );
 
   const env = {
-    ...process.env,
+    ...environment,
     SNAPSHOT_FILE: SNAPSHOT,
     // SNAPSHOT_FILE alone does NOT keep this suite off live Sheets — it only
     // picks the offline FALLBACK, and _read_tab_values consults Google first
@@ -90,10 +100,15 @@ export async function startApi({ port = 8731, auth = false } = {}) {
     // neither read nor written.
     AUTH_DB_PATH: authDb,
     APPLY_STATE_DB_PATH: stateDb,
-    // Never inherit a token from the developer's shell: a set API_TOKEN flips
-    // open_access() off and would 401 every unauthenticated test.
+    // Empty (not missing) is deliberate: load_dotenv(override=False) must not
+    // refill these from .env when /api/cv/profile first imports cv_parser.
+    // Also override inherited shell tokens. Regression: environment.test.mjs.
     API_TOKEN: '',
     APPLY_API_TOKEN: '',
+    SUBMIT_ENABLED: 'false',
+    SUBMIT_DRY_RUN: 'false',
+    ACTION_RATE_LIMIT: '100000',
+    RJA_E2E_TRACKER: tracker ? '1' : '',
     // Keep the brute-force limiter out of the way of a suite that signs in
     // repeatedly from one address.
     LOGIN_RATE_LIMIT: '100000',
@@ -108,7 +123,7 @@ export async function startApi({ port = 8731, auth = false } = {}) {
     const created = spawnSync(
       PYTHON,
       ['create_user.py', credentials.username, credentials.password, '--role', 'admin'],
-      { cwd: REPO, env, encoding: 'utf8' },
+      { cwd: projectRoot, env, encoding: 'utf8' },
     );
     if (created.status !== 0) {
       throw new Error(`create_user.py failed (${created.status}):\n${created.stderr || created.stdout}`);
@@ -117,8 +132,8 @@ export async function startApi({ port = 8731, auth = false } = {}) {
 
   const proc = spawn(
     PYTHON,
-    ['-m', 'uvicorn', 'api.app:app', '--host', '127.0.0.1', '--port', String(port), '--log-level', 'warning'],
-    { cwd: REPO, env, stdio: ['ignore', 'pipe', 'pipe'] },
+    ['-m', 'uvicorn', tracker ? 'tests.e2e.tracker_api:app' : 'api.app:app', '--host', '127.0.0.1', '--port', String(port), '--log-level', 'warning'],
+    { cwd: projectRoot, env, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   let log = '';
   proc.stdout.on('data', (d) => { log += d; });
@@ -175,9 +190,14 @@ export async function startApi({ port = 8731, auth = false } = {}) {
 
 export async function stopApi(api) {
   if (!api?.proc) return;
-  api.proc.kill('SIGTERM');
-  await sleep(300);
-  if (!api.proc.killed) api.proc.kill('SIGKILL');
+  if (api.proc.exitCode === null && api.proc.signalCode === null) {
+    const exited = new Promise((resolve) => api.proc.once('exit', resolve));
+    api.proc.kill('SIGTERM');
+    // proc.killed only means a signal was sent, not that the process exited.
+    const forceKill = setTimeout(() => api.proc.kill('SIGKILL'), 3000);
+    try { await exited; } finally { clearTimeout(forceKill); }
+  }
+  // Wait for exit before deleting SQLite files (important on Windows).
   // Remove the throwaway auth and apply-state stores (and their WAL/SHM
   // siblings) so repeated suite runs cannot accumulate temp databases.
   api.cleanup?.();

@@ -31,12 +31,23 @@ starts a background scrape run in a daemon thread inside the API process
 | Layer | Location | Role | State |
 |---|---|---|---|
 | Scraping | `agents/scrapper.py`, `tools/*scraper*.py` | 45+ boards → raw jobs (per-board `SCRAPER_TIMEOUT`; JobSpy opt-in via `ENABLE_JOBSPY` in isolated child process) | stateless per run |
-| Curation | `agents/curator.py`, `tools/cv_*.py`, `tools/deduplicator.py` | dedup (MD5 `job_fingerprint`), keyword + optional FAISS scoring, rank | `seen_jobs.json`, `cv_embeddings.json` |
+| Curation | `agents/curator.py`, `tools/cv_*.py`, `tools/deduplicator.py` | dedup (MD5 `job_fingerprint`), keyword + optional FAISS scoring, rank | `seen_jobs.json`, managed `cache/cv_embeddings/*.json` |
 | Persistence | Google Sheets via `tools/sheet_writer.py` | 5 tabs: ALL JOBS, TOP MATCHES, GOOD MATCHES, APPLIED, STATS | the Sheet |
 | Read API | `api/` | TTL cache over Sheets + `curated_jobs.json` enrichment left-join; action routers (scrape runs, tailored materials, CV profile edits) | in-process cache (90s) |
 | Dashboard | `frontend/` | bento metrics, job desk, drawer, resume studio, fill-only review-package cockpit, kanban | browser + `localStorage` (token/base URL) |
 | Edge (deploy) | `deploy/Caddyfile` + compose `caddy` service | reverse proxy 80/443 → `api:8000`; automatic Let's Encrypt + HTTP→HTTPS when `SITE_ADDRESS` is a hostname, plain `:80` on a bare IP | named volumes (certs) |
 | Automation | `scheduler.py`, `track.py`, `main.py`, `Run.py` | cron, tracker CLI, pipeline entry points; standalone CLI also has ATS Playwright fill (fill-only; blind submit permanently removed) | `data/`, `logs/` |
+
+### Per-CV semantic consistency (2026-10-15)
+
+`CVLibrary.pick_best` remains keyword-based. Curation uses that selected path
+for `CVEmbeddingCache.get` and `score_semantic`, not a global primary embedding.
+The single-CV fallback uses only `CV_PATH`. Managed JSON cache identities include
+source SHA-256, model name and schema version; edits invalidate parsed-library,
+pick and keyword-matcher caches as well. Cache writes are atomic and contain no
+raw CV text. Missing/failed semantics renormalize to keyword-only, never another
+CV's embeddings; a computed zero remains meaningful. These are personal-agent
+changes, independent of the deferred user product.
 
 ## 3. Data contracts
 
@@ -109,14 +120,27 @@ starts a background scrape run in a daemon thread inside the API process
 
    See `BACKEND.md` §4 and `PM.md` §5.
 
-## 4b. Planned — Phase 2.1 (design intent, not yet built)
+## 4b. Deferred user product / independent cache seam (2026-10-15)
 
-| Item | Design intent | Why it is shaped this way |
-|---|---|---|
-| **2.1a CV-upload-first** | Upload → existing CV parse chain → the parsed profile becomes the *active* matching profile for the session; Resume Studio diffs job `tech_stack` (through the same `cache.extract_skills` canonicalization used by `/api/skills`) against CV skills and surfaces the missing set | Reuses the parser and the skill canonicalizer rather than adding a second notion of "skill". The new capability is the **diff**, not the upload |
-| **2.1b Cache backend seam** | Put the TTL store in `api/cache.py` behind a small interface; keep in-process as the default; warn loudly at `--workers > 1` | The risk is not that multi-worker fails — it is that it *silently* succeeds while burning 4× Sheets quota and serving inconsistent reads. A seam keeps a future Redis swap contained; adding Redis now would be infrastructure for a scale problem this deployment does not have |
+Personal `main` remains software-development-focused, using the owner's on-disk
+CV and configured Sheets/LLM resources. The former short-term Phase 2.1a upload
+plan is superseded: CV upload belongs with profession-aware matching and Scenario
+B isolation on a future `user` branch. No merge into personal `main`, target date,
+branch creation or implementation is authorized by this documentation decision.
 
-Spec: `PM.md` §2.1. Operations/PII rules: `PRODUCTION.md` §8.
+The future architecture must define deployment model, database-backed ownership,
+per-user CV/jobs/tracker/run/artifact/cache isolation, user-owned provider/Sheets
+credentials and their secret lifecycle, plus profession-appropriate frontend
+onboarding and feedback. Existing actor attribution is not multi-tenancy, and
+existing SQLite tables do not isolate the whole pipeline. Never fall back to the
+owner's resources for an unconfigured user.
+
+Canonical scope, sequencing and release gates: `USER_PRODUCT.md`. Product
+tracker: `PM.md` §2.1 and §5. Operational constraints: `PRODUCTION.md` §9.
+
+**Independent low-priority work:** the 2.1b TTL cache backend seam and loud
+multi-worker warning remain planned, with in-process default. Redis is not
+being added now; this is not a prerequisite for the future product plan.
 
 ## 5. Failure modes
 

@@ -39,12 +39,12 @@ whatever the new version reports.
 
 Scans the LOCK, not requirements.txt, because the lock is the full transitive
 resolution — and every one of the 48 findings above is in a package
-requirements.txt does not mention. Caveat worth knowing: nothing currently
-INSTALLS from the lock (the Dockerfile installs requirements.txt), so this
-audits the best available record of what ships rather than a byte-exact
-manifest. Making the image install from the lock is the real fix and is a
-separate, riskier change — it has to be verified on the ARM deployment VM,
-which CI does not run.
+requirements.txt does not mention. The Dockerfile now installs the lock and
+checks dependency consistency, so audited application package versions match
+the intended runtime. Native x86-64/ARM64 CI builds additionally verify installed
+pins and runtime smoke tests; configured jobs are not evidence until they pass.
+This does not pin base-image digests, the uv bootstrap image or artifact hashes,
+and does not clear the recorded vulnerabilities.
 """
 
 from __future__ import annotations

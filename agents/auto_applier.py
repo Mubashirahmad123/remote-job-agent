@@ -20,6 +20,7 @@ import webbrowser
 import re
 import time
 import random
+from uuid import uuid4
 import sqlite3
 import json
 from datetime import datetime, timedelta
@@ -294,6 +295,11 @@ def _greenhouse_confirmation_data(page) -> Dict[str, Optional[str]]:
 
     return {"confirmation_path": None, "confirmation_message": None}
 
+def _review_screenshot_stamp() -> str:
+    """Concurrent fills must never share a second-resolution screenshot path."""
+    return datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid4().hex
+
+
 def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str], 
                           cover_letter: str, user_profile: Dict) -> Dict:
     result = {
@@ -320,7 +326,7 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
         
         screenshot_dir = Path("screenshots")
         screenshot_dir.mkdir(exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = _review_screenshot_stamp()
         
         # Name split: Greenhouse example/current boards expose separate
         # #first_name / #last_name inputs (not a single full-name field).
@@ -640,7 +646,7 @@ def _fill_lever_form(page, job_url: str, resume_path: Optional[str],
         
         screenshot_dir = Path("screenshots")
         screenshot_dir.mkdir(exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = _review_screenshot_stamp()
         
         # Name
         try:

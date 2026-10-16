@@ -1,30 +1,131 @@
 # PM.md — Project Tracker (Phases, Status, Next)
 
-Living plan for the remote-job-agent build. Status last reconciled 2026-10-09.
+Living plan for the remote-job-agent build. Status reconciled 2026-10-15. Section 1 is the current checklist; dated historical specifications below are not new work orders.
 
 ---
 
-## 1. Status (2026-10-01)
+## 1. Current status and checklist (2026-10-16)
 
-| Phase | Scope | State |
+**Legend:** checked = implementation exists, not necessarily merged or deployed.
+Pending verification is listed separately. The published baseline on
+`arena/393bb940-remote-job-agent` passed CI; the new fill-timeout/result-handoff
+fix is included in PR #31. See its latest checks for hosted CI status; the
+live-browser rerun remains pending. The 2026-10-16 dependency remediation uses
+CrewAI 1.6.1 with patched MCP 1.30.0 (a deliberate compatibility rollback);
+see `deploy/CI_FAILURE_REMEDIATION.md`. Nothing is merged or deployed. `phase 3` work is user-reported and has not been integrated
+or independently checked in this checkout.
+
+### Done / implemented
+
+- [x] Core scraper, dev-role filtering, deduplication, CV scoring/ranking, Sheets
+      output, scheduler and tracker CLI.
+- [x] Read/action APIs, live dashboard/Job Desk, Scrape Monitor, skills aggregate,
+      tracker status mapping, CV profile editing/variants and tailored materials.
+- [x] Authentication, roles, documented security hardening and Scenario A actor
+      attribution (shared data, not per-user isolation).
+- [x] Greenhouse/Lever fill-and-review; unsupported ATS package generation.
+- [x] Real-Chrome Democorp fill-only smoke **reported by the user on 2026-10-15**:
+      supplied screenshot shows applicant fields filled and resume/cover letter
+      listed as attached. No submission reported. Partial verification only:
+      API fill timed out after 90 seconds and screenshot endpoint returned 404.
+      See `LIVE_SUBMIT.md` run log; no live rerun performed in this session.
+- [x] Fill timeout/result-handoff fix implemented locally: configurable foreground
+      wait (default 180s), durable pending/result polling, periodic claim renewal,
+      late screenshot/metadata persistence and stale-worker fencing. 20 Python
+      handoff cases and 4 UI-polling cases pass. This is not a new live fill pass.
+- [x] Greenhouse intent/submit code and safety gates. **No verified live submit;
+      kill-switch and UI submit toggle remain disabled.** Lever has no submit path.
+- [x] Resume CV-fidelity improvements and actual generated-markdown preview.
+- [x] Per-CV semantic scoring, content/model/schema cache invalidation, safe
+      keyword-only fallback and regression tests (current working branch).
+- [x] Docker installation from the existing universal lock, dependency consistency
+      check and regression guards. **Native x86-64/ARM64 image builds/runtime
+      checks passed in GitHub CI run 38743655019 at code commit `0971322`.**
+      Job/step metadata reviewed; raw log download blocked in this sandbox.
+      Evidence/limits: `deploy/DOCKER_CI_VERIFICATION.md`.
+- [x] Docker/Compose/Caddy and Oracle deployment preparation; this is not proof
+      of an actual live VM deployment.
+- [x] Tracker/Kanban interaction coverage: 22 jsdom tests over real routes and
+      tracker services with isolated fake Sheets, plus 22 API/runner contracts.
+      Failed-write/local-success, URL-key routing, repeated notes, double-clicks
+      and false-success refresh handling fixed. Manual final review unchanged.
+- [x] Targeted E2E `.env`/auth revalidation: 6 dummy-credential checks reproduce
+      the historical missing-pin failure and prove current empty-string pins
+      prevent it, including trailing-comment values and isolated login. Stale
+      warning retired with evidence; production auth unchanged (see `TESTER.md`).
+- [x] Existing automated suites: latest recorded local results below.
+- [x] Windows UTF-8/path fixes and flake investigation **reported complete on
+      `phase 3`**. The flake was not reproduced; the timeout change is only a
+      possible explanation, not a confirmed root cause.
+- [x] Future `user` product decision documented in `USER_PRODUCT.md`; CV upload
+      is explicitly removed from the immediate personal-main roadmap.
+
+### Not done — integration and personal-agent work
+
+- [ ] Review and merge the published working-branch changes only after approval;
+      CI passed, but no merge is authorized here. Review `phase 3` separately; verify
+      its portability patch on the integrated revision rather than duplicating it.
+- [ ] Validate the new handoff fix in an authorized live Chrome fill-only rerun
+      and fresh image CI before release. Use Regenerate for the previously
+      packaged demo, retain step timings, confirm final status and screenshot
+      GET 200. The exact slow ATS operation remains unmeasured; do not infer
+      confirmation metadata or readback results from the original PNG. No
+      intent/submit calls or CAPTCHA bypass authorized by this task.
+- [ ] Run real-browser application checks for responsive layout, keyboard/pointer
+      behavior, login and enforced CSP. The configured Docker Chromium launch
+      smoke is not full application/browser coverage.
+- [ ] Verify actual Oracle VM deployment and operational behavior. Prep docs and
+      a passing container smoke do not prove the deployed services work.
+- [ ] Reduce the recorded vulnerability baseline through tested upgrades. Lock
+      installation does not clear existing advisories.
+- [ ] Add the cache-backend seam and multi-worker warning (§2.1b), low priority
+      while running one worker. Redis is not required now.
+
+### Not done — only before expanding automated submission
+
+- [ ] **Form-structure snapshot comparison:** compare the reviewed form's field
+      schema with the fresh submission form and require review again on relevant
+      changes. Typed-value readback/repair is already implemented; this is a
+      different check. Existing gates catch many changes, but do not explicitly
+      compare a structure change that preserves confirmation metadata and still
+      fills cleanly. Needed before unattended/high-volume use.
+- [ ] **Greenhouse submit-path live verification:** the 2026-10-03 recon was
+      blocked by absent confirmation metadata and reCAPTCHA. The user-reported
+      2026-10-15 Chrome run verified visible filling/attachments only, not intent,
+      full-path submit dry run, armed submission or confirmation. Future work
+      must follow `LIVE_SUBMIT.md`, human approvals and fail-closed gates; this
+      report does not authorize enabling submit or bypassing a captcha.
+
+### Deferred / not in the current personal-main scope
+
+CV upload, active-upload switching, profession-aware matching/gap analysis,
+user-owned configuration/credentials and database-backed user isolation belong
+on the future `user` product track, with no target date. See `USER_PRODUCT.md`.
+Lever submit remains deliberately out of scope. No branch creation is authorized
+by this checklist.
+
+### Latest recorded verification (2026-10-15)
+
+| Environment | Pytest | Frontend E2E |
 |---|---|---|
-| 0 — Pipeline | 45+ scrapers, curator, Sheets dashboard, tracker CLI, Docker | ✅ done (pre-existing) |
-| 1 — Read API | `api/` factory+deps+cache+schemas+mappers+5 routers, 18 isolated tests | ✅ done, verified live (12 Sheet rows) |
-| 1b — API split | monolith `app.py` → `deps/mappers/routers/*`, static UI mount | ✅ done, 18/18 green |
-| 1c — Frontend wiring | `api.js` client, `store` normalization+fallback, jobDesk/dashboard/tracker/drawer live, source badges | ✅ done, verified via TestClient |
-| 1d — Data honesty | snapshot fallback, `data_source`, cp1252 emoji-crash fix in `sheet_writer.py` | ✅ done, live Sheets confirmed |
-| 1e — Docs | README API section, PRODUCTION/ARCHITECTURE/BACKEND/FRONTEND/PM | ✅ done |
-| 2 — Action API | scrape ✅ + status card; resume/cover-letter ✅ (Studio wired); CV profile GET+PUT ✅ + variants ✅; fill-and-review API ✅; cockpit queue connected | 🟡 in progress — submit remains gated; skills endpoint pending |
-| 3 — Polish | auto-apply telemetry wiring, E2E checks | 🟡 in progress — tracker review mapping done |
-| 4 — Free deployment | compose `api` + `caddy` (automatic Let's Encrypt via `SITE_ADDRESS`), `deploy/` (Oracle Always Free walkthrough + `setup-vm.sh` + `Caddyfile`), `auth-bootstrap.js` token-in-URL capture, tier env vars surfaced | ✅ done (2026-10-03) — code/docs complete; live VM launch is the remaining manual step (`deploy/DEPLOY_ORACLE.md`) |
-| 2 — Action API | scrape ✅ + status card; resume/cover-letter ✅ (Studio wired); CV profile GET+PUT ✅ + variants ✅; fill-and-review API ✅; cockpit queue connected; skills aggregate ✅ | ✅ endpoints complete — 2b live submit remains unproven: 2026-10-03 Democorp recon found no confirmation metadata, so `/intent` would fail closed before fill or click; reCAPTCHA also present. No submission occurred. |
-| 2.1 — CV-upload-first + cache seam | 2.1a upload→parse→match→gap analysis in Resume Studio; 2.1b cache backend seam + multi-worker warning | ⬜ planned, target 3–4 days from 2026-10-03 (spec in §2.1) |
-| 3 — Polish | auto-apply telemetry wiring, E2E checks | 🟡 in progress — tracker review mapping done; frontend E2E smoke landed (19 assertions, mutation-tested) |
-| 3 — Resume CV fidelity | grounded prompts, rejected-entry filtering, footer strip, Arial 1-page passes, live markdown preview (`resume_generator` + Studio) | ✅ done (2026-10-09, PR #29) — tailoring no longer invents projects/experience; preview shows the real generated resume |
+| Current local lock-only Linux x86-64, including review handoff/polling fix | 1042 passed, 8 skipped | 68 passed |
+| GitHub CI run 38743655019, code commit 0971322 | Full API suite passed; raw counts not downloaded | Job passed |
+| Native Docker CI in that run, x86-64 + ARM64 | Build/pins/API/auth/Chromium/leak steps passed | Not a dashboard-browser pass |
+| Earlier development, before tracker tests, with optional FAISS available | 988 passed, 2 skipped | 36 passed |
+| Earlier lock-only Linux x86-64, before tracker tests | 982 passed, 8 skipped | 36 passed |
 
-Suite last verified 2026-10-09 in CI (Linux) after PR #29 — green; the only skip remains the Lever exact confirmation-copy assertion. **Local Windows runs are not a release gate**: 16 tests fail there on the cp1252 default codec (`Path.read_text()` without `encoding=` reading UTF-8 sources — 13 in `test_glm_client.py`, plus one each in the CSP / embedding-cache / url-guard scans and one `test_api_phase2` isolation flake that passes alone). Encoding fix scoped in §3 Backlog. Historical note — full suite last verified 2026-10-03: **336 passed, 1 skipped** (+45 since the 291 baseline: `/api/skills`, scraper parity, source naming), plus 19 frontend E2E assertions (`./tests/e2e/run.sh`) (`venv\Scripts\python.exe -m pytest tests/ -q`). The skip is the Lever exact confirmation-copy assertion, now a deliberate documented limitation (Lever submit deferred — no paid trial account; see 2b split below), not a temporary blocker. Scrape-log fixes landed the same day (curator sign format, Arbeitnow `company_name` backfill, single-loop poll guard, and the spurious `scraped_at` missing-column warning); details in `CHANGELOG.md` and `PRODUCTION.md` §7. To be unambiguous about that last one: `scraped_at` **is** populated — `prepare_job_for_sheet` (`tools/sheet_writer.py`) sets `scraped_at`/`status`/`job_fingerprint` defaults on every job before the row is built, on both write paths. The warning was false: `append_rows` validated its sample job *before* those defaults were applied, so it reported columns that the very next step filled in. The fix applies the defaults to the sample first — nothing was suppressed or merely relocated, and a genuinely missing column still warns. Score parsing is also hardened: `_safe_score` (`agents/auto_applier.py`) and the sheet-writer twin coerce `"85.0"`, `"87%"`, `""`, `None`, and bools instead of raising on `int("85.0")`; unparseable values score 0 and fall to `batch`. Covered by `tests/test_apply_submit_primitives.py` (`"85.0"`/`""`/`None`/`"95%"`). Claim, intent, validation, and Greenhouse verification helpers are implemented; Greenhouse `/intent` + `/submit` routes exist, are kill-switch gated (403 while `SUBMIT_ENABLED=False`), and are tested. Lever has no submit path by design.
+Current local full run: 1042 passed, 8 skipped, 32 warnings; frontend 68 passed
+(36 existing + 22 tracker + 6 environment + 4 review polling tests). Lock-only skips: Lever confirmation copy and
+seven optional FAISS-dependent cases. Earlier development skips: Lever and the
+optional crawl4ai/playwright-stealth import check. `uv pip check` passes in the
+current locked environment. Earlier pin auditing and x86-64/ARM64 dry-run
+resolution passed. Docker is unavailable locally, but both native Docker jobs
+now passed on GitHub at `0971322`; all five CI jobs are green. Step conclusions
+and runner notices were reviewed via the API; raw-log download was blocked.
+Oracle deployment remains unverified. Evidence: `deploy/DOCKER_CI_VERIFICATION.md`.
+Earlier counts in dated sections below are historical.
 
-## 2. Next: Phase 2 — Action API (spec)
+## 2. Implemented Phase 2 — Action API reference
 
 Goal: dashboard buttons do real work, behind the existing safety gates.
 
@@ -80,7 +181,7 @@ No gate is considered closed by documentation or a partial implementation:
 each must have its §2b.7 tests passing before the endpoint code in execution
 order step 4 is added. 2b has no target date.
 
-### Current 2b execution status (2026-10-01)
+### Historical 2b execution status (2026-10-01)
 
 | Step | State | Evidence / remaining work |
 |---|---|---|
@@ -95,73 +196,32 @@ open until its application tab closes (maximum 30 minutes), and the review fill
 carries the final tailored materials. The legacy CLI blind submit is permanently
 removed, so there is no unverified submit path left anywhere.
 
-## 2.1 Phase 2.1 — planned (target: 3–4 days from 2026-10-03)
+## 2.1 Scope decision — personal main vs future user product (2026-10-15)
 
-Two items promoted off the backlog into scheduled work. They are unrelated in
-scope — one is a user-facing feature, one is infrastructure — and are sized very
-differently. Do them in that order; the feature is the one with actual user
-value.
+The previous 3–4 day CV-upload plan is **superseded**. CV upload is not the
+next feature for personal `main`. Keep the owner's software-development filters,
+on-disk CV workflow, Sheets setup and environment-supplied credentials intact.
 
-### 2.1a CV-upload-first flow (the substantial one)
+### 2.1a CV-upload-first — deferred to the future `user` product
 
-**Today:** the CV is a fixed file on disk (`my_cv.pdf` / `CV_PATH`, or a folder
-via `CV_DIR`). Everything downstream — scrape relevance, matching, scoring,
-Resume Studio — runs against whatever file happens to be there. Changing CV
-means replacing the file and restarting.
+CV upload, active-profile selection and gap analysis move together with
+profession-agnostic matching and Scenario B user isolation. Other users may work
+in any profession and must supply their own LLM keys and optional Sheets
+configuration; they must never silently use the owner's CV, Sheet or API quota.
+This requires coordinated backend, frontend, database/storage and secret-handling
+work, not a standalone upload button.
 
-**Phase 2.1a flips the order:** the CV becomes the *starting point of a
-session*. Upload through the dashboard, and everything downstream uses that
-profile from then on.
+**Destination:** a future branch named `user`, not a merge into personal `main`.
+**Status:** deferred, no target date; no branch creation or implementation now.
+The present documentation work does not change the session branch.
 
-What it concretely delivers:
+`USER_PRODUCT.md` is the canonical future scope: deployment-model decisions,
+profession-aware matching, ownership-aware persistence, per-user credentials,
+onboarding, safe upload/retention, tests and release gates. The old single shared
+profile upload acceptance criteria are replaced by that plan. Existing
+`CV_PATH`/`CV_DIR`, profile editing and variant behavior remain unchanged.
 
-1. **Upload control in the dashboard** — PDF/DOCX in, parsed through the CV
-   parsing chain that already exists for `CV_PATH`/`CV_DIR`, into the same
-   structured profile shape. No new parser.
-2. **The parsed profile becomes the active matching profile** for the session —
-   jobs score against *this* CV, not the on-disk default.
-3. **Resume Studio surfaces gaps** — this is the genuinely new capability, not
-   just a new entry point. Studio tailors an existing profile per job today;
-   this adds a comparison: *"this posting wants Kubernetes, your CV never
-   mentions it — add a project or skill line?"* It diffs what the job asks for
-   against what the uploaded CV actually contains.
-
-Why it's worth building (the two real workflows):
-
-- **Try a CV variant** — backend-focused vs fullstack — without touching the
-  `CV_DIR` layout or restarting the server; upload and watch scoring change.
-- **Iterate on the CV itself** — upload a draft, see which *real* postings it's
-  weak against, add the line Studio flagged, re-upload, measure the
-  improvement. That is a different workflow from "tailor a resume from a CV I
-  already finalized": it uses live job data to tell you what the CV is missing.
-
-What it is **not**: a replacement for the `CV_DIR` multi-CV selection (choosing
-the best of several CVs per job). That exists and works. This is about the
-first CV entering the system interactively, with feedback.
-
-Scope honesty: this touches the upload path, the parsing pipeline, Studio's
-comparison logic, and new UI. It is not an afternoon's work like the
-`by_source` fix — it is the largest remaining item by a distance. Build it
-properly or not at all.
-
-Acceptance criteria:
-
-- [ ] `POST /api/cv/upload` (multipart) — validates type + size, parses via the
-      existing chain, returns the structured profile; rejects unparseable files
-      with a stated reason rather than a silent empty profile.
-- [ ] Uploaded profile is what `/api/jobs` scoring and Resume Studio read, and
-      `/api/cv/profile` reports which CV is active (uploaded vs on-disk) so the
-      UI can never imply the wrong one is in use.
-- [ ] Gap analysis: job `tech_stack` (canonicalized via the same
-      `cache.extract_skills` path, so it benefits from the role-noun purge)
-      diffed against CV skills → explicit missing list surfaced in Studio.
-- [ ] Clear reset path back to the on-disk CV; the active CV is visible at all
-      times (no silent state).
-- [ ] Uploaded CVs are PII — see PRODUCTION.md §8 for storage/retention rules.
-      Never committed; `.gitignore` covers the upload dir.
-- [ ] Tests: upload happy path, rejected file types, oversize, unparseable,
-      profile switching, gap-diff correctness. Plus an E2E assertion that the
-      dashboard shows which CV is active.
+The cache work below is independent and remains low priority.
 
 ### 2.1b Multi-worker cache (small, and only if we ever need it)
 
@@ -191,41 +251,68 @@ So the Phase 2.1 deliverable is deliberately **not** "add Redis". It is:
       detected with the in-process backend, log a loud warning naming the
       consequence (duplicate Sheet reads, cross-worker inconsistency). Failing
       silently into 4× quota burn is the actual risk.
-- [ ] Documented in PRODUCTION.md §8 — including that Redis is intentionally
+- [ ] Documented in PRODUCTION.md §9b — including that Redis is intentionally
       *not* added until someone needs multi-worker.
 
 Explicit non-goal: standing up Redis now. If that changes, the seam makes it a
 contained change rather than a refactor.
 
+### Multi-CV semantic scoring — implemented in working branch (2026-10-15)
+
+Keyword selection, semantic scoring and downstream materials now use the same
+selected CV. `CV_DIR`-only and single-`CV_PATH` flows are supported. Embeddings
+are cached per resolved CV path with source-content/model/schema invalidation;
+CV edits also invalidate parsed-library/pick/keyword-matcher caches. Missing
+semantics retain full keyword weight, with no fallback to another CV. Existing
+saved scores are not automatically rescored. No CV upload, tenancy, credential
+redesign or submit change is included.
+
+Regression coverage: `tests/test_multi_cv_semantic.py` (routing, content/model
+invalidation, malformed caches, failure recovery, single-CV fallback, genuine
+zero, numerical FAISS and real DOCX extraction with a deterministic encoder).
+Sentence-transformer model download/live model quality is not validated here.
+At semantic-feature completion: **976 pytest passed, 2 skipped; 36 frontend E2E passed**. Later Docker guards brought development verification to **988 passed, 2 skipped**; see §1.
+
+### Docker locked dependencies — native CI passed (2026-10-15)
+
+Docker now installs `requirements.lock.txt` and checks dependency consistency.
+Native x86-64/ARM64 CI matrix builds the image, verifies active installed pins,
+non-root API startup, Chromium launch, API/auth behavior and image leaks.
+No requirements or lock pins were regenerated for this switch.
+
+Local checks: a fresh Linux x86-64 locked Python environment installed all 179
+active pins and passed `uv pip check`; **982 pytest passed, 8 skipped; 36 frontend
+E2E passed**. Seven skips require optional FAISS, absent from the lock; one is
+Lever's deliberate confirmation-copy skip. `uv` dry-run resolution passed for
+Linux x86-64 and ARM64. Those were pre-CI results. Native image builds,
+lock/dependency checks, non-root API/Chromium, API/auth suites and leak checks
+subsequently passed on both architectures in GitHub run 38743655019 at `0971322`.
+The leak inventory now fails closed, with three additional local guards. Oracle
+VM operational verification remains pending. See `deploy/DOCKER_CI_VERIFICATION.md`
+for exact scope, raw-log limitations and the Ubuntu runner migration notice.
+
 ## 3. Backlog
 
-- **Domain-agnostic matching — separate branch, deferred (no target date):**
-  main stays dev-only — the scraper filters, rejection engine, scoring
-  categories, and resume/cover-letter generation all assume software
-  development roles, which is intentional and stays for personal use. A future
-  *separate branch* will remove that assumption so an uploaded CV's domain
-  (customer support, cybersecurity, sales, etc.) drives matching instead of a
-  hardcoded dev filter. Touches `TECH_FILTER`/`DEV_TITLE_FILTER`
-  (`agents/scrapper.py`), the rejection engine (`tools/cv_matcher.py`),
-  `CORE_CATEGORIES`, and role-detection (`agents/gemini_tools.py`). **Do not
-  build on main.**
-- **Windows/cp1252 test failures (scoped, small, not yet landed):** the
-  source-scanning tests read repo files with `Path.read_text()` and no
-  `encoding=` — the locale codec on Windows (cp1252) cannot decode the UTF-8
-  sources, so 13 `test_glm_client.py` consumer tests plus
-  `test_content_security_policy`, `test_embedding_cache` and `test_url_guard`
-  scans fail locally while CI (Linux, UTF-8 default) stays green. Fix: pass
-  `encoding="utf-8"` at each read site; also note the observed
-  `test_api_phase2::test_get_one_and_list` full-suite-only flake on Windows
-  (passes in isolation — likely shared-state leakage between tests, worth a
-  look when the encoding fix lands). Delivered as its own small PR.
-- **CV-upload-first flow → promoted to Phase 2.1a** (see §2.1; spec, scope and
-  acceptance criteria live there). Originally from operator notes: upload the
-  CV first, scrape/match on that basis, and have Resume Studio surface CV
-  sections not yet added (projects, certifications).
+- **Future user product — deferred, no target date:** domain-agnostic matching,
+  CV upload, database-backed user isolation, user-owned LLM/Sheets credentials
+  and frontend onboarding belong together on a future `user` branch, not in
+  personal `main`. No implementation or branch creation now. See
+  `USER_PRODUCT.md` and §2.1a for the revised scope.
+
+- **Windows portability — reported complete on `phase 3`, integration pending:**
+  explicit UTF-8 reads and Windows path normalization are reported fixed there.
+  No matching test-file patch is present in this checkout. Review/integrate that
+  branch's changes and verify Windows after integration. The historical
+  `test_get_one_and_list` flake passed five isolated runs and the reported full
+  suite; its root cause is unconfirmed, so do not label the earlier timeout
+  extension a proven fix.
+
+- **CV-upload-first flow — deferred with the user product**, not a scheduled
+  personal-agent feature. See §2.1a and `USER_PRODUCT.md`.
+
 - `POST /api/apply/{fp}/intent` and `/submit` are Greenhouse-only and implemented; Lever submit will not be built (fill-only indefinitely). UI toggle unlock stays a separate decision after review.
 - **Field-drift guard gap (known limitation, narrowed 2026-10-01):** `_run_greenhouse_submit` refills in a fresh page and the metadata-change guard compares only `confirmation_path/message` + requires `filled_ready`. The refill now verifies typed-field readback (`verified`/`repaired`), minimum profile (name + email), and attachment proof, and the artifact stores `field_verification` + `profile_fields_verified` — so a same-shape posting change that drops/renames fields fails closed instead of passing silently. What remains is pure field-shape drift that keeps identical confirmation metadata *and* still fills cleanly. Accepted risk for supervised single runs with human screenshot review; unattended/high-volume submit use must wait for a field-snapshot diff fix. Any future toggle unlock carries this caveat.
-- Kanban `review` column is now backed by fill-only/package statuses (`filled_ready`, `needs_review`, `package_only`, `custom_questions`, …) mapped in `tracker.js` — done 2026-10-01. Remaining: tracker E2E coverage.
+- Kanban `review` column is now backed by fill-only/package statuses (`filled_ready`, `needs_review`, `package_only`, `custom_questions`, …) mapped in `tracker.js` — done 2026-10-01. Tracker interaction/persistence/failure coverage added 2026-10-15 (see §1).
 - ~~`by_source` naming (`RemoteOK` vs `RemoteOKAPI`)~~ — **done 2026-10-03**:
   canonicalized at write *and* read (`tools/sources.py`). Scope was wider than
   the ticket: `Remojobs-Frontend/Backend/Fullstack` are Remotive API calls and
@@ -245,7 +332,9 @@ contained change rather than a refactor.
   The 2026-10-03 read-only Democorp demo-board recon is a recorded pre-flight
   block, not verification: confirmation metadata was absent (`/intent` would
   return 502) and reCAPTCHA was present. No dry run, armed run, or submission
-  was performed.
+  was performed. A later user-reported 2026-10-15 Chrome run reached visible
+  fill/attachments but hit the 90-second API timeout and screenshot URL 404;
+  it did not call intent/submit or verify confirmation. See the run log.
 
 ## 4. Definition of Done (every phase)
 
@@ -297,6 +386,10 @@ kept as the *before* picture — read it as history, not as current state.
 
 ### Explicitly Deferred — Scenario B (True Multi-Tenancy)
 
+As of 2026-10-15, this is part of the future `user` product together with CV
+upload and profession-agnostic matching (`USER_PRODUCT.md`), not an extension
+to personal `main`. Shared-data Scenario A remains shipped and unchanged.
+
 | Scenario B Item | Status |
 |---|---|
 | Per-user CV / CV_DIR isolation | ⬜ Deferred — separate redesign |
@@ -307,7 +400,14 @@ kept as the *before* picture — read it as history, not as current state.
 
 Same gating discipline as Docker/Celery/ML-classifier elsewhere in this doc — not built until explicitly scoped and approved.
 
-## 2b Submit Specification
+## 2b Submit Specification — historical implementation plan
+
+The following preserves the original design/execution order, not current
+permission to unlock submit. Current status is §1. Current route authorization
+is documented in `BACKEND.md` §4: session or dedicated `APPLY_API_TOKEN`, with an
+admin session required for submit and session precedence. Older Bearer-only
+wording below is historical. The kill-switch and explicit human approval remain
+independent gates; completing helper tests does not authorize enabling the UI.
 
 ### 0. Preconditions (must land before any 2b code)
 

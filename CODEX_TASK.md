@@ -1,4 +1,12 @@
-# Task brief for Codex
+# Historical task brief for Codex — not an active work order
+
+> Archived status note (2026-10-15): this brief refers to a former session branch
+> and predates current CI/auth changes. The recorded Democorp recon stopped at
+> missing confirmation metadata; no dry run, armed run or submission followed.
+> See `LIVE_SUBMIT.md` run log, `PM.md` §1 for current work and `BACKEND.md` for
+> current auth. Commands/branch names below are historical, not instructions to
+> switch branches, arm submit, push or merge now. Current session work remains
+> on its assigned branch. Keep `SUBMIT_ENABLED=False` and human approval gates.
 
 Two jobs, **in this order**:
 

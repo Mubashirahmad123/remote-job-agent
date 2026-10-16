@@ -18,6 +18,10 @@
 #     python deploy/dependency_audit.py --update-baseline
 #
 # Recorded: 2026-10-08
+# 2026-10-16: MCP findings removed after upgrading to 1.30.0. No new MCP
+# exception was accepted. CrewAI 1.6.1 requires json-repair==0.25.2; migrate
+# the EXISTING json-repair advisory from 0.25.3 to 0.25.2 (same unfixed issue).
+# See deploy/CI_FAILURE_REMEDIATION.md for the compatibility rollback/tradeoff.
 
 chromadb==1.1.1 PYSEC-2026-311
 chromadb==1.1.1 PYSEC-2026-3813
@@ -41,11 +45,8 @@ crawl4ai==0.3.74 PYSEC-2026-587
 crawl4ai==0.3.74 PYSEC-2026-588
 crawl4ai==0.3.74 PYSEC-2026-596
 crawl4ai==0.3.74 PYSEC-2026-798
-json-repair==0.25.3 GHSA-xf7x-x43h-rpqh
+json-repair==0.25.2 GHSA-xf7x-x43h-rpqh
 lxml==5.4.0 PYSEC-2026-87
-mcp==1.26.0 PYSEC-2026-3481
-mcp==1.26.0 PYSEC-2026-3482
-mcp==1.26.0 PYSEC-2026-3483
 pdfminer-six==20231228 PYSEC-2026-1761
 pdfminer-six==20231228 PYSEC-2026-1762
 pillow==10.4.0 PYSEC-2026-165

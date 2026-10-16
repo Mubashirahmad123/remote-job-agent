@@ -176,6 +176,11 @@ JobAgent.api = (() => {
     });
   }
 
+  async function getReviewStatus(fingerprint, runId) {
+    return request('/api/apply/' + encodeURIComponent(fingerprint) + '/review-status'
+      + query({ run_id: runId }));
+  }
+
   async function getApplyQueue({ threshold = 0, limit = 3 } = {}) {
     return request('/api/apply/queue' + query({ threshold, limit }));
   }
@@ -283,6 +288,7 @@ JobAgent.api = (() => {
     createResume,
     createCoverLetter,
     applyReview,
+    getReviewStatus,
     getApplyQueue,
     getPackagedFingerprints,
     getMe,

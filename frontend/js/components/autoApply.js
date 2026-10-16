@@ -114,6 +114,24 @@ JobAgent.autoApply = {
     }
   },
 
+  async awaitReview(fingerprint, response, { interval = 2000, maxWait = 35 * 60 * 1000 } = {}) {
+    if (response.status !== 'review_pending') return response;
+    const runId = response.review_run_id;
+    if (!runId) throw new Error('Pending review has no run ID; do not resubmit.');
+    this.appendTerminalLine('[PENDING] Fill is still running. Waiting for its saved result; nothing was submitted.', 'term-amber');
+    const deadline = Date.now() + maxWait;
+    while (response.status === 'review_pending') {
+      if (Date.now() >= deadline) throw new Error('Review status wait ended. The fill may still be running; check its status before retrying.');
+      await new Promise((resolve) => setTimeout(resolve, interval));
+      try {
+        response = await JobAgent.api.getReviewStatus(fingerprint, runId);
+      } catch (_) {
+        throw new Error('Review status refresh failed. The fill may still be running; do not resubmit blindly.');
+      }
+    }
+    return response;
+  },
+
   toQueueResult(fingerprint, job, response) {
     // Single response -> view-model mapping, shared by the bulk queue and the
     // per-job regenerate action so the two can never drift.
@@ -195,7 +213,7 @@ JobAgent.autoApply = {
         const fingerprint = job.job_fingerprint || job.id;
         this.appendTerminalLine('[PACKAGE ' + (index + 1) + '/' + jobs.length + '] ' + (job.job_title || 'Untitled') + ' @ ' + (job.company || 'Unknown company'), 'term-cyan');
         try {
-          const response = await JobAgent.api.applyReview(fingerprint);
+          const response = await this.awaitReview(fingerprint, await JobAgent.api.applyReview(fingerprint));
           const result = this.toQueueResult(fingerprint, job, response);
           this.latestQueueResults.push(result);
           const needsReview = result.status === 'needs_review';
@@ -261,7 +279,7 @@ JobAgent.autoApply = {
     this.appendTerminalLine('[REGENERATE] Rebuilding package for ' + label + ' with a fresh tailored resume + cover letter.', 'term-indigo');
     if (this.btnRunAutoApplyQueue) this.btnRunAutoApplyQueue.disabled = true;
     try {
-      const response = await JobAgent.api.applyReview(fingerprint, { regenerate: true });
+      const response = await this.awaitReview(fingerprint, await JobAgent.api.applyReview(fingerprint, { regenerate: true }));
       const result = this.toQueueResult(fingerprint, job, response);
       this.latestQueueResults = [result];
       if (JobAgent.store.loadPackages) await JobAgent.store.loadPackages();

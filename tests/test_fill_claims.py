@@ -224,7 +224,7 @@ class TestHeartbeat:
 
     The stale window has to mean "no heartbeat for this long", not "running
     for this long". A fill legitimately takes minutes (LLM resume, LLM cover
-    letter, then an ATS fill that alone waits up to 90s), so a TTL measured
+    letter, then a slow ATS fill with periodic worker heartbeats), so a TTL measured
     from claimed_at expires DURING a normal fill — the next request reclaims
     the job and both generate. That is the duplicate-package bug returning
     through a different door, so it gets pinned here.

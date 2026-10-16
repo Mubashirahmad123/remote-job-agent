@@ -9,6 +9,9 @@ Usage:
 
 import os
 import json
+import hashlib
+import math
+import tempfile
 from pathlib import Path
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
@@ -68,12 +71,14 @@ def section_weight(name: str) -> float:
     return SECTION_WEIGHTS.get(name, DEFAULT_SECTION_WEIGHT)
 
 _model = None
+_model_name = None
 
 
 def _get_model():
-    global _model
-    if _model is None and SENTENCE_AVAILABLE:
+    global _model, _model_name
+    if SENTENCE_AVAILABLE and (_model is None or _model_name != EMBEDDING_MODEL):
         _model = SentenceTransformer(EMBEDDING_MODEL)
+        _model_name = EMBEDDING_MODEL
     return _model
 
 
@@ -156,6 +161,142 @@ def save_cv_embeddings(embeddings: dict, path: Optional[Path] = None):
         json.dump(embeddings, handle)
 
 
+# Managed per-file caches are separate from the legacy bare-vector JSON API.
+# A bare cache cannot prove which CV/model produced it and is never substituted
+# for a selected CV. One stable slot per resolved path bounds growth on edits.
+EMBEDDING_CACHE_DIR = BASE_DIR / "cache" / "cv_embeddings"
+EMBEDDING_CACHE_VERSION = 1
+
+
+def _valid_embeddings(data) -> bool:
+    """Reject empty, non-finite or mixed-dimension section vectors."""
+    if not isinstance(data, dict) or not data:
+        return False
+    dimension = None
+    for section, vector in data.items():
+        if not isinstance(section, str) or not isinstance(vector, list) or not vector:
+            return False
+        if not all(
+            isinstance(v, (int, float)) and not isinstance(v, bool)
+            and math.isfinite(v) for v in vector
+        ):
+            return False
+        if dimension is not None and len(vector) != dimension:
+            return False
+        dimension = len(vector)
+    return True
+
+
+class CVEmbeddingCache:
+    """Lazy embeddings for the exact CV used for keyword scoring.
+
+    Hash the source bytes, not mtime/size, so in-place edits invalidate both
+    memory and disk caches. Model name and cache schema are also part of the
+    identity. No parsing LLM is used: extraction is local PDF/DOCX text reading.
+    Instantiate once per curation run to memoize failures without retrying a
+    missing model for every job; the next run can retry a recovered dependency.
+    """
+
+    def __init__(self, cache_dir: Optional[Path] = None):
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else EMBEDDING_CACHE_DIR
+        self._memory = {}
+        self._notices = set()
+
+    def warn_once(self, path: Path, reason: str) -> None:
+        """Report a CV-specific degradation once per run without CV contents."""
+        key = (str(path), reason)
+        if key not in self._notices:
+            self._notices.add(key)
+            print(f"Semantic matching: {path.name}: {reason}")
+
+    def cache_path(self, cv_path) -> Path:
+        path = Path(cv_path)
+        if not path.is_absolute():
+            path = BASE_DIR / path
+        path = path.resolve()
+        slot = hashlib.sha256(str(path).encode("utf-8")).hexdigest()
+        return self.cache_dir / f"{slot}.json"
+
+    def get(self, cv_path) -> Optional[dict]:
+        """Return validated sections or None (explicit keyword-only fallback)."""
+        path = Path(cv_path)
+        if not path.is_absolute():
+            path = BASE_DIR / path
+        path = path.resolve()
+        if not SENTENCE_AVAILABLE or not FAISS_AVAILABLE:
+            self.warn_once(path, "optional semantic dependencies unavailable; using keyword-only scoring")
+            return None
+        try:
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            self.warn_once(path, "CV unreadable; using keyword-only scoring")
+            return None
+        identity = {
+            "version": EMBEDDING_CACHE_VERSION,
+            "cv_sha256": digest,
+            "model": EMBEDDING_MODEL,
+        }
+        key = str(path)
+        cached = self._memory.get(key)
+        if cached is not None and cached[0] == identity:
+            return cached[1]
+
+        # Memoize unsuccessful work for this source/model only. Never return
+        # a previous CV version's vectors after a failed rebuild.
+        self._memory[key] = (identity, None)
+        target = self.cache_path(path)
+        try:
+            payload = json.loads(target.read_text(encoding="utf-8"))
+            if (isinstance(payload, dict) and payload.get("identity") == identity
+                    and _valid_embeddings(payload.get("embeddings"))):
+                embeddings = payload["embeddings"]
+                self._memory[key] = (identity, embeddings)
+                return embeddings
+        except (OSError, ValueError, TypeError):
+            pass
+
+        try:
+            from tools.cv_parser import extract_cv_text
+            text = extract_cv_text(str(path))
+            if not text or not text.strip():
+                self.warn_once(path, "no extractable CV text; using keyword-only scoring")
+                return None
+            embeddings = compute_cv_embeddings(text)
+            if not _valid_embeddings(embeddings):
+                self.warn_once(path, "no usable embeddings; using keyword-only scoring")
+                return None
+            # Do not label vectors as current if the file changed during text
+            # extraction/encoding. A subsequent call will see the new digest.
+            if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+                self.warn_once(path, "CV changed during embedding; using keyword-only scoring")
+                return None
+        except Exception as exc:
+            self.warn_once(path, f"embedding failed ({type(exc).__name__}); using keyword-only scoring")
+            return None
+
+        self._memory[key] = (identity, embeddings)
+        # Atomic replacement prevents readers seeing a partial JSON file.
+        # Temporary files are owner-readable only and never contain raw CV text.
+        temporary = None
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=target.parent, suffix=".tmp", delete=False
+            ) as handle:
+                temporary = Path(handle.name)
+                json.dump({"identity": identity, "embeddings": embeddings}, handle, allow_nan=False)
+            os.replace(temporary, target)
+        except OSError:
+            self.warn_once(path, "disk cache unavailable; using in-memory embeddings for this run")
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        return embeddings
+
+
 def compute_cv_embeddings(cv_text: str) -> Optional[dict]:
     """
     Compute and return embeddings for a CV.
@@ -208,7 +349,7 @@ def _split_cv_sections(cv_text: str) -> dict:
     return sections
 
 
-def score_semantic(job: dict, cv_embeddings: dict) -> float:
+def score_semantic(job: dict, cv_embeddings: dict) -> Optional[float]:
     """
     Score a job's relevance to CV using semantic similarity.
     Returns 0-100 score.
@@ -218,14 +359,15 @@ def score_semantic(job: dict, cv_embeddings: dict) -> float:
         cv_embeddings: pre-computed CV embeddings
 
     Returns:
-        float score 0-100
+        float score 0-100, or None when scoring could not be performed.
+        A genuine 0 is a computed mismatch, not an unavailable score.
     """
     if not SENTENCE_AVAILABLE or not FAISS_AVAILABLE or not cv_embeddings:
-        return 0
+        return None
 
     model = _get_model()
     if not model:
-        return 0
+        return None
 
     # Build job text
     job_text = " ".join([
@@ -235,7 +377,7 @@ def score_semantic(job: dict, cv_embeddings: dict) -> float:
     ])
 
     if not job_text.strip():
-        return 0
+        return None
 
     try:
         job_embedding = model.encode(job_text)
@@ -246,6 +388,7 @@ def score_semantic(job: dict, cv_embeddings: dict) -> float:
         # Compare against each CV section (job vector normalized once;
         # per-section FAISS index is tiny — dim is fixed so reuse it)
         scores = []
+        weights = []
         for section_name, cv_emb in cv_embeddings.items():
             cv_vec = np.array(cv_emb, dtype=np.float32).reshape(1, -1)
             if cv_vec.shape[1] != dim:
@@ -262,17 +405,16 @@ def score_semantic(job: dict, cv_embeddings: dict) -> float:
             weight = section_weight(section_name)
 
             scores.append((similarity[0][0] + 1) * 50 * weight)
+            weights.append(weight)
 
         if scores:
-            return min(sum(scores) / sum(
-                section_weight(s)
-                for s in cv_embeddings.keys()
-            ), 100.0)
+            result = float(sum(scores) / sum(weights))
+            return max(0.0, min(result, 100.0)) if math.isfinite(result) else None
 
     except Exception as e:
-        print(f"Semantic scoring failed: {e}")
+        print(f"Semantic scoring failed ({type(e).__name__}); using keyword-only scoring")
 
-    return 0
+    return None
 
 
 def build_cv_index(cv_text: str, output_path: Optional[Path] = None) -> Optional[Path]:
@@ -306,12 +448,14 @@ def build_cv_index_from_file(cv_path: Optional[str] = None) -> Optional[Path]:
     p = Path(resolved)
     if not p.is_absolute():
         p = BASE_DIR / p
-    from tools.cv_parser import extract_cv_text
-    text = extract_cv_text(str(p))
-    if not text or not text.strip():
-        print(f"❌ Could not extract text from {p}")
+    embeddings = CVEmbeddingCache().get(p)
+    if not embeddings:
         return None
-    return build_cv_index(text)
+    # Compatibility export for tools using load_cv_embeddings(). Curation uses
+    # only the managed, source/model-validated cache, never this bare mapping.
+    save_cv_embeddings(embeddings)
+    print(f"CV embeddings saved to {CV_EMBEDDINGS_PATH}")
+    return CV_EMBEDDINGS_PATH
 
 
 if __name__ == "__main__":

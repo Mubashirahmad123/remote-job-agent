@@ -37,9 +37,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock.txt
 
-      # Full requirements, not a subset: tests/test_source_naming.py and
+      # Full locked requirements, not a subset: tests/test_source_naming.py and
       # test_api_skills.py import tools.sheet_writer and agents.scrapper, which
       # need gspread/requests. Installing less makes those files fail at
       # COLLECTION, which reads like a code regression but is only a missing dep.
@@ -51,7 +51,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.lock.txt
 
       - name: Verify the lock file matches requirements.txt
         run: |
@@ -113,8 +113,10 @@ jobs:
           # (except the Node e2e suite) is an offline unit test: none of them
           # performs an HTTP call and none needs the Playwright browser binaries.
           # 514 pass on a plain `pytest tests/` once requirements.txt is
-          # installed, so anything red here is a real regression, not flake.
-          python -m pytest tests/ -q --ignore=tests/e2e
+          # installed. Failures need investigation, including scheduling races.
+          # Keep the original exit status and expose the failure tail through
+          # Checks API annotations even when raw-log download is unavailable.
+          python deploy/ci_failure_report.py python -m pytest tests/ -q --ignore=tests/e2e
 
       # Split out so a failure elsewhere in the suite cannot hide an auth or
       # attribution regression, and so that contract is legible in the log as a
@@ -142,7 +144,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements.txt
+          cache-dependency-path: requirements.lock.txt
 
       - uses: actions/setup-node@v7
         with:
@@ -157,7 +159,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m venv .venv
           ./.venv/bin/pip install --upgrade pip
-          ./.venv/bin/pip install -r requirements.txt
+          ./.venv/bin/pip install -r requirements.lock.txt
 
       # `npm ci`, not `npm install`: tests/e2e/package-lock.json is committed, so
       # CI must install exactly that tree and fail loudly if package.json has
@@ -166,23 +168,94 @@ jobs:
         run: npm ci --prefix tests/e2e
 
       - name: Run the dashboard e2e suite
-        run: node --test tests/e2e/smoke.test.mjs
+        run: python deploy/ci_failure_report.py npm test --prefix tests/e2e
         env:
           # The suite boots a real uvicorn; keep it off the developer's data.
           CI: true
 
   docker:
-    name: Image builds
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    name: Locked image (${{ matrix.arch }})
+    # Native runners, not cross-resolution or QEMU-only builds: ARM shared
+    # libraries and Chromium must actually start on ARM before we call it ready.
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
     steps:
       - uses: actions/checkout@v7
 
-      # Build only, no push: this verifies the Dockerfile and .dockerignore still
-      # produce an image (argon2-cffi is a compiled dependency, so a bad pin or a
-      # missing build tool shows up here and nowhere else).
+      # No push: build and run the same locked image on each native platform.
+      # Compiler/browser/platform failures must fail their job, not be waived.
       - name: Build the image
         run: docker build -t remote-job-agent:ci .
+
+      - name: Check installed dependency consistency
+        run: docker run --rm remote-job-agent:ci uv pip check --system
+
+      - name: Smoke-test runtime architecture, API and Chromium as non-root
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          docker run --rm -i -e EXPECTED_ARCH remote-job-agent:ci python - <<'PY'
+          import os
+          import platform
+
+          assert platform.machine() == os.environ["EXPECTED_ARCH"], platform.machine()
+          assert os.geteuid() != 0, "image must run as the unprivileged agent user"
+          from importlib.metadata import version
+          from pathlib import Path
+          from packaging.requirements import Requirement
+          checked = 0
+          for line in Path("requirements.lock.txt").read_text(encoding="utf-8").splitlines():
+              line = line.split("#", 1)[0].strip()
+              if not line:
+                  continue
+              requirement = Requirement(line)
+              if requirement.marker is None or requirement.marker.evaluate():
+                  installed = version(requirement.name)
+                  assert requirement.specifier.contains(installed, prereleases=True), (line, installed)
+                  checked += 1
+          assert checked > 0, "no locked packages were checked"
+          print(f"OK: {checked} installed packages match active lock pins")
+          # No real credentials or external calls. A token keeps startup out of
+          # open-access mode; the liveness endpoint is intentionally public.
+          os.environ["API_TOKEN"] = "container-smoke-only"
+          from fastapi.testclient import TestClient
+          from api.app import create_app
+          with TestClient(create_app()) as client:
+              response = client.get("/api/health/live")
+              assert response.status_code == 200, response.text
+              assert response.json() == {"status": "ok"}, response.text
+
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as playwright:
+              browser = playwright.chromium.launch(headless=True)
+              page = browser.new_page()
+              page.set_content("<title>container smoke</title>")
+              assert page.title() == "container smoke"
+              browser.close()
+          print("OK: native architecture, non-root API startup and Chromium launch")
+          PY
+
+      # Full tests run in api-tests; source-scanning tests need .github/.git,
+      # deliberately excluded from the runtime image. Run behavior suites here
+      # without mounting the checkout or any credentials into the container.
+      - name: Run API and auth regression suites inside the locked image
+        run: |
+          docker run --rm remote-job-agent:ci python -m pytest -q \
+            tests/test_api_phase1.py \
+            tests/test_api_auth.py \
+            tests/test_api_auth_hardening.py \
+            tests/test_api_actor_attribution.py \
+            tests/test_country_filter.py \
+            tests/test_auto_applier.py \
+            tests/test_crewai_security_compat.py
 
       - name: Verify no secret, database or local venv is baked into the image
         run: |
@@ -196,8 +269,13 @@ jobs:
           # container filesystem, so the previous loop-over-patterns version
           # re-streamed it once per pattern and was the slowest step in the job.
           docker create --name ci-check remote-job-agent:ci >/dev/null
-          docker export ci-check | tar -t > /tmp/image-files.txt 2>/dev/null || true
+          trap 'docker rm -f ci-check >/dev/null 2>&1 || true' EXIT
+          # Fail closed: an export/listing error or empty inventory is NOT a
+          # clean image. GitHub runs Bash with -e and -o pipefail.
+          docker export ci-check | tar -t > /tmp/image-files.txt
+          test -s /tmp/image-files.txt
           docker rm ci-check >/dev/null
+          trap - EXIT
 
           leaks=0
           check() {  # $1 = human label, $2 = extended regex over tar -t paths
@@ -270,4 +348,4 @@ jobs:
       # decision in review. The rationale and the per-package remediation cost
       # are in the docstring of deploy/dependency_audit.py.
       - name: Audit the dependency tree against the recorded baseline
-        run: python deploy/dependency_audit.py
+        run: python deploy/ci_failure_report.py python deploy/dependency_audit.py
