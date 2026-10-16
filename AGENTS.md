@@ -22,10 +22,10 @@ python Run.py --setup                                       # first-time setup (
 python Run.py                                               # run pipeline (CrewAI)
 python main.py simple                                       # direct scrape → Sheets, no LLM
 python scheduler.py                                         # scheduled scraping
-python -m pytest tests/                                     # run all tests (514, all offline)
+python -m pytest tests/                                     # run offline Python tests; current counts/status in TESTER.md
 
 # Dashboard e2e (boots a real uvicorn; needs Node 20+ and a venv the harness can find)
-cd tests/e2e && npm ci && node --test smoke.test.mjs        # or: ./tests/e2e/run.sh
+npm ci --prefix tests/e2e && npm test --prefix tests/e2e    # smoke + tracker + environment + review; or ./tests/e2e/run.sh
 
 # Docker workflow
 docker compose up -d --build                                 # full stack: api + scheduler + caddy (needs API_TOKEN)
@@ -78,12 +78,22 @@ options and both are a commit: upgrade past it, or add the line to the baseline
 and own the decision in review. Fixed advisories are reported as FIXED so the
 baseline gets pruned, and a pruned entry cannot come back silently.
 
-One gap worth knowing about: **nothing currently installs from the lock** — the
-`Dockerfile` installs `requirements.txt`, so transitive versions float between
-builds and the audit is checking the best available *record* of what ships rather
-than a byte-exact manifest. Switching the image to install from the lock is the
-real fix; it has to be verified on the ARM deployment VM, which CI does not run,
-so it was not done as a drive-by.
+**Docker installs from `requirements.lock.txt`** (2026-10-15 working-branch
+change), then runs `uv pip check --system`. Keep direct requirements and the
+universal lock in sync; do not switch the image back to fresh transitive
+resolution. CI's Docker matrix builds on native x86-64 and ARM64 runners and
+checks active lock pins, non-root API startup, Chromium launch, dependency
+consistency, API/auth behavior and image leaks. Both native jobs passed in
+GitHub run 38743655019 at `0971322`; job/step metadata and notices were reviewed,
+but raw-log download was blocked here. See `deploy/DOCKER_CI_VERIFICATION.md`.
+Local Docker is unavailable; actual Oracle deployment still needs the separate
+operational verification in `deploy/DEPLOY_ORACLE.md` §7b.
+
+This pins application Python package versions, not every build input: the base
+image and uv bootstrap image still have mutable tags, and the lock does not
+contain artifact hashes. Optional packages outside the lock remain outside this
+verification. The ordinary API CI job still resolves requirements.txt to guard
+its satisfiability; the Docker job verifies the locked runtime separately.
 
 ## Coding Style & Naming Conventions
 
@@ -93,7 +103,7 @@ so it was not done as a drive-by.
 
 ## Testing Guidelines
 
-- Framework: pytest (already in `requirements.txt`). No coverage threshold is enforced.
+- Framework: pytest (already in `requirements.txt`). No coverage threshold is enforced. Tracker interactions and dummy-credential environment regressions run via the canonical npm test script; see TESTER.md for isolation evidence and current results.
 - Place files in `tests/` named `test_<module>.py`; classes as `TestXxx`, methods as `test_<behavior>`.
 - Avoid tests that hit live APIs, Google Sheets, or real browsers; prefer isolated units with temp dirs.
 

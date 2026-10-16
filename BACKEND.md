@@ -7,7 +7,7 @@ closed with 403 while `api/safety.py SUBMIT_ENABLED=False`; Lever has no submit
 path by design. See the gated 2b spec and current execution status in `PM.md`.
 
 Run: `venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000`
-Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (last verified 2026-10-01: 291 passed, 1 skipped)
+Docs: `http://127.0.0.1:8000/docs` · Tests: `venv\Scripts\python.exe -m pytest tests/ -q` (latest recorded local results: `TESTER.md`; native Docker x86-64/ARM64 CI passed at `0971322`; Oracle deployment pending)
 
 ---
 
@@ -91,20 +91,34 @@ were written under the old keys; a write-only fix would stay split until the
 sheet was rebuilt. Unknown board names pass through untouched, so a genuinely
 new board is never absorbed into an existing one.
 
-### Planned — Phase 2.1 (not implemented yet)
+### Per-CV semantic scoring (2026-10-15)
 
-- `POST /api/cv/upload` (multipart) — validate type (content-sniffed) + size,
-  parse through the existing CV chain, return the structured profile. The
-  uploaded profile becomes the active matching profile; `GET /api/cv/profile`
-  gains a field saying **which** CV is active (uploaded vs on-disk) plus a
-  reset path. Token-gated like every write route. Uploaded files are PII —
-  storage rules in `PRODUCTION.md` §8a.
-- Gap analysis reuses `cache.extract_skills` so job-side skills are
-  canonicalized identically to `/api/skills` (role nouns already purged) —
-  no second definition of "skill".
-- Cache backend seam (2.1b): the TTL store moves behind a small interface,
-  in-process stays default, and a `--workers > 1` startup warning is added.
-  Redis is explicitly **not** being added yet. See `PM.md` §2.1.
+This is a pipeline correction, not a new HTTP endpoint. `agents/curator.py`
+passes the keyword-selected CV path to `tools.embedding_matcher.CVEmbeddingCache`
+and then scores that CV's vectors. Missing/failed vectors leave
+`semantic_computed=false`, `semantic_score=""` (mapped to nullable API output),
+and full keyword weight. A real computed zero is retained and blended.
+`selected_cv`/`selected_cv_path` continue through existing enrichment contracts;
+no API schema or frontend change is required. Managed cache provenance is checked
+against CV content/model/schema; old primary bare JSON is not used as a fallback.
+Read endpoints do not generate embeddings; new scoring occurs during curation,
+not when opening the dashboard. Tests: `tests/test_multi_cv_semantic.py`.
+
+### Deferred user product / independent cache work (2026-10-15)
+
+- CV upload and gap analysis are **not scheduled for personal `main`**. The
+  former Phase 2.1a proposal is superseded by the future `user` product in
+  `USER_PRODUCT.md` (deferred, no target date).
+- That product needs profession-aware filters/scoring/prompts, ownership-aware
+  DB persistence and background tasks, isolated profiles/artifacts/caches, and
+  each user's own provider keys and optional Sheets integration. Existing
+  auth/apply SQLite and actor attribution do not provide that isolation.
+- Do not add a shared-profile upload endpoint or silently fall back to the
+  owner's `.env`, CV, Sheet or provider quota. Choose credential custody and
+  deployment model before finalizing the API contracts.
+- Cache backend seam (2.1b) remains independent low-priority work: wrap the TTL
+  store, retain in-process default, and add a multi-worker warning. No Redis
+  now. See `PM.md` §2.1.
 
 ### `GET /api/skills?tab=&limit=` → `SkillsOut`
 `{tab, total_jobs, jobs_with_stack, unique_skills, skills[{name, count, pct}]}`
@@ -152,7 +166,13 @@ refreshes the tracker cache, and returns the created `TrackerEntry`.
 ### `PATCH /api/tracker/{fp}` ← `{status, notes}`
 Status must be in `applied|interviewing|offer|rejected|withdrawn|ghosted` (400 otherwise).
 Resolves fingerprint **or** raw `apply_url` → `tools.application_tracker.update_status`
-→ refreshes APPLIED cache → returns the fresh row. 404 unknown, 502 sheet-write failure.
+→ refreshes APPLIED cache → returns the fresh row. URL keys must be encoded as
+one parameter (`encodeURIComponent`); the route uses `{job_fingerprint:path}`
+because ASGI decodes slashes before routing. Paths, queries, fragments and
+already-encoded URL components are covered by real HTTP tests. 404 unknown,
+502 sheet-write failure. `notes` appends to existing notes; a status-only client
+must omit notes or send an empty string, never resend the saved note. Existing
+auth/reconciliation gates remain unchanged.
 
 ### `POST /api/jobs/refresh` ← `{tab?}`
 Clears cache (+ enrichment map), re-warms, returns `{status, cleared[], warmed{tab:count}}`.
@@ -222,6 +242,46 @@ Any `mode` other than `"review"` → 400. `AUTO_APPLY_CONFIRM` is ignored
 everywhere (legacy CLI blind submit permanently removed) — env cannot
 re-enable submit over HTTP (`api/safety.py` `SUBMIT_ENABLED=False` fails
 `/intent` + `/submit` closed with 403). Never writes `status:"submitted"`.
+
+### Foreground wait and late-result handoff (local fix, 2026-10-15)
+
+The reported 90-second timeout returned a stub with no screenshot path and lost
+late browser results. That stub is removed. `APPLY_FILL_TIMEOUT` controls the
+HTTP foreground wait for the whole review operation, including material/package
+generation: default **180 seconds**, integer clamp **1–600**, malformed values
+fall back to 180. Lower it to receive a pending response sooner; this does not
+speed up the external form.
+
+Work now runs under `api/review_worker.py`. If not finished within that wait,
+POST returns HTTP 200 with `status: review_pending`, `review_run_id`,
+`review_status_url` and no screenshot URL. The client polls authenticated
+`GET /api/apply/{fp}/review-status?run_id=...` rather than issuing another POST.
+The real result, including screenshot, confirmation metadata, readback status,
+reviewed materials and actor, is saved when it completes. A screenshot URL is
+published only after artifact persistence succeeds. No filesystem glob guesses
+which image belongs to a job; concurrent screenshot names include UUIDs.
+
+`apply_review_runs` is an additive SQLite table for the pending/terminal handoff.
+GET returns pending or the durable terminal result; unknown run is 404 and an
+obsolete run ID is 409. Lost/expired claims produce an honest error instead of
+endless pending. Run/claim reads share a SQLite snapshot, avoiding a false
+error if completion and claim release happen between SELECTs. A crash loses in-memory execution, not a completed stored
+result; abandoned pending work becomes an error once its claim expires.
+
+Claims renew every 15 seconds (existing stale TTL remains 15 minutes), including
+across HTTP timeout, so pending work still blocks duplicate/regenerate requests.
+A 30-minute work watchdog records failure and atomically releases ownership.
+Python cannot forcibly kill an underlying stuck browser thread; its eventual
+artifact/package writes are ownership-fenced, so it cannot overwrite a newer
+retry. A new run invalidates old review evidence, not silently displays it.
+The successful desktop browser can still stay open for manual review as before.
+
+Material/package/browser stage elapsed times are logged by fingerprint. The
+exact slow step and metadata from the original Democorp run remain unknown.
+No live board was revisited for this fix. New tests: 20 Python handoff/ownership
+cases and 4 UI polling checks. Old orphan screenshots/metadata are not recovered
+retroactively; use an authorized fill-only Regenerate to create new evidence.
+Submit remains disabled and all intent/readback/material/auth gates stay intact.
 
 The cockpit calls this endpoint sequentially for up to three highest-scoring
 eligible jobs per trigger (enforced daily cap with per-day persisted count),
@@ -494,7 +554,17 @@ response explains why sign-in history is absent for a non-admin.
 
 ## 5. Testing
 
-The suite was last fully verified 2026-10-01 at 291 passed, 1 skipped
+Latest local results (2026-10-16), including tracker/environment regressions, with lock-only
+dependencies: **1042 pytest passed, 8 skipped; 68 frontend E2E passed**.
+`test_api_tracker_contract.py` adds 22 routing/status/notes/auth/error and runner
+contracts; `tracker.test.mjs` adds 22 interaction cases against real services
+with fake Sheets only. Six environment checks reproduce missing auth pins
+causing late-dotenv 401s and prove the existing harness pins prevent them; no
+production auth changes were needed. Earlier counts predate these tests;
+see `TESTER.md` for skips and browser/runtime limits. Native Docker checks and
+all other GitHub CI jobs passed at `0971322` (run 38743655019); raw logs were not
+available in this sandbox. See `deploy/DOCKER_CI_VERIFICATION.md`. The following describes
+foundational coverage rather than current per-file test totals:
 (`venv\Scripts\python.exe -m pytest tests/ -q`):
 `test_api_phase1.py` (18: faked `cache._read_tab_values` +
 `_load_enrichment_map` — no credentials, no network; covers list/tab-400,
@@ -536,3 +606,15 @@ status codes, never hit live Sheets).
    fails the build on a new leak.
 5. Tests in `tests/test_api_<group>.py` following the Phase 1 fake pattern.
 6. Frontend fn in `js/api.js` + row in README endpoint table.
+
+
+### 2026-10-16 CI/security follow-up
+
+Host API/dashboard CI now install the same lock as Docker and pip-audit. The
+new MCP finding is fixed with MCP 1.30.0, using a deliberate CrewAI rollback
+to 1.6.1 whose declared bounds permit it. Real offline SDK factory/kickoff/
+provider-construction tests guard the application's APIs, including native-image
+jobs. The existing JSON-repair risk remains on required 0.25.2; it is not fixed
+or silently represented as a clean dependency tree. Audit: 43 known findings,
+none new. Failure annotations preserve command exit status. Full tradeoffs and
+limits: `deploy/CI_FAILURE_REMEDIATION.md`; latest hosted status: PR #31.

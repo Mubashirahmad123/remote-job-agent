@@ -42,9 +42,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv for fast, reliable dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN uv pip install --system --no-cache -r requirements.txt
+# Install the audited, universally resolved dependency versions, not a fresh
+# transitive resolution of requirements.txt. Copy first for layer invalidation
+# whenever the lock changes; platform markers select the target's dependencies.
+COPY requirements.lock.txt .
+RUN uv pip install --system --no-cache -r requirements.lock.txt \
+    && uv pip check --system
 
 # Install Playwright browser and all system OS dependencies
 # (crawl4ai has no `install` module in 0.3.x — `python -m crawl4ai.install`

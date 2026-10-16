@@ -37,7 +37,10 @@ def create_tracker_entry(
     return to_tracker_entry(row)
 
 
-@router.patch("/api/tracker/{job_fingerprint}", response_model=TrackerEntry)
+# Compact tracker rows use apply_url as their key. Percent-encoded slashes are
+# decoded by ASGI before routing, so the ordinary single-segment converter
+# would 404 those real rows even though cache._resolve_tracker_url supports URLs.
+@router.patch("/api/tracker/{job_fingerprint:path}", response_model=TrackerEntry)
 def patch_tracker(
     job_fingerprint: str,
     request: Request,

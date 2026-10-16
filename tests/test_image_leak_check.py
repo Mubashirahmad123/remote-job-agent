@@ -230,3 +230,35 @@ def test_the_workflow_explains_why_the_patterns_are_scoped():
         "the docker job no longer explains that the file list covers the whole "
         "filesystem, which is the reason the patterns are scoped to app/"
     )
+
+
+@pytest.mark.parametrize("failure", ["export", "listing", "empty"])
+def test_image_inventory_failures_cannot_report_a_clean_image(tmp_path, failure):
+    """Execute the actual CI shell with fake tools, not a Docker daemon."""
+    import shutil
+    import subprocess
+
+    bash = shutil.which("bash")
+    if os.name != "posix" or bash is None:
+        pytest.skip("Docker CI shell failure injection requires POSIX Bash")
+    tools = tmp_path / "bin"
+    tools.mkdir()
+    docker = tools / "docker"
+    docker.write_text(
+        "#!/bin/sh\n"
+        + ("if [ \"$1\" = export ]; then exit 9; fi\n" if failure == "export" else "")
+        + "exit 0\n", encoding="utf-8",
+    )
+    tar = tools / "tar"
+    tar.write_text("#!/bin/sh\nexit " + ("9" if failure == "listing" else "0") + "\n",
+                   encoding="utf-8")
+    docker.chmod(0o755)
+    tar.chmod(0o755)
+    script = _leak_step().replace("/tmp/image-files.txt", str(tmp_path / "inventory.txt"))
+    result = subprocess.run(
+        [bash, "-e", "-o", "pipefail", "-c", script],
+        env={**os.environ, "PATH": str(tools) + os.pathsep + os.environ.get("PATH", "")},
+        text=True, capture_output=True,
+    )
+    assert result.returncode != 0, "invalid image inventory must fail CI"
+    assert "OK: no secrets" not in result.stdout

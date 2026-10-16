@@ -12,7 +12,12 @@ python-dotenv==1.2.2
 feedparser==6.0.11
 
 # AI / CrewAI
-crewai==1.14.7
+# Deliberate compatibility rollback: 1.7+ caps MCP below the patched release.
+# The application's Agent/Crew/Task/tool APIs are covered by offline tests.
+# Do not upgrade CrewAI until its MCP bounds permit >=1.30.0.
+crewai==1.6.1
+# First patched 1.x release for CVE-2026-59951; never waive this finding.
+mcp==1.30.0
 # Bounded above: an unbounded `>=1.0.0` means the next major release is
 # allowed to break `docker build` with no change on our side. The lock holds
 # 1.55.0; raise the ceiling deliberately, after a test run, not implicitly.

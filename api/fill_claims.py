@@ -18,7 +18,7 @@ get_package_record point at a folder that does not exist yet). "In progress"
 and "packaged" are different states, so they get different tables.
 
 Lifecycle: claim BEFORE any generation starts (fill_review), refresh the
-heartbeat at each pipeline stage, release when the fill ends either way — the
+heartbeat at each pipeline stage and periodically during browser work, release when the fill ends either way — the
 package index row is the durable record, the claim is only the in-flight
 lock. A claim abandoned by a crashed process self-expires after
 STALE_FILL_CLAIM_MINUTES of silence, and release_fill_claim deletes only the
@@ -27,7 +27,7 @@ drop a fresher claim reclaimed over it.
 
 Why the heartbeat exists: liveness is judged on heartbeat_at, never on
 claimed_at. One fill legitimately runs for minutes (LLM resume, then LLM
-cover letter, then an ATS fill that alone waits up to 90s). A TTL measured
+cover letter, then a slow ATS fill with periodic worker heartbeats). A TTL measured
 from the start would expire partway through a perfectly healthy fill, a
 second request would reclaim the job, and both would generate — the exact
 duplicate-package bug this module exists to close, returning silently.
@@ -104,12 +104,12 @@ def claim_fill(
     concurrent caller ever gets "you generate" for a given job.
 
     Liveness is judged on heartbeat_at, NOT claimed_at. A fill is minutes
-    long (LLM resume + cover letter + an ATS fill that alone waits up to 90s),
+    long (LLM resume + cover letter + a slow ATS fill),
     so a fixed TTL measured from the start would expire *during* a healthy
     fill and let a second request reclaim the job while the first is still
     generating — the duplicate-package bug, silently. The worker instead
-    calls refresh_fill_claim at each stage, so the TTL means "no heartbeat for
-    this long" (crashed), not "has been running for this long".
+    calls refresh_fill_claim at each stage and every 15 seconds during the fill,
+    so the TTL means "no heartbeat for this long" (crashed), not "has been running for this long".
     """
     timestamp = _as_utc(now or datetime.now(timezone.utc))
     timestamp_text = timestamp.isoformat()

@@ -191,6 +191,23 @@ _MEDIA_BY_SUFFIX = {
 }
 
 
+@router.get("/api/apply/{job_fingerprint}/review-status")
+def review_status(job_fingerprint: str, run_id: str | None = None,
+                  _: None = Depends(require_token)):
+    """Poll a fill-only result without resubmitting or starting new work."""
+    from api import apply_state
+    from api.review_runs import read_run
+    connection = apply_state.connect()
+    try:
+        return read_run(connection, job_fingerprint, run_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Review run not found")
+    except ValueError:
+        raise HTTPException(status_code=409, detail="Review run was replaced by a newer attempt")
+    finally:
+        connection.close()
+
+
 @router.get("/api/apply/{job_fingerprint}/screenshot")
 def apply_screenshot(job_fingerprint: str, _: None = Depends(require_token)):
     """Serve the stored before-submit screenshot by artifact ID.
