@@ -18,7 +18,7 @@ below; it does not establish submit-path verification or change these gates.
 
 ---
 
-## 0. Known facts about the target (verified 2026-10-03)
+## 0. Known facts about the target (originally verified 2026-10-03; metadata rechecked 2026-10-16)
 
 Read these before planning the run; two of them change what a "pass" means.
 
@@ -27,7 +27,7 @@ Read these before planning the run; two of them change what a "pass" means.
 | Required fields are **First Name, Last Name, Email** only | `_fill_greenhouse_form` already handles all three. No unhandled required questions — the most common cause of a post-click validation failure is absent here. |
 | Optional: Phone, Resume/CV, Cover Letter, LinkedIn, Website, "How did you hear about this job?" | Resume + cover letter still get attached and still pass the attachment gate. |
 | **The form is reCAPTCHA-protected** ("protected by reCAPTCHA" next to *Submit application*) | ⚠️ The headline risk. An automated click may be scored and blocked. See §5. |
-| The page is Greenhouse-hosted, not an iframe embed | `_greenhouse_confirmation_data` has a real chance of finding the embedded JSON — but this is unverified until step 1. |
+| Confirmation metadata is present in Greenhouse's `window.__remixContext` loader data: `/example/jobs/83446/confirmation` and the message "Your application has been received..." | `_greenhouse_confirmation_data` reads the live Remix state because Greenhouse removes the bootstrap script from the DOM shortly after loading. This verifies pre-submit metadata discovery only; it does **not** verify the post-submit page or response. |
 
 ### What a live run is actually testing
 

@@ -1,6 +1,7 @@
 """Pre-endpoint 2b tests for fill, verification, and claim primitives."""
 import os
 import hashlib
+import re
 import sqlite3
 import sys
 import threading
@@ -385,6 +386,63 @@ def test_greenhouse_confirmation_metadata_is_read_from_embedded_json():
     assert _greenhouse_confirmation_data(page) == {
         "confirmation_path": "/confirmation/123",
         "confirmation_message": "Thanks for applying",
+    }
+
+
+def test_greenhouse_remix_confirmation_metadata_is_read_from_bare_script():
+    fixture_path = os.path.join(
+        os.path.dirname(__file__), "fixtures", "greenhouse_remix_confirmation.html"
+    )
+    fixture = open(fixture_path, encoding="utf-8").read()
+    script = re.search(r"<script>(.*?)</script>", fixture, re.DOTALL).group(1)
+
+    class ScriptLocator:
+        def __init__(self, selector):
+            self.selector = selector
+
+        def all_text_contents(self):
+            return [script] if self.selector == "script" else []
+
+    class BareScriptPage:
+        def locator(self, selector):
+            return ScriptLocator(selector)
+
+    assert _greenhouse_confirmation_data(BareScriptPage()) == {
+        "confirmation_path": "/example/jobs/83446/confirmation",
+        "confirmation_message": (
+            "<h1>Thank you for applying.</h1>\n"
+            "<p>Your application has been received. If there is a fit, "
+            "someone will be getting back to you.&nbsp;</p>"
+        ),
+    }
+
+
+def test_greenhouse_remix_confirmation_metadata_survives_script_removal():
+    class RemixRuntimePage:
+        def evaluate(self, _expression):
+            return {
+                "state": {
+                    "loaderData": {
+                        "routes/$url_token_.jobs_.$job_post_id": {
+                            "confirmationPath": "/example/jobs/83446/confirmation",
+                            "jobPost": {
+                                "confirmation_message": "Your application has been received."
+                            },
+                        }
+                    }
+                }
+            }
+
+        def locator(self, _selector):
+            return ScriptLocator()
+
+    class ScriptLocator:
+        def all_text_contents(self):
+            return []
+
+    assert _greenhouse_confirmation_data(RemixRuntimePage()) == {
+        "confirmation_path": "/example/jobs/83446/confirmation",
+        "confirmation_message": "Your application has been received.",
     }
 
 

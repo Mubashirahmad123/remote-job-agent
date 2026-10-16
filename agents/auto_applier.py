@@ -254,7 +254,7 @@ def _get_playwright():
 # =============================================================================
 
 def _greenhouse_confirmation_data(page) -> Dict[str, Optional[str]]:
-    """Read Greenhouse confirmation settings from public embedded JSON."""
+    """Read Greenhouse confirmation settings from public embedded page data."""
     def find_values(value):
         if isinstance(value, dict):
             normalized = {str(key).replace("_", "").casefold(): item for key, item in value.items()}
@@ -278,18 +278,82 @@ def _greenhouse_confirmation_data(page) -> Dict[str, Optional[str]]:
                 return None
         return None
 
+    def find_confirmation_message(value):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if (
+                    str(key).replace("_", "").casefold() == "confirmationmessage"
+                    and isinstance(child, str)
+                    and child.strip()
+                ):
+                    return child.strip()
+                found = find_confirmation_message(child)
+                if found:
+                    return found
+        elif isinstance(value, list):
+            for child in value:
+                found = find_confirmation_message(child)
+                if found:
+                    return found
+        return None
+
+    def find_remix_values(value):
+        if not isinstance(value, dict):
+            return None
+        normalized = {str(key).replace("_", "").casefold(): item for key, item in value.items()}
+        state = normalized.get("state")
+        if isinstance(state, dict):
+            loader_data = {
+                str(key).replace("_", "").casefold(): item
+                for key, item in state.items()
+            }.get("loaderdata")
+            if isinstance(loader_data, dict):
+                for route_data in loader_data.values():
+                    if not isinstance(route_data, dict):
+                        continue
+                    route_values = {
+                        str(key).replace("_", "").casefold(): item
+                        for key, item in route_data.items()
+                    }
+                    path = route_values.get("confirmationpath")
+                    job_post = route_values.get("jobpost")
+                    message = find_confirmation_message(job_post)
+                    if (
+                        isinstance(path, str)
+                        and path.strip()
+                        and message
+                    ):
+                        return path.strip(), message
+        return None
+
     try:
-        scripts = page.locator(
-            'script[type="application/json"], script#__NEXT_DATA__, script[data-page]'
-        ).all_text_contents()
+        remix_context = page.evaluate("() => window.__remixContext")
+    except Exception:
+        remix_context = None
+    found = find_remix_values(remix_context)
+    if found:
+        return {"confirmation_path": found[0], "confirmation_message": found[1]}
+
+    try:
+        scripts = page.locator("script").all_text_contents()
     except Exception:
         scripts = []
 
     for script in scripts:
         try:
-            found = find_values(json.loads(script))
+            payload = json.loads(script)
         except (json.JSONDecodeError, TypeError):
-            found = find_values(script)
+            match = re.search(r"\bwindow\.__remixContext\s*=\s*", script)
+            if not match:
+                found = find_values(script)
+            else:
+                try:
+                    payload, _ = json.JSONDecoder().raw_decode(script, match.end())
+                except json.JSONDecodeError:
+                    continue
+                found = find_remix_values(payload)
+        else:
+            found = find_values(payload)
         if found:
             return {"confirmation_path": found[0], "confirmation_message": found[1]}
 
