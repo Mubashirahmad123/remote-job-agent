@@ -475,6 +475,38 @@ def generate_cover_letter_from_job_data(job_data_json):
 # MARKDOWN JOB EXTRACTION
 # =============================================================================
 
+JOB_EXTRACT_FIELDS = (
+    "job_title", "company", "salary", "tech_stack", "timezone",
+    "apply_url", "summary", "posted_date_iso",
+)
+
+
+def _coerce_text(value) -> str:
+    """Flatten any LLM-returned value (str, list, dict, scalar) to text.
+
+    Models occasionally ignore the requested field types and emit
+    ``"tech_stack": ["Python", "AWS"]``-style arrays. Downstream pipeline
+    stages call ``.strip()``/``.split()`` on these fields, so they must
+    always arrive as strings.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (list, tuple)):
+        return ", ".join(part for part in (_coerce_text(v) for v in value) if part)
+    if isinstance(value, dict):
+        return _coerce_text(list(value.values()))
+    return str(value).strip()
+
+
+def _normalize_extracted_job(job) -> dict:
+    """Coerce one extracted job to the documented string-field schema."""
+    if not isinstance(job, dict):
+        return {}
+    return {field: _coerce_text(job.get(field)) for field in JOB_EXTRACT_FIELDS}
+
+
 def extract_jobs_from_markdown(markdown: str) -> list:
     """
     Extract developer jobs from crawler markdown using LLM with fallback.
@@ -502,7 +534,9 @@ Return ONLY valid JSON, no markdown fences and no explanation.
         parsed = json.loads(text)
         if isinstance(parsed, dict):
             parsed = parsed.get("jobs", [])
-        return parsed if isinstance(parsed, list) else []
+        if not isinstance(parsed, list):
+            return []
+        return [_normalize_extracted_job(job) for job in parsed]
     except Exception as e:
         print(f"❌ Markdown extraction failed: {e}")
         return []

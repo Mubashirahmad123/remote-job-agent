@@ -1,5 +1,63 @@
 # CHANGELOG.md
 
+## 2026-10-17 — fix rate-limit Retry-After boundary overflow (Windows flake)
+
+- The sliding-window limiter computed `retry_after` as `int(remaining) + 1`.
+  On Windows, `time.monotonic()` is `GetTickCount64()` (~15.6ms resolution;
+  measured here: 199,992 of 200,000 consecutive reads returned an identical
+  value), so the budget hits and the denial can share one tick, the remaining
+  time is exactly the whole window, and the formula reported window+1 —
+  `retry_after` 601 for a 600-second window. This is the "601 seconds versus a
+  600-second assertion" failure recorded in the Windows full-suite run in
+  `TESTER.md`; the ns-resolution Linux CI clock cannot reproduce it.
+- Replace it with the house pattern already used in `fill_claims.py` and
+  `apply_claims.py`: `max(1, math.ceil(remaining))`, keeping `retry_after`
+  inside `[1, window]` on any clock. The invariant is documented on `Decision`.
+- Two regression tests pin both boundaries: a same-tick denial must report the
+  window itself (failed with 601 against the old formula, RED-first) and a
+  0.5-second remainder must round up to 1. Rate-limit/auth/proxy/timing
+  suites: **85 passed**.
+- No requirements, lock or submit changes; `SUBMIT_ENABLED` stays false; no
+  deployment. The other Windows environment failures in `TESTER.md` remain
+  open.
+
+## 2026-10-17 — survive list-typed LLM extraction fields; serve /health liveness alias
+
+- A dashboard scrape died after scraping completed with
+  `AttributeError: 'list' object has no attribute 'strip'`: the Gemini answer to
+  `extract_jobs_from_markdown` carried `"tech_stack": ["Python", "Docker"]`-style
+  arrays, and `is_valid_dev_job()` called `.strip()` on the list at the end of
+  `scrape_all()`. The curator's sanitizer previously converted only `None` → `""`,
+  so nothing in the pipeline coerced non-string scalars.
+- Two-layer fix. `agents/gemini_tools.py` coerces every extracted field to text at
+  the LLM boundary (`_coerce_text`/`_normalize_extracted_job`: lists joined with
+  `", "`, dict values flattened, scalars stringified, non-dict rows dropped), and
+  `agents/curator.py::sanitize_string_fields` now flattens None/list/tuple/scalar
+  values in place before dedup, CV matching or Sheets writing touch a raw job.
+  The documented 8-field extraction schema is enforced; rogue keys are dropped.
+- `tests/test_markdown_extraction.py`: 16 cases — coercion shapes, schema
+  normalization, monkeypatched LLM responses (fenced, non-array, empty markdown)
+  and the exact crash path through `is_valid_dev_job` + `job_fingerprint`.
+- `GET /health` now serves the identical `{"status":"ok"}` payload as
+  `GET /api/health/live` (same ungated `liveness` router, same deliberately-empty
+  disclosure). An external poller — no repo code, current or historical, calls
+  bare `/health`; the dashboard has always used `/api/health` — was logging a 404
+  every few seconds. Live-verified against a running uvicorn: `/health` 200,
+  `/api/health/live` 200, `/api/health` still 401. Pinned by
+  `test_health_alias_serves_open_liveness`; BACKEND/README/PRODUCTION updated.
+- Two harness fixes. `tests/test_glm_client.py` source-reading tests now pass
+  `encoding="utf-8"` — the platform-default cp1252 decode crashed on the source
+  files' non-ASCII bytes on Windows, verified failing on stashed clean HEAD
+  (CI's Linux default is UTF-8, so it passed there). `test_api_phase1.py`'s
+  `test_no_heavy_imports_at_startup` asserts on modules *added* by the request
+  instead of absolute `sys.modules` absence, which any test file importing
+  `agents.curator` at collection time would break by file order.
+- Touched suites: 164 passed, 7 skipped; `test_api_phase1.py` 21 passed. The full
+  Windows run reported 7 failed, 5 errors — identical on stashed clean HEAD and
+  all environment-specific (Docker CI parsing, CrewAI SDK, timing); itemized in
+  `TESTER.md`. No deployment, no live Sheets writes beyond an operator-initiated
+  scrape, no dependency changes.
+
 ## 2026-10-16 — fix Greenhouse confirmation discovery and visible-copy verification
 
 - Supersede the 2026-10-03 Democorp recon result below: the original extractor

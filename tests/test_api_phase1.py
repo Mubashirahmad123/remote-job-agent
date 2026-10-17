@@ -118,9 +118,21 @@ class TestHealth:
             assert token.lower() not in text
 
     def test_no_heavy_imports_at_startup(self, client):
+        # Snapshot, not absolute absence: other test files legitimately import
+        # agents.curator, which caches it in this shared pytest process. The
+        # invariant under test is that the request itself pulls nothing heavy.
+        before = set(sys.modules)
         client.get("/api/health")
-        assert "agents.curator" not in sys.modules
-        assert "main" not in sys.modules
+        added = set(sys.modules) - before
+        assert "agents.curator" not in added
+        assert "main" not in added
+
+    def test_health_alias_serves_open_liveness(self, client):
+        # External monitors default to GET /health; it must answer with the
+        # same deliberately-empty liveness payload, unauthenticated, and
+        # disclose nothing more than /api/health/live does.
+        assert client.get("/health").status_code == 200
+        assert client.get("/health").json() == {"status": "ok"}
 
 
 class TestJobs:

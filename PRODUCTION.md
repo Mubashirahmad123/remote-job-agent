@@ -167,7 +167,8 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
   plain HTTP.
 - Health endpoint leaks nothing: `sheets_configured` / `curated_jobs_loaded`
   are presence-only signals (covered by `tests/test_api_phase1.py`).
-- `GET /api/health/live` is the **only** API route reachable without
+- `GET /api/health/live` (and a bare `GET /health` alias serving the identical
+  payload) is the **only** API route reachable without
   credentials besides the login trio. It returns exactly `{"status":"ok"}` and
   is excluded from the OpenAPI schema, so orchestrator probes work while
   build/config/state stay behind the login.
@@ -215,7 +216,9 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
   - `data_source: snapshot` = Sheets unreachable, serving local scrape snapshot
   - `data_source: empty` = no Sheets, no snapshot (UI shows an explicit empty state)
 - `GET /api/health/live` → `{"status":"ok"}` with **no credentials**. Point
-  Docker/compose/uptime probes here, not at `/api/health`, which now requires a
+  Docker/compose/uptime probes here — or at the bare `/health` alias, which
+  serves the identical payload for monitors that default to it — not at
+  `/api/health`, which now requires a
   session or a Bearer token and will otherwise report the container unhealthy
   and restart it in a loop.
 - `GET /api/activity?limit=N` → merged, time-ordered audit feed: apply claims,

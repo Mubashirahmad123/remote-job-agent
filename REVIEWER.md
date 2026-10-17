@@ -35,7 +35,7 @@ the agent use the same lenses.
 
 **API (`api/`)**
 - Thin `app.py` kept thin (no handler logic)? One router file per group?
-- Lazy-import rule intact (`agents.curator`/`main` absent from `sys.modules` after `/api/health` — test asserts this)?
+- Lazy-import rule intact (`/api/health` adds no `agents.curator`/`main` to `sys.modules` — the test asserts on modules *added* by the request, so other test files importing curator don't break it)?
 - New endpoint: schema nullable + `""→null` validators, error codes (400/401/404/502) match BACKEND.md, faked tests added, `js/api.js` fn + README row?
 - Auth: write paths require token off-localhost? No secret substrings in responses (health test pattern)?
 

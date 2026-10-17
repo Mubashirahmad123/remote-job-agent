@@ -425,7 +425,7 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/health/live` | `{"status":"ok"}` — the **only** API route reachable with no credentials besides the three below. Point container/uptime probes here; not in the OpenAPI schema |
+| `GET /api/health/live` | `{"status":"ok"}` — the **only** API route reachable with no credentials besides the three below. Point container/uptime probes here; not in the OpenAPI schema. A bare `GET /health` alias serves the identical payload (same ungated router) so monitors that default to `/health` work too |
 | `POST /api/auth/login` | `{username, password}` → `200 {ok, username, role, expires_at}` + HttpOnly `rja_session` cookie. Rate-limited per IP and per username *before* any Argon2 work → `429` + `Retry-After` |
 | `POST /api/auth/logout` | Revokes the session server-side and clears the cookie → `{ok, deleted}` |
 | `GET /api/auth/me` | `{authenticated, username, role, expires_at}` for the current cookie |

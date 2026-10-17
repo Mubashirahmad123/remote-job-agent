@@ -362,32 +362,32 @@ CONSUMERS = ["agents/gemini_tools.py", "tools/cv_parser.py", "tools/resume_gener
 class TestConsumersWiredToTheHttpClient:
     @pytest.mark.parametrize("relpath", CONSUMERS)
     def test_does_not_import_the_zhipuai_sdk(self, relpath):
-        src = (REPO_ROOT / relpath).read_text()
+        src = (REPO_ROOT / relpath).read_text(encoding="utf-8")
         assert not re.search(r"^\s*(from|import)\s+zhipuai", src, re.M), relpath
         assert "ZhipuAI(" not in src, relpath
 
     @pytest.mark.parametrize("relpath", CONSUMERS)
     def test_imports_glm_client(self, relpath):
-        src = (REPO_ROOT / relpath).read_text()
+        src = (REPO_ROOT / relpath).read_text(encoding="utf-8")
         assert "glm_client" in src, relpath
 
     @pytest.mark.parametrize("relpath", CONSUMERS)
     def test_call_glm_delegates_to_the_shared_client(self, relpath):
-        src = (REPO_ROOT / relpath).read_text()
+        src = (REPO_ROOT / relpath).read_text(encoding="utf-8")
         assert "_glm.call_glm(prompt, api_key=GLM_API_KEY, model=GLM_MODEL)" in src, relpath
 
     @pytest.mark.parametrize("relpath", CONSUMERS)
     def test_glm_still_degrades_gracefully_without_the_dependency(self, relpath):
         # GLM_AVAILABLE must be False (not a crash) when the import fails, so the
         # fallback chain skips rung 3 instead of taking the whole pipeline down.
-        src = (REPO_ROOT / relpath).read_text()
+        src = (REPO_ROOT / relpath).read_text(encoding="utf-8")
         assert re.search(r"except ImportError:\s*\n\s*GLM_AVAILABLE = False", src), relpath
 
     def test_cv_parser_tolerates_being_run_as_a_script(self):
         # Its docstring documents `python tools/cv_parser.py <cv.pdf>`, which puts
         # tools/ (not the repo root) on sys.path[0]. Without the flat fallback
         # import that documented invocation would break.
-        src = (REPO_ROOT / "tools/cv_parser.py").read_text()
+        src = (REPO_ROOT / "tools/cv_parser.py").read_text(encoding="utf-8")
         assert re.search(r"^\s*import glm_client as _glm", src, re.M)
 
     def test_all_three_modules_import_without_zhipuai_installed(self):

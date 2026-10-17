@@ -11,6 +11,12 @@ x86-64/ARM64 jobs and all other jobs passed in GitHub CI run 38743655019 at
 was blocked. Local numeric totals above are not inferred CI log counts.
 Evidence: `deploy/DOCKER_CI_VERIFICATION.md`; historical counts: `CHANGELOG.md`.
 
+2026-10-17 addition: two rate-limit boundary regression tests pin the
+coarse-clock `Retry-After` fix (`api/ratelimit.py`, see `CHANGELOG.md`) — the
+full rate-limit/auth/proxy/timing suites pass on Windows (**85 tests**,
+including both new boundaries). The full Linux lock-only suite has not rerun
+since; the 1042 figure below predates the fix by exactly those two tests.
+
 Security/CI remediation: `deploy/CI_FAILURE_REMEDIATION.md`. A fresh **168-package**
 locked installation passes dependency consistency. CrewAI is deliberately rolled
 back to 1.6.1 so patched MCP 1.30.0 satisfies its real metadata. Seven offline
@@ -27,11 +33,45 @@ Coverage includes `test_api_phase1.py`,
 grounding, footer strip, out-param), `test_api_skills.py`,
 `test_source_naming.py`, `test_submit_dryrun.py`, `test_submit_recon.py`,
 `test_scraper_timeout.py`, `test_glm_client.py` (golden vectors +
-consumer wiring), `test_api_auth.py`, `test_api_auth_hardening.py`,
+consumer wiring), `test_action_rate_limit.py` (per-actor budgets and
+coarse-clock `Retry-After` boundaries), `test_api_auth.py`,
+`test_api_auth_hardening.py`,
 `test_api_actor_attribution.py`, and the PR #26 security suites
 (`test_content_security_policy.py`, `test_embedding_cache.py`,
 `test_url_guard.py`, container-hardening, TLS-verification,
 proxy-header-trust, session-idle-timeout, login-timing).
+
+## Markdown extraction list-field regression coverage (2026-10-17)
+
+A dashboard scrape died post-scrape with `AttributeError: 'list' object has no
+attribute 'strip'`: the Gemini answer to `extract_jobs_from_markdown` carried
+`"tech_stack": ["Python", ...]`-style arrays, and `is_valid_dev_job()` (then the
+dedup fingerprint) called `.strip()` on the list. Fix is two layers:
+`agents/gemini_tools.py` coerces every extracted field to text at the LLM
+boundary (`_coerce_text`/`_normalize_extracted_job`), and
+`agents/curator.py::sanitize_string_fields` flattens None/list/scalar values
+in place before any consumer runs (previously None-only).
+
+`tests/test_markdown_extraction.py`: **16 cases** covering coercion shapes,
+schema normalization, monkeypatched LLM responses (fenced, non-array, empty
+markdown) and the exact crash path through `is_valid_dev_job` +
+`job_fingerprint`. Also two harness fixes: `test_glm_client.py` source-reading
+tests now pass `encoding="utf-8"` (cp1252 default broke them on Windows —
+verified failing on clean HEAD), and `test_api_phase1.py`'s
+`test_no_heavy_imports_at_startup` asserts on modules *added* by the request
+(snapshot) instead of absolute `sys.modules` absence, which any test importing
+`agents.curator` at collection time would otherwise break by file order.
+Touched suites: 164 passed, 7 skipped. Full local Windows run: 7 failed,
+5 errors — identical on stashed HEAD, all environment-specific (Docker CI
+parsing, CrewAI SDK, timing); Linux CI remains the gate.
+
+`/health` liveness alias: an external poller (no repo code, current or
+historical, calls it — the dashboard has always used `/api/health`) was
+logging a 404 every few seconds. `api/routers/liveness.py` now serves the
+identical `{"status": "ok"}` payload at both `/api/health/live` and
+`/health` (same ungated router, same deliberately-empty disclosure), pinned
+by `test_health_alias_serves_open_liveness`. Live-verified against a running
+uvicorn: `/health` 200, `/api/health/live` 200, `/api/health` still 401.
 
 ## Review timeout and late-result regression coverage (2026-10-15)
 
@@ -99,7 +139,10 @@ unavailability in five Docker shell tests, Windows path separator assumptions
 in a URL-guard test, default-codepage `UnicodeDecodeError` in GLM consumer
 tests, CrewAI network/version environment failures, and a rate-limit boundary
 result of 601 seconds versus a 600-second assertion. PyArrow also emitted a
-Windows fatal access violation during import. These environment failures were
+Windows fatal access violation during import. The rate-limit boundary failure
+was subsequently fixed on 2026-10-17 (coarse-clock rounding in
+`api/ratelimit.py`; see `CHANGELOG.md`) and is covered by two boundary
+regression tests. These remaining environment failures were
 not fixed or hidden; targeted regression/recon tests pass. No dry run, form
 fill or live submission was performed. See `LIVE_SUBMIT.md` for the evidence
 and remaining uncertainty about actual post-submit confirmation.

@@ -265,6 +265,40 @@ def _generate_fingerprint(job: dict) -> str:
 
 
 # =============================================================================
+# SANITIZATION
+# =============================================================================
+
+STRING_FIELDS = [
+    "job_title", "company", "summary", "timezone", "tech_stack",
+    "apply_url", "salary", "posted_date_iso", "source", "location",
+    "job_type", "match_reason"
+]
+
+
+def sanitize_string_fields(raw_jobs: list) -> None:
+    """Coerce job string fields in place: None → '', lists → 'a, b', scalars → str().
+
+    LLM extraction occasionally ignores requested field types (e.g.
+    ``"tech_stack": ["Python", "AWS"]``), while dedup, matching and Sheets
+    writing all call ``.strip()``/``.split()`` on these fields and crash on
+    non-strings. Runs before any consumer touches a raw job.
+    """
+    for job in raw_jobs:
+        if not isinstance(job, dict):
+            continue
+        for field in STRING_FIELDS:
+            value = job.get(field)
+            if value is None:
+                job[field] = ""
+            elif isinstance(value, (list, tuple)):
+                job[field] = ", ".join(
+                    str(item).strip() for item in value if item is not None
+                )
+            elif not isinstance(value, str):
+                job[field] = str(value)
+
+
+# =============================================================================
 # MAIN CURATION
 # =============================================================================
 
@@ -281,16 +315,8 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     print(f"🔍 CURATING {len(raw_jobs)} RAW JOBS")
     print(f"{'='*60}")
 
-        # === SANITIZE: Convert None values to empty strings ===
-    STRING_FIELDS = [
-        "job_title", "company", "summary", "timezone", "tech_stack",
-        "apply_url", "salary", "posted_date_iso", "source", "location",
-        "job_type", "match_reason"
-    ]
-    for job in raw_jobs:
-        for field in STRING_FIELDS:
-            if job.get(field) is None:
-                job[field] = ""
+        # === SANITIZE: force string fields to real strings ===
+    sanitize_string_fields(raw_jobs)
 
     if not raw_jobs:
         return {

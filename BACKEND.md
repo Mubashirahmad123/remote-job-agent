@@ -39,8 +39,9 @@ api/
   routers/
     auth.py         POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
                     (OPEN — the login page has to work before a session exists)
-    liveness.py     GET /api/health/live (OPEN, exactly {"status":"ok"}, hidden
-                    from the schema; for container/orchestrator probes)
+    liveness.py     GET /api/health/live + GET /health alias (OPEN, exactly
+                    {"status":"ok"}, hidden from the schema; for
+                    container/orchestrator probes — monitors default to /health)
     health.py       GET /api/health
     jobs.py         GET /api/jobs, GET /api/jobs/{job_fingerprint}
     stats.py        GET /api/stats

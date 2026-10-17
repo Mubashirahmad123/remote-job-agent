@@ -1,4 +1,4 @@
-"""GET /api/health/live — unauthenticated liveness probe.
+"""GET /api/health/live (and /health alias) — unauthenticated liveness probe.
 
 Why this exists separately from GET /api/health
   `/api/health` is gated (router-level `require_token`) and reports
@@ -22,6 +22,12 @@ Not a readiness probe
   reachable or that the scrape pipeline works — use `/api/health` (authenticated)
   for that. Reporting dependency failures on an unauthenticated route would
   both leak state and flap the probe on transient upstream errors.
+
+`/health` alias
+  Monitors and scripts commonly default to `GET /health`; polls arriving there
+  used to log a 404 line every few seconds. The alias serves the identical
+  liveness payload so those probes turn green without disclosing anything new.
+  The dashboard itself never calls it — it polls `/api/health` (frontend/js/api.js).
 """
 
 from fastapi import APIRouter
@@ -32,5 +38,6 @@ router = APIRouter(tags=["liveness"])
 
 
 @router.get("/api/health/live", include_in_schema=False)
+@router.get("/health", include_in_schema=False)
 def live() -> dict:
     return {"status": "ok"}
