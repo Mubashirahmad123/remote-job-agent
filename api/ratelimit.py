@@ -36,6 +36,7 @@ Env
 All functions are thread-safe; the login handler may run in a worker thread.
 """
 
+import math
 import os
 import threading
 import time
@@ -65,8 +66,10 @@ class Decision:
     """Outcome of one `allow()` call.
 
     `allowed` is False when the budget is spent; `retry_after` is then the
-    number of seconds until the oldest recorded hit leaves the window (always
-    >= 1, so it is usable directly as a `Retry-After` header).
+    number of seconds until the oldest recorded hit leaves the window — always
+    >= 1 so it is usable directly as a `Retry-After` header, and never more
+    than the window (ceil rounds a fraction of a second up; a whole-window
+    wait reports the window itself).
     """
 
     __slots__ = ("allowed", "remaining", "retry_after")
@@ -125,7 +128,14 @@ class RateLimiter:
             self._prune(now)
             history = [t for t in self._hits.get(key, ()) if t > cutoff]
             if len(history) >= self.limit:
-                retry_after = int(history[0] + self.window - now) + 1
+                # ceil, not int(...)+1: on a coarse clock (Windows monotonic is
+                # GetTickCount64, ~15.6ms) the denial can land in the same tick
+                # as the first hit, the remainder is exactly the whole window,
+                # and int()+1 reported window+1 (601 > 600). ceil keeps the
+                # value inside [1, window]; the fraction-of-a-second remainder
+                # still rounds up to a usable 1. Same pattern as fill_claims
+                # and apply_claims.
+                retry_after = max(1, math.ceil(history[0] + self.window - now))
                 self._hits[key] = history
                 return Decision(False, 0, max(1, retry_after))
             history.append(now)

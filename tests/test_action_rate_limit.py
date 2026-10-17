@@ -179,6 +179,57 @@ def test_a_denied_call_reports_how_long_to_wait():
     assert decision.retry_after <= 600
 
 
+def test_retry_after_never_exceeds_the_window_on_a_coarse_clock(monkeypatch):
+    """The denial can land in the same clock tick as the first hit.
+
+    Windows `time.monotonic()` is `GetTickCount64()` with ~15.6ms resolution,
+    so all six budget hits and the denial routinely share one tick. The old
+    `int(remaining) + 1` then rounded the full window up to window+1 and a
+    Retry-After of 601 exceeded the 600-second window (observed in the Windows
+    full-suite run recorded in TESTER.md). Rounding must stay inside
+    `[1, window]` no matter how coarse the clock is.
+    """
+    import types
+
+    from api import ratelimit
+
+    frozen_clock = types.SimpleNamespace(monotonic=lambda: 1_000.0)
+    monkeypatch.setattr(ratelimit, "time", frozen_clock, raising=True)
+
+    limiter = ratelimit.RateLimiter(6, 600)
+    for _ in range(6):
+        assert limiter.allow("alice").allowed
+    decision = limiter.allow("alice")  # same instant as the first hit
+    assert not decision.allowed
+    assert decision.retry_after == 600, (
+        "a whole-window wait must report the window itself, not window+1"
+    )
+
+
+def test_retry_after_stays_positive_when_the_window_is_almost_spent(monkeypatch):
+    """The other end of the same boundary: a remainder of a fraction of a
+    second must still round up to a usable Retry-After of at least 1."""
+    import types
+
+    from api import ratelimit
+
+    class _CreepingClock:
+        value = 1_000.0
+
+        @classmethod
+        def monotonic(cls):
+            return cls.value
+
+    monkeypatch.setattr(ratelimit, "time", _CreepingClock, raising=True)
+
+    limiter = ratelimit.RateLimiter(1, 600)
+    assert limiter.allow("alice").allowed
+    _CreepingClock.value = 1_000.0 + 599.5  # 0.5s left before the hit expires
+    decision = limiter.allow("alice")
+    assert not decision.allowed
+    assert decision.retry_after == 1
+
+
 def test_env_overrides_the_defaults(monkeypatch):
     monkeypatch.setenv("RUN_RATE_LIMIT", "2")
     monkeypatch.setenv("RUN_RATE_WINDOW", "600")

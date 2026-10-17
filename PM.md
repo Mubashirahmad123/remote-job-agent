@@ -1,18 +1,22 @@
 # PM.md — Project Tracker (Phases, Status, Next)
 
-Living plan for the remote-job-agent build. Status reconciled 2026-10-15. Section 1 is the current checklist; dated historical specifications below are not new work orders.
+Living plan for the remote-job-agent build. Status reconciled 2026-10-17. Section 1 is the current checklist; dated historical specifications below are not new work orders.
 
 ---
 
-## 1. Current status and checklist (2026-10-16)
+## 1. Current status and checklist (2026-10-17)
 
 **Legend:** checked = implementation exists, not necessarily merged or deployed.
 Pending verification is listed separately. The published baseline on
-`arena/393bb940-remote-job-agent` passed CI; the new fill-timeout/result-handoff
-fix is included in PR #31. See its latest checks for hosted CI status; the
-live-browser rerun remains pending. The 2026-10-16 dependency remediation uses
+`arena/393bb940-remote-job-agent` passed CI; the fill-timeout/result-handoff
+fix shipped in PR #31 (merged). The live-browser rerun remains pending. The
+2026-10-16 dependency remediation uses
 CrewAI 1.6.1 with patched MCP 1.30.0 (a deliberate compatibility rollback);
-see `deploy/CI_FAILURE_REMEDIATION.md`. Nothing is merged or deployed. `phase 3` work is user-reported and has not been integrated
+see `deploy/CI_FAILURE_REMEDIATION.md`. **Merged into `main` (verified in git
+2026-10-17; `main` == `feat/test2`, 0 commits apart): PR #31
+(`arena/393bb940`, Docker locked-dependency work + remediation), PR #32
+(`arena/58ad20f5`, confirmation-metadata investigation brief) and PR #33
+(`feat/test`). Nothing is deployed.** `phase 3` work is user-reported and has not been integrated
 or independently checked in this checkout.
 
 ### Done / implemented
@@ -54,6 +58,14 @@ or independently checked in this checkout.
       prevent it, including trailing-comment values and isolated login. Stale
       warning retired with evidence; production auth unchanged (see `TESTER.md`).
 - [x] Existing automated suites: latest recorded local results below.
+- [x] Rate-limit `Retry-After` boundary overflow fixed locally (2026-10-17):
+      the sliding-window limiter's `int(remaining) + 1` reported window+1
+      (601 for a 600s window) whenever the denial landed in the same
+      ~15.6ms `GetTickCount64` tick as the first hit — a Windows-only flake
+      the Linux CI clock cannot reproduce. Now `max(1, math.ceil(remaining))`,
+      matching the pattern in `fill_claims.py`/`apply_claims.py`. Two boundary
+      regression tests added RED-first (601 observed against the old formula);
+      85 targeted rate-limit/auth/proxy/timing tests pass. See `CHANGELOG.md`.
 - [x] Windows UTF-8/path fixes and flake investigation **reported complete on
       `phase 3`**. The flake was not reproduced; the timeout change is only a
       possible explanation, not a confirmed root cause.
@@ -62,9 +74,12 @@ or independently checked in this checkout.
 
 ### Not done — integration and personal-agent work
 
-- [ ] Review and merge the published working-branch changes only after approval;
-      CI passed, but no merge is authorized here. Review `phase 3` separately; verify
-      its portability patch on the integrated revision rather than duplicating it.
+- [x] Review and merge the published working-branch changes — done: PRs #31,
+      #32 and #33 are merged into `main` (verified in git 2026-10-17).
+      Hosted CI status for the merged head should be checked on GitHub before
+      release; the live-browser rerun below is still open.
+- [ ] Review `phase 3` separately; verify its portability patch on the
+      integrated revision rather than duplicating it.
 - [ ] Validate the new handoff fix in an authorized live Chrome fill-only rerun
       and fresh image CI before release. Use Regenerate for the previously
       packaged demo, retain step timings, confirm final status and screenshot
@@ -128,6 +143,10 @@ now passed on GitHub at `0971322`; all five CI jobs are green. Step conclusions
 and runner notices were reviewed via the API; raw-log download was blocked.
 Oracle deployment remains unverified. Evidence: `deploy/DOCKER_CI_VERIFICATION.md`.
 Earlier counts in dated sections below are historical.
+2026-10-17 addition: the two new rate-limit boundary regression tests plus the
+full rate-limit/auth/proxy/timing suites pass on Windows (85 tests); the full
+Linux lock-only suite has not rerun since, so the 1042 figure predates that
+fix by exactly those two added tests.
 
 ## 2. Implemented Phase 2 — Action API reference
 
