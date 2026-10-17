@@ -90,11 +90,15 @@ or independently checked in this checkout.
       compare a structure change that preserves confirmation metadata and still
       fills cleanly. Needed before unattended/high-volume use.
 - [ ] **Greenhouse submit-path live verification:** the 2026-10-03 recon was
-      blocked by absent confirmation metadata and reCAPTCHA. The user-reported
-      2026-10-15 Chrome run verified visible filling/attachments only, not intent,
-      full-path submit dry run, armed submission or confirmation. Future work
-      must follow `LIVE_SUBMIT.md`, human approvals and fail-closed gates; this
-      report does not authorize enabling submit or bypassing a captcha.
+      initially reported absent confirmation metadata due to a selector/runtime
+      blind spot; a read-only 2026-10-16 check found it in Greenhouse's Remix
+      loader state, and the extractor now reads it. A strict HTML-to-visible-
+      text confirmation comparison was also fixed and fixture-tested. reCAPTCHA
+      remains present. Neither the full-path dry run nor any submission was
+      performed in that session; the post-submit page has never been observed.
+      Continue to follow `LIVE_SUBMIT.md`, human approvals and fail-closed
+      gates. This report does not authorize enabling submit or bypassing a
+      captcha.
 
 ### Deferred / not in the current personal-main scope
 
@@ -329,12 +333,19 @@ for exact scope, raw-log limitations and the Ubuntu runner migration notice.
   remains open — the browser CDN is unreachable from the build sandbox.
 - 2b submit stays kill-switched and the UI toggle stays disabled; submit is
   reachable only via the authenticated Greenhouse pair (Lever has no submit path).
-  The 2026-10-03 read-only Democorp demo-board recon is a recorded pre-flight
-  block, not verification: confirmation metadata was absent (`/intent` would
-  return 502) and reCAPTCHA was present. No dry run, armed run, or submission
-  was performed. A later user-reported 2026-10-15 Chrome run reached visible
-  fill/attachments but hit the 90-second API timeout and screenshot URL 404;
-  it did not call intent/submit or verify confirmation. See the run log.
+  The 2026-10-03 read-only recon's "metadata absent" result was superseded by
+  the 2026-10-16 read-only probe: metadata is in Greenhouse's short-lived
+  bootstrap script and persistent `window.__remixContext`. The extractor now
+  reads the live runtime state, with an all-script fallback. Confirmation
+  verification now normalizes HTML/entity/whitespace while preserving strict
+  case-sensitive full-message and exact-path checks; mutation-tested fixtures
+  cover the regression. Recon found the metadata and submit button, no
+  unhandled required fields, and reCAPTCHA. No dry run, armed run, or submission
+  was performed in this session. The post-submit page therefore remains
+  unobserved and the submit path is not live-verified. The separate user-
+  reported 2026-10-15 Chrome fill reached visible attachments but timed out
+  before producing an API screenshot record and 404ed at the screenshot URL;
+  it made no intent/submit call. Details: `LIVE_SUBMIT.md`.
 
 ## 4. Definition of Done (every phase)
 

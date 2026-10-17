@@ -57,7 +57,9 @@ transport fakes. npm/shell/CI entrypoints include this file.
 Current local full suites: 1042 Python passed, 8 skipped; 68 frontend passed.
 No live ATS or native Docker rerun was performed for this local fix; previously
 recorded image CI applies to its named earlier commit, not these new edits.
-The reported original run's exact slow step and metadata remain unknown.
+The reported original fill's exact slow step remains unknown. The demo board's
+confirmation metadata has since been independently recovered; see the regression
+record below.
 
 ## User-reported live fill-only check (2026-10-15)
 
@@ -77,6 +79,30 @@ remain the preceding automated results.
 > completed on `phase 3`. They are not integrated into this checkout. Review and
 > verify that patch on Windows after integration. The flake was not reproduced;
 > its cause remains unconfirmed. See `PM.md` §1 and §3.
+
+---
+
+## Greenhouse confirmation regression (2026-10-16)
+
+`tests/test_apply_submit_primitives.py` covers the actual HTML-formatted
+confirmation message read from `tests/fixtures/greenhouse_remix_confirmation.html`
+and rejects an empty normalized expected message. Before the verifier fix, the
+new fixture and empty-message cases failed (**2 failed, 84 deselected**); after
+the fix they passed (**2 passed, 84 deselected**). The targeted primitive +
+recon suites passed **101 tests, 1 skipped**.
+
+The full-suite result recorded above is the Linux lock-only baseline, not a
+result for the current Windows checkout after these edits. A Windows run of
+`venv\Scripts\python.exe -m pytest tests -q` reported **22 failed, 1028 passed,
+4 skipped, 1 teardown error** in 281.18s. Failures include WSL `/bin/bash`
+unavailability in five Docker shell tests, Windows path separator assumptions
+in a URL-guard test, default-codepage `UnicodeDecodeError` in GLM consumer
+tests, CrewAI network/version environment failures, and a rate-limit boundary
+result of 601 seconds versus a 600-second assertion. PyArrow also emitted a
+Windows fatal access violation during import. These environment failures were
+not fixed or hidden; targeted regression/recon tests pass. No dry run, form
+fill or live submission was performed. See `LIVE_SUBMIT.md` for the evidence
+and remaining uncertainty about actual post-submit confirmation.
 
 ---
 

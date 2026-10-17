@@ -1,6 +1,13 @@
 """DOM-level confirmation checks used by the future apply submit service."""
 
+import html
+import re
 from urllib.parse import urlparse
+
+
+def _normalize_confirmation_text(value: str) -> str:
+    text = re.sub(r"<[^>]*>", " ", value)
+    return " ".join(html.unescape(text).split())
 
 
 def verify_greenhouse_confirmation(page, confirmation_path: str, confirmation_message: str) -> bool:
@@ -9,7 +16,11 @@ def verify_greenhouse_confirmation(page, confirmation_path: str, confirmation_me
     expected_path = confirmation_path.rstrip("/") or "/"
     if actual_path != expected_path:
         return False
-    return confirmation_message in page.locator("body").inner_text()
+    expected_message = _normalize_confirmation_text(confirmation_message)
+    if not expected_message:
+        return False
+    actual_message = _normalize_confirmation_text(page.locator("body").inner_text())
+    return expected_message in actual_message
 
 
 def verify_lever_confirmation(page) -> bool:

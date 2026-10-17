@@ -12,9 +12,10 @@ that hosts real postings, so the DOM, the embedded confirmation metadata and
 the submit control are the real thing.
 
 **This runbook is executed by the operator in an authorized browser environment.**
-This coding sandbox cannot reach job boards/browser downloads, so a live run
-cannot be reproduced here. A user-reported real-Chrome fill-only run is recorded
-below; it does not establish submit-path verification or change these gates.
+The 2026-10-16 desktop checks below did reach the public demo board, but did
+not fill the form or submit. A separately user-reported real-Chrome fill-only
+run is recorded below; it does not establish submit-path verification or
+change these gates.
 
 ---
 
@@ -27,24 +28,31 @@ Read these before planning the run; two of them change what a "pass" means.
 | Required fields are **First Name, Last Name, Email** only | `_fill_greenhouse_form` already handles all three. No unhandled required questions — the most common cause of a post-click validation failure is absent here. |
 | Optional: Phone, Resume/CV, Cover Letter, LinkedIn, Website, "How did you hear about this job?" | Resume + cover letter still get attached and still pass the attachment gate. |
 | **The form is reCAPTCHA-protected** ("protected by reCAPTCHA" next to *Submit application*) | ⚠️ The headline risk. An automated click may be scored and blocked. See §5. |
-| Confirmation metadata is present in Greenhouse's `window.__remixContext` loader data: `/example/jobs/83446/confirmation` and the message "Your application has been received..." | `_greenhouse_confirmation_data` reads the live Remix state because Greenhouse removes the bootstrap script from the DOM shortly after loading. This verifies pre-submit metadata discovery only; it does **not** verify the post-submit page or response. |
+| Confirmation metadata is present in Greenhouse's `window.__remixContext` loader data: `/example/jobs/83446/confirmation` and the message "Your application has been received..." | `_greenhouse_confirmation_data` reads the live Remix state because Greenhouse removes the bootstrap script from the DOM shortly after loading. Verification strips markup, decodes entities and normalizes whitespace before strict case-sensitive copy matching. This verifies the comparison against the expected rendered text, not the actual post-submit page or response. |
 
 ### What a live run is actually testing
 
 1. Does `_greenhouse_confirmation_data` find `confirmation_path` +
-   `confirmation_message` on a real page? (If not, `/intent` returns 502 and
-   nothing else can happen.)
+   `confirmation_message` on a real page? **Yes, on the demo board, in the
+   2026-10-16 read-only check.** The live Remix runtime data contains
+   `/example/jobs/83446/confirmation` and the posting's HTML-formatted
+   confirmation message. The extractor returned the same values immediately
+   after the form selector appeared and after a 10-second wait.
 2. Does the post-submit page actually match those values? This is the
    **assumption nobody has ever checked**: the metadata is scraped from the
    *pre*-submit page and then asserted against the *post*-submit page. If it
    is wrong, the result is a **false negative** — Greenhouse accepts the
    application, `verified=False`, the claim finalizes as `submit_unverified`,
-   and the API returns 422. Submitted, recorded as failed.
+   and the API returns 422. Submitted, recorded as failed. The verifier now
+   strips markup, unescapes entities, and normalizes whitespace while keeping
+   case-sensitive full-message containment and exact-path matching; this is
+   covered by a fixture regression, but the real post-submit page remains
+   unobserved.
 3. Does reCAPTCHA let an automated submission through at all?
 
 ---
 
-## 1. Dry run first — zero consequences
+## 1. Dry run first — no submit click, but real form data is filled
 
 Two independent rehearsals exist. Run both.
 
@@ -64,9 +72,13 @@ presence, and a verdict.
 **Stop here if `confirmation_metadata_found` is false.** `/intent` will 502
 and there is nothing to test. That finding alone justifies the recon step.
 
-### 1b. Full-path dry run (real browser, real fill, stops before the click)
+### 1b. Full-path dry run (real browser, real data entry, stops before the click)
 
-Seed the posting into the pipeline, then rehearse the whole thing:
+Seed the posting into the pipeline, then rehearse the whole thing. This
+opens the public Greenhouse form, fills applicant data, and may upload the
+reviewed resume; it prevents the submit click but is **not** a zero-data-
+transmission test. Only run it with operator authorization for the target and
+the data being entered:
 
 ```powershell
 venv\Scripts\python.exe -m tools.seed_demo_job
@@ -81,8 +93,10 @@ venv\Scripts\python.exe -m uvicorn api.app:app --host 127.0.0.1 --port 8000 --wo
 
 Then fill/review → intent → submit, exactly as a real run would (see §3 for
 the calls). The response comes back `status: "dry_run"`, `would_click: true`
-— and **nothing was clicked, no intent consumed, no claim taken, no daily
-cap spent**. Repeat it as often as you like.
+— nothing is clicked, no intent is consumed, no claim is taken, and no daily
+cap is spent. Form fields and any uploaded resume are still sent to the target
+page before the dry-run stop. Do not repeat without authorization for that
+data transfer.
 
 Dry run still enforces every gate a real submit enforces (fingerprint echo,
 typed title, score, field readback, attachment proof, confirmation metadata
@@ -219,7 +233,7 @@ Lever remains deferred — no trial account, documented skip.
 
 ## Run log
 
-### 2026-10-03 — Democorp recon only (blocked)
+### 2026-10-03 — Democorp recon only (historical; metadata result superseded)
 
 - **Target:** Greenhouse public demo board, Full Stack Engineer, Democorp
   (`https://job-boards.greenhouse.io/example/jobs/83446`).
@@ -233,6 +247,38 @@ Lever remains deferred — no trial account, documented skip.
   controls clicked.
 - **Evidence:** `recon-democorp.json`; no `data/submit_runs/` evidence
   directory exists because the browser submission path was never entered.
+
+### 2026-10-16 — metadata probe and verifier regression (no form interaction)
+
+- **Target:** Greenhouse public Democorp demo board, Full Stack Engineer
+  (`https://job-boards.greenhouse.io/example/jobs/83446`).
+- **Read-only findings:** raw HTTP HTML includes the confirmation metadata in
+  a bare `window.__remixContext` bootstrap script. Greenhouse removes that
+  script from the DOM shortly after startup, while `window.__remixContext`
+  persists. `_greenhouse_confirmation_data` now reads that runtime state.
+  Extraction immediately after the form selector and after 10 seconds returned
+  the same path and HTML message. Saved probe captures are local under
+  `scratch/confirmation-metadata-probe/`; they are not committed.
+- **Recon:** confirmation path/message found; submit button found; no
+  unhandled required fields; reCAPTCHA detected. Recon remains advisory and
+  blocked by the captcha finding.
+- **Verifier fix:** confirmation HTML is normalized to rendered text before
+  strict case-sensitive containment; exact path matching is unchanged and an
+  empty normalized message fails closed. Fixture tests were mutation-checked:
+  the HTML-message and empty-message cases failed against the old verifier and
+  passed after the fix.
+- **Tests:** targeted confirmation/recon tests: 101 passed, 1 skipped. The
+  full Windows test run reported 22 failed, 1028 passed, 4 skipped, and 1
+  teardown error; failures were environment/baseline issues detailed in
+  `TESTER.md`. The full-suite gate is therefore not green in this environment.
+- **Submission:** no form fields were filled, no files uploaded, no intent or
+  submit request was made, and no submit control was clicked. No dry run or
+  live run was performed; no screenshot approval, `attempt.json`, post-click
+  text, or HAR exists from this session. `SUBMIT_ENABLED` remains false.
+- **Conclusion:** metadata discovery and verifier logic are tested, but the
+  end-to-end submit path and post-submit confirmation assumption remain
+  unverified. CAPTCHA must not be bypassed. Any later run requires a separate
+  operator decision and the human screenshot gate in §3.
 
 
 ### 2026-10-15 — Democorp real-Chrome fill only (user-reported; API timeout)

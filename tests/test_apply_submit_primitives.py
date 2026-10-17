@@ -1,4 +1,5 @@
 """Pre-endpoint 2b tests for fill, verification, and claim primitives."""
+import json
 import os
 import hashlib
 import re
@@ -334,6 +335,45 @@ def test_greenhouse_confirmation_requires_path_and_message(url, body, expected):
     assert verify_greenhouse_confirmation(
         page, confirmation_path="/confirmation", confirmation_message="Application received"
     ) is expected
+
+
+def test_greenhouse_confirmation_matches_rendered_fixture_message():
+    fixture_path = os.path.join(
+        os.path.dirname(__file__), "fixtures", "greenhouse_remix_confirmation.html"
+    )
+    fixture = open(fixture_path, encoding="utf-8").read()
+    message_match = re.search(
+        r'"confirmation_message"\s*:\s*("(?:\\.|[^"\\])*")', fixture
+    )
+    assert message_match is not None
+    confirmation_message = json.loads(message_match.group(1))
+    page = FakePage(
+        url="https://job-boards.greenhouse.io/example/jobs/83446/confirmation",
+        body_text=(
+            "Thank you for applying.\nYour application has been received. "
+            "If there is a fit, someone will be getting back to you.\u00a0"
+        ),
+    )
+
+    assert verify_greenhouse_confirmation(
+        page,
+        confirmation_path="/example/jobs/83446/confirmation",
+        confirmation_message=confirmation_message,
+    )
+
+
+def test_greenhouse_confirmation_rejects_empty_normalized_message():
+    page = FakePage(
+        url="https://job-boards.greenhouse.io/example/jobs/83446/confirmation",
+        body_text="Thank you for applying.",
+    )
+
+    for message in ("", "<p>&nbsp;</p>", " \n\t "):
+        assert not verify_greenhouse_confirmation(
+            page,
+            confirmation_path="/example/jobs/83446/confirmation",
+            confirmation_message=message,
+        )
 
 
 def test_greenhouse_confirmation_message_match_is_case_sensitive():
