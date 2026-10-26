@@ -316,6 +316,15 @@ Lever remains deferred — no trial account, documented skip.
   regression coverage, then repeat only an authorized fill-only smoke. Do not
   merely increase the timeout and declare success. Submit remains disabled;
   confirmation/reCAPTCHA and full-path submission verification remain pending.
+- **Resolution status (2026-10-18, doc reconciliation — Q8):** the handoff
+  repair below shipped (configurable 180s default, durable pending/result
+  polling, heartbeats, stale-worker fencing) and is covered by 20 Python + 4
+  UI-polling tests; the stale "90-second discard path" description in this
+  entry refers to the pre-fix wrapper only. **Still open:** the authorized
+  live Chrome fill-only rerun (Phase A5) — the exact slow ATS operation was
+  never measured, and no live rerun has happened since. The screenshot-404
+  symptom is explained by the fixed handoff (screenshot persisted only on a
+  returned path); it has not been re-observed live.
 
 
 ### 2026-10-15 — local timeout/handoff repair (not a new live run)

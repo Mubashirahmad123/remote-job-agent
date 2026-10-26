@@ -3,6 +3,7 @@ import requests
 import json
 import re
 import datetime
+from pathlib import Path
 from dateutil import parser as date_parser
 import time
 import random
@@ -38,14 +39,16 @@ def fetch_authentic_jobs_rss(feed_url="https://authenticjobs.com/rss?category=De
         title = e.title or ""
         if EXCLUDE_FILTER.search(title) or not re.search(TECH_FILTER, title):
             continue
+        # C3: stack from title + feed summary, not the title alone.
+        summary = clean_html(getattr(e, "summary", ""))[:200]
         out.append({
             "job_title": title,
             "company": "",
             "salary": "",
-            "tech_stack": top_techs(title),
+            "tech_stack": _stack_from(title, summary),
             "timezone": "Remote",
             "apply_url": e.link,
-            "summary": clean_html(getattr(e, "summary", ""))[:200],
+            "summary": summary,
             "posted_date_iso": normalize_date(getattr(e, "published", None), "AuthenticJobs"),
             "source": "AuthenticJobs"
         })
@@ -78,14 +81,16 @@ def fetch_weworkremotely_rss(feed_url="https://weworkremotely.com/categories/rem
                 any(word in title.lower() for word in ['developer', 'engineer', 'programmer'])):
             continue
 
+        # C3: stack from title + feed summary, not the title alone.
+        summary = clean_html(getattr(e, "summary", ""))[:300]
         out.append({
             "job_title": title,
             "company": company,
             "salary": "",
-            "tech_stack": top_techs(title),
+            "tech_stack": _stack_from(title, summary),
             "timezone": "Remote",
             "apply_url": e.link,
-            "summary": clean_html(getattr(e, "summary", ""))[:300],
+            "summary": summary,
             "posted_date_iso": normalize_date(getattr(e, "published", None), "WeWorkRemotely"),
             "source": "WeWorkRemotely"
         })
@@ -127,6 +132,63 @@ def clean_html(raw_html):
         return ""
     cleaned = re.sub(r"<.*?>", "", str(raw_html))
     return _html.unescape(cleaned).strip()
+
+
+# === C3 HELPERS (AUDIT 2026-10-18) ==========================================
+# The scorer only sees `title + summary + tech_stack`. Nine parsers used to
+# write stub summaries ("Himalayas remote listing", ...) which (a) scored
+# every such job 0 — "No recognizable tech skills in job" — and (b) defeated
+# the country filter, which scans summary text. These helpers give every card
+# parser a real-description path.
+
+_CARD_DESC_SELECTORS = [
+    '[class*="description"]',
+    ".description",
+    "[class*=\"snippet\"]",
+    "[class*=\"summary\"]",
+    "[class*=\"excerpt\"]",
+    "p",
+]
+
+
+def _card_description(element, title="", company="", limit=300):
+    """Best available description text from a job card.
+
+    Tries common description selectors first, then falls back to the card's
+    own text (title/company echoes removed). Returns "" rather than a stub:
+    an empty summary is honest input for the scorer and the country filter,
+    a fake sentence is not.
+    """
+    if element is None:
+        return ""
+    try:
+        for sel in _CARD_DESC_SELECTORS:
+            node = element.select_one(sel)
+            if node is None:
+                continue
+            text = clean_text(node)
+            if text and text != title and text != company:
+                return text[:limit]
+        text = clean_text(element)
+    except Exception:
+        return ""
+    if not text:
+        return ""
+    for noise in (title, company):
+        if noise:
+            text = text.replace(noise, " ")
+    text = re.sub(r"\s+", " ", text).strip(" -|·,")
+    return text[:limit]
+
+
+def _stack_from(title, *texts, limit=5):
+    """tech_stack from the title PLUS body text, not the title alone.
+
+    RSS/API parsers derived the stack from the title only, so a generic
+    title ("Software Engineer") carried zero skill signal even when the
+    feed summary listed the real stack.
+    """
+    return top_techs(" ".join([title] + [t for t in texts if t]), limit=limit)
 
 
 # TECH_FILTER intentionally also matches ROLE words (developer, engineer,
@@ -174,8 +236,21 @@ def clean_text(element):
 
 
 def days_ago(date_str):
-    """Simple date check - returns 0 to bypass filtering for now"""
-    return 0
+    """Age of a posting in days, or None when missing/unparseable.
+
+    B8 (AUDIT 2026-10-18): this was hard-coded to 0 "to bypass filtering
+    for now", which made date filtering non-functional while looking real.
+    It now parses what normalize_date produces. The filter itself is
+    deliberate config (PO decision #4): SCRAPER_MAX_AGE_DAYS > 0 enables
+    the age gate in scrape_all; the default 0 keeps the no-filter behavior.
+    """
+    if not date_str:
+        return None
+    try:
+        posted = datetime.datetime.strptime(str(date_str)[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    return max(0, (datetime.date.today() - posted).days)
 
 
 # =============================================================================
@@ -209,7 +284,16 @@ MASTER_BOARDS = {
         "type": "api"
     },
     "TheMuse": {
-        "url": "https://www.themuse.com/api/public/jobs?page=1&category=Computer%20and%20IT&category=Software%20Engineer&level=Entry%20Level&level=Mid%20Level",
+        # §6 fix (2026-10-21): the old slice (category=Computer and IT +
+        # category=Software Engineer) landed on IT-support pages — 20/20
+        # correctly rejected, board yielded 0 every run. "Software
+        # Engineering" is the real dev category and level values must be the
+        # full names (verified live: both filters honored, 93538 -> 56665).
+        # The category carries employer-mislabeled noise (a veterinarian is
+        # tagged "Software Engineering"); the pipeline's dev/rejection
+        # filters are the real gate, same as every other board. Yield after
+        # the _accept_job fix: ~4-5 dev jobs per page of 20.
+        "url": "https://www.themuse.com/api/public/jobs?category=Software%20Engineering&level=Mid%20Level&level=Entry%20Level&page=1",
         "type": "api"
     },
     "Adzuna": {
@@ -290,22 +374,24 @@ MASTER_BOARDS = {
         "url": "https://www.trueup.io/jobs",
         "type": "html"
     },
-    "Naukri": {
-        "url": "https://www.naukri.com/remote-developer-jobs",
-        "type": "html"
-    },
+    # Naukri dropped (§6, 2026-10-21): bot wall (35KB shell to non-browser
+    # clients) and India-focused — outside ALLOWED_COUNTRY_TERMS, so its
+    # jobs were country-filtered away anyway. Same trade as TimesJobs.
+    # (FounditIN, which duplicated this exact URL, is dropped in
+    # ADDITIONAL_BOARDS below for the same reason.)
     "CWJobs": {
         "url": "https://www.cwjobs.co.uk/jobs/developer/remote",
         "type": "html"
     },
-    "TimesJobs": {
-        "url": "https://www.timesjobs.com/jobsearch/result.html?txtKeywords=developer&txtLocation=remote",
-        "type": "html"
-    },
-    "WorkInStartups": {
-        "url": "https://www.workinstartups.com/job-board",
-        "type": "html"
-    },
+    # TimesJobs dropped (AUDIT 2026-10-18 §6): its TLS chain does not
+    # validate and the board is out of region. The fail-closed TLS policy is
+    # correct, so the board burned 3 retries + backoff every run and could
+    # never produce a job. Restore only with a fixed certificate chain.
+    # WorkInStartups dropped (§6, 2026-10-21): 405 on GET for every
+    # non-browser client (verified via the scraper AND an independent
+    # fetch), despite already being in BOT_PROTECTED_BOARDS with rotated
+    # headers and longer delays. A Playwright path would need live selector
+    # development. Restore only with a working endpoint.
     "BuiltIn": {
         "url": "https://builtin.com/jobs/remote",
         "type": "html"
@@ -346,7 +432,12 @@ ADDITIONAL_BOARDS = {
     "Remotees": {"url": "https://remote.co/remote-jobs/developer/", "type": "html"},
     "GoRemote": {"url": "https://www.workingnomads.co/jobs?tag=developer", "type": "html"},
     "RemoteFrontendJobs": {"url": "https://reactjobs.io/jobs/front-end/remote", "type": "html"},
-    "FounditIN": {"url": "https://www.naukri.com/remote-developer-jobs", "type": "html"},
+    # Naukri dropped (§6, 2026-10-21): bot wall (35KB shell to non-browser
+    # clients) and India-focused — outside ALLOWED_COUNTRY_TERMS, so its
+    # jobs were country-filtered away anyway. Same trade as TimesJobs.
+    # FounditIN dropped with it: it targets the SAME naukri.com endpoint
+    # (it was previously skipped per run as Naukri's URL duplicate), so
+    # keeping it would just re-point the bot wall at a new label.
     "NaukriGulf": {"url": "https://www.naukrigulf.com/remote-jobs", "type": "html"},
 }
 MASTER_BOARDS.update(ADDITIONAL_BOARDS)
@@ -1030,9 +1121,17 @@ def parse_json_arbeitnow(board, data, debug=False):
 
 
 def _accept_job(title, description=""):
-    combined_text = f"{title} {description}"
-    if not is_valid_dev_job({"job_title": title, "tech_stack": combined_text}):
+    # §6 fix (2026-10-21): the full description used to be passed as
+    # `tech_stack`, so NON_DEV_FILTER matched single tool/role words
+    # ANYWHERE in the body — "Software Engineer, Hardware Test & Automation"
+    # died because its own description says "hardware", and The Muse
+    # yielded 0 of 20 real results. The title gate is unchanged; the body
+    # now feeds only the role-word check. Body-based rejection still
+    # happens downstream via cv_matcher's curated multi-word
+    # BODY_REJECTION_PATTERNS, which was designed for body text.
+    if not is_valid_dev_job({"job_title": title}):
         return False
+    combined_text = f"{title} {description}"
     return bool(
         EXP_FILTER.search(combined_text)
         or any(word in title.lower() for word in ["developer", "engineer", "programmer"])
@@ -1369,14 +1468,16 @@ def parse_html_weworkremotely(html):
                 continue
 
             print(f"    + Found Job: '{title}' at {company}")
+            # C3: real card text instead of the "Full-Time listing" stub.
+            summary = _card_description(element, title, company)
             results.append({
                 "job_title": title,
                 "company": company,
                 "salary": clean_text(element.select_one('span.salary')),
-                "tech_stack": ", ".join(re.findall(TECH_FILTER, title)[:5]),
+                "tech_stack": _stack_from(title, summary),
                 "timezone": clean_text(element.select_one('span.region')),
                 "apply_url": link,
-                "summary": "Full-Time listing from WeWorkRemotely.",
+                "summary": summary,
                 "posted_date_iso": datetime.date.today().isoformat(),
                 "source": "WeWorkRemotely"
             })
@@ -1440,14 +1541,16 @@ def parse_html_wellfound(html):
                     company = clean_text(company_elem)
                     break
 
+            # C3: real card text instead of the "Wellfound listing" stub.
+            summary = _card_description(container, title, company or "Unknown")
             results.append({
                 "job_title": title,
                 "company": company or "Unknown",
                 "salary": salary,
-                "tech_stack": ", ".join(re.findall(TECH_FILTER, title)[:5]),
+                "tech_stack": _stack_from(title, summary),
                 "timezone": location,
                 "apply_url": link,
-                "summary": f"Wellfound listing - {location}" + (f" - {salary}" if salary else ""),
+                "summary": summary,
                 "posted_date_iso": normalize_date(None),
                 "source": "Wellfound"
             })
@@ -1519,14 +1622,16 @@ def parse_html_nodesk(html):
                 else:
                     link = "https://nodesk.co/" + link
 
+            # C3: real card text instead of the "NoDesk remote listing" stub.
+            summary = _card_description(element, title, company or "Unknown")
             results.append({
                 "job_title": title,
                 "company": company or "Unknown",
                 "salary": "",
-                "tech_stack": ", ".join(re.findall(TECH_FILTER, title)[:5]),
+                "tech_stack": _stack_from(title, summary),
                 "timezone": "Remote",
                 "apply_url": link or "",
-                "summary": "NoDesk remote listing",
+                "summary": summary,
                 "posted_date_iso": normalize_date(None),
                 "source": "NoDesk"
             })
@@ -1598,14 +1703,16 @@ def parse_html_himalayas(html):
                 else:
                     link = "https://himalayas.app/" + link
 
+            # C3: real card text instead of the "Himalayas remote listing" stub.
+            summary = _card_description(element, title, company or "Unknown")
             results.append({
                 "job_title": title,
                 "company": company or "Unknown",
                 "salary": "",
-                "tech_stack": ", ".join(re.findall(TECH_FILTER, title)[:5]),
+                "tech_stack": _stack_from(title, summary),
                 "timezone": "Remote",
                 "apply_url": link or "",
-                "summary": "Himalayas remote listing",
+                "summary": summary,
                 "posted_date_iso": normalize_date(None),
                 "source": "Himalayas"
             })
@@ -1687,14 +1794,16 @@ def parse_html_generic(html, board_name, base_url):
                 else:
                     link = base_url + '/' + link
 
+            # C3: real card text instead of the "Listing from {board}" stub.
+            summary = _card_description(element, title, company or "Unknown")
             results.append({
                 "job_title": title,
                 "company": company or "Unknown",
                 "salary": "",
-                "tech_stack": ", ".join(re.findall(TECH_FILTER, title)[:5]),
+                "tech_stack": _stack_from(title, summary),
                 "timezone": "Remote",
                 "apply_url": link or "",
-                "summary": f"Listing from {board_name}",
+                "summary": summary,
                 "posted_date_iso": normalize_date(None),
                 "source": board_name
             })
@@ -1789,14 +1898,18 @@ def parse_html_justremote(html, base_url, board):
         timezone = ", ".join(location_restrictions) if location_restrictions else "Remote"
 
         print(f"    + Found Job: '{title}' at {j.get('company_name', '')}")
+        # C3: use the description the preloaded state carries, when it
+        # does; the "{job_type} position via JustRemote" stub guaranteed a
+        # 0 from the scorer and hid the location from the country filter.
+        summary = clean_html(j.get("description", "") or "")[:300]
         results.append({
             "job_title": title,
             "company": j.get("company_name", "") or "",
             "salary": "",
-            "tech_stack": category,
+            "tech_stack": _stack_from(title, summary),
             "timezone": timezone,
             "apply_url": link,
-            "summary": f"{j.get('job_type', 'Remote')} position via JustRemote",
+            "summary": summary,
             "posted_date_iso": _parse_relative_date(j.get("date", "")),
             "source": board,
         })
@@ -1837,14 +1950,18 @@ def parse_html_arc(html, base_url="https://arc.dev", board="Arc"):
             if m:
                 company = m.group(1).strip()
                 break
+        # C3: real card text instead of the "Arc.dev remote listing" stub.
+        if node is None:
+            node = a.find_parent("div")
+        summary = _card_description(node, title, company)
         results.append({
             "job_title": title,
             "company": company,
             "salary": "",
-            "tech_stack": top_techs(title),
+            "tech_stack": _stack_from(title, summary),
             "timezone": "Remote",
             "apply_url": link,
-            "summary": "Arc.dev remote listing",
+            "summary": summary,
             "posted_date_iso": normalize_date(None),
             "source": board,
         })
@@ -1948,6 +2065,9 @@ def _justjoinit_job_from_obj(obj, board):
         return None
     slug = (obj.get("slug") or obj.get("id") or "").strip()
     link = f"https://justjoin.it/offers/{slug}" if slug else ""
+    # C3: embedded offer objects usually carry the description — use it
+    # instead of the "JustJoin.it listing" stub (guaranteed scorer 0).
+    summary = clean_html(obj.get("description") or obj.get("descriptionPlain") or "")[:300]
     return {
         "job_title": title,
         "company": company or "Unknown",
@@ -1955,7 +2075,7 @@ def _justjoinit_job_from_obj(obj, board):
         "tech_stack": ", ".join(skills[:5]) if isinstance(skills, list) and skills else top_techs(tech_text),
         "timezone": "Remote",
         "apply_url": link,
-        "summary": "JustJoin.it listing",
+        "summary": summary,
         "posted_date_iso": normalize_date(obj.get("publishedAt") or obj.get("createdAt")),
         "source": board,
     }
@@ -2046,6 +2166,8 @@ def parse_html_justjoinit(html, board="JustJoinIt", base_url="https://justjoin.i
                 if link in seen_urls:
                     continue
                 seen_urls.add(link)
+                # C3: honest empty summary over a stub — the <a> carries no
+                # description; the card is just the link on JS-only renders.
                 results.append({
                     "job_title": title,
                     "company": "Unknown",
@@ -2053,7 +2175,7 @@ def parse_html_justjoinit(html, board="JustJoinIt", base_url="https://justjoin.i
                     "tech_stack": top_techs(title),
                     "timezone": "Remote",
                     "apply_url": link,
-                    "summary": f"Listing from {board}",
+                    "summary": "",
                     "posted_date_iso": normalize_date(None),
                     "source": board,
                 })
@@ -2316,6 +2438,84 @@ def _run_optional_scraper(label, scrape_func, jobs, working_scrapers, failed_scr
             tracker.scrape(label, "error", 0)
 
 # =============================================================================
+# BOARD HEALTH / CIRCUIT BREAKER (AUDIT 2026-10-18 §6)
+# =============================================================================
+
+# Chronic failures (e.g. FlexJobs/CWJobs/Remotees/NaukriGulf timing out three
+# times every run) burn real wall-clock: 3 retries x 3-6s base delays, 403
+# backoff and 30-40s timeouts each — per failing board, per run. After
+# BREAKER_FAIL_THRESHOLD consecutive failed runs a board is skipped
+# automatically for the next BREAKER_COOLDOWN_RUNS runs and the skip is
+# surfaced in the tracker instead of failing again. State persists across
+# processes (each run is a fresh interpreter) in cache/board_health.json;
+# cache/ is gitignored so this never reaches git.
+
+BOARD_HEALTH_PATH = Path(__file__).resolve().parents[1] / "cache" / "board_health.json"
+BREAKER_FAIL_THRESHOLD = 3
+BREAKER_COOLDOWN_RUNS = 5
+
+
+def _load_board_health():
+    try:
+        with open(BOARD_HEALTH_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_board_health(health):
+    try:
+        BOARD_HEALTH_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(BOARD_HEALTH_PATH, "w", encoding="utf-8") as fh:
+            json.dump(health, fh, indent=2, sort_keys=True)
+    except OSError as e:
+        print(f"  ⚠️ Could not persist board health state: {e}")
+
+
+def _board_breaker_check(name, health):
+    """True when the breaker is OPEN for this board (skip it this run).
+
+    Side effect: decrements the remaining cooldown once per run and persists
+    it, so the board is retried automatically after the cooldown runs out.
+    """
+    state = health.get(name)
+    if not isinstance(state, dict):
+        return False
+    cooldown = int(state.get("cooldown", 0) or 0)
+    if cooldown <= 0:
+        return False
+    state["cooldown"] = cooldown - 1
+    _save_board_health(health)
+    print(f"  ⚡ Circuit breaker OPEN: skipping {name} "
+          f"(failed {state.get('fails', '?')} consecutive runs; "
+          f"{state['cooldown']} cooldown runs left)")
+    return True
+
+
+def _board_breaker_record(name, health, success):
+    """Update the breaker after one fetch attempt.
+
+    Only exceptions count as failures: an empty result can be a board
+    legitimately listing no matching jobs this run, and tripping the breaker
+    on that would silently drop real coverage. Recovery resets the state.
+    """
+    state = health.setdefault(name, {"fails": 0, "cooldown": 0})
+    if success:
+        if state.get("fails") or state.get("cooldown"):
+            print(f"  ✅ {name} recovered — circuit breaker reset")
+        state["fails"] = 0
+        state["cooldown"] = 0
+    else:
+        state["fails"] = int(state.get("fails", 0) or 0) + 1
+        if state["fails"] >= BREAKER_FAIL_THRESHOLD and int(state.get("cooldown", 0) or 0) <= 0:
+            state["cooldown"] = BREAKER_COOLDOWN_RUNS
+            print(f"  ⚡ {name} failed {state['fails']} consecutive runs — "
+                  f"skipping for the next {BREAKER_COOLDOWN_RUNS} runs")
+    _save_board_health(health)
+
+
+# =============================================================================
 # SCRAPE ALL
 # =============================================================================
 
@@ -2333,6 +2533,14 @@ def scrape_all(debug=False, tracker=None):
 
     print("Starting job scraping...")
 
+    # §6 (AUDIT 2026-10-18): zero the LLM accounting so this run's
+    # yield-per-LLM-call numbers are its own, not the process's lifetime.
+    try:
+        from agents.gemini_tools import reset_llm_call_stats as _reset_llm
+        _reset_llm()
+    except Exception:
+        pass
+
     # Two board keys can point at the identical URL (RemoteOKAPI/RemoteOK and
     # FounditIN/Naukri), which fetched the same endpoint twice per run — two
     # HTTP round-trips plus their bot-protection sleeps, for rows the
@@ -2341,6 +2549,7 @@ def scrape_all(debug=False, tracker=None):
     # and recorded as such, so the run log says what happened instead of
     # silently double-counting a provider.
     fetched_urls = {}
+    board_health = _load_board_health()
 
     for name, info in MASTER_BOARDS.items():
         board_url = (info.get("url") or "").strip()
@@ -2360,6 +2569,10 @@ def scrape_all(debug=False, tracker=None):
             tracker.scrape(name, "skipped-js", 0)
             continue
         print(f"\n--- Processing {name} ---")
+        if _board_breaker_check(name, board_health):
+            failed_scrapers.append(name)
+            tracker.scrape(name, "skipped-breaker", 0)
+            continue
         try:
             jobs_from_board = fetch_jobs_from_board(name, info, debug)
             count = len(jobs_from_board)
@@ -2368,6 +2581,7 @@ def scrape_all(debug=False, tracker=None):
                 print(f"Parsed {count} jobs from {name}")
                 working_scrapers.append(name)
                 jobs.extend(jobs_from_board)
+                _board_breaker_record(name, board_health, success=True)
                 tracker.scrape(name, "ok", count)
             else:
                 print(f"  No jobs found from {name}")
@@ -2375,6 +2589,7 @@ def scrape_all(debug=False, tracker=None):
                 tracker.scrape(name, "empty", 0)
 
         except Exception as e:
+            _board_breaker_record(name, board_health, success=False)
             print(f"{name} completely failed: {e}")
             import traceback
             traceback.print_exc()
@@ -2442,6 +2657,27 @@ def scrape_all(debug=False, tracker=None):
         failed_scrapers.append("Crawl4AI-JustRemote")
         tracker.scrape("Crawl4AI-JustRemote", "error", 0)
 
+    # §6 (AUDIT 2026-10-18): the only LLM-consuming scrape path is
+    # Crawl4AI-JustRemote (markdown extraction via the fallback chain).
+    # Record attempts vs jobs so yield-per-LLM-call is visible per run —
+    # in the tracker AND the JSONL log. The floor decision stays MANUAL:
+    # one provider outage (3 failed attempts, 0 jobs) must not
+    # auto-disable the board; the recorded numbers carry the evidence.
+    try:
+        from agents.gemini_tools import get_llm_call_stats
+        _llm = get_llm_call_stats(reset=True)
+        if _llm["attempts"]:
+            tracker.llm("Crawl4AI-JustRemote", attempts=_llm["attempts"],
+                        providers=_llm["providers"])
+            _fetched = tracker.boards.get("Crawl4AI-JustRemote", {}).get("fetched", 0)
+            _prov = ", ".join(
+                f"{p}: {v['ok']}/{v['attempts']} ok" for p, v in _llm["providers"].items())
+            print(f"  💡 LLM cost (Crawl4AI-JustRemote): {_llm['attempts']} attempts "
+                  f"({_prov}) -> {_fetched} jobs "
+                  f"(yield {_fetched / _llm['attempts']:.1f} jobs/call)")
+    except Exception:
+        pass
+
     total_before_filter = len(jobs)
     jobs = [job for job in jobs if is_valid_dev_job(job)]
     tracker.stage("dev_filter", count_by_source(jobs))
@@ -2452,6 +2688,25 @@ def scrape_all(debug=False, tracker=None):
     country_blocked = country_before - len(jobs)
     print(f"Country filter: blocked {country_blocked} jobs | remaining: {len(jobs)}")
     tracker.stage("country", count_by_source(jobs))
+
+    # === DATE FILTER (opt-in — B8, AUDIT 2026-10-18) ===
+    # days_ago() used to be a hard-coded 0, so this filter never worked.
+    # It is now real but deliberate config: SCRAPER_MAX_AGE_DAYS > 0 drops
+    # postings older than that many days. Default 0 keeps the documented
+    # no-filter behavior (PO decision #4). Jobs with no parsable date are
+    # KEPT when the filter is on: an unparseable date is not evidence of
+    # age, and dropping them would silently hide whole boards.
+    try:
+        max_age_days = int(os.getenv("SCRAPER_MAX_AGE_DAYS", "0") or "0")
+    except ValueError:
+        max_age_days = 0
+    if max_age_days > 0:
+        age_before = len(jobs)
+        jobs = [job for job in jobs
+                if (age := days_ago(job.get("posted_date_iso"))) is None
+                or age <= max_age_days]
+        print(f"Date filter (>{max_age_days}d old): dropped {age_before - len(jobs)} jobs | remaining: {len(jobs)}")
+        tracker.stage("date", count_by_source(jobs))
 
     # Add location tags for all jobs
     for job in jobs:

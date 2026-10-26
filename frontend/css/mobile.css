@@ -23,6 +23,11 @@
 }
 
 @media (max-width: 768px) {
+  /* The drawer's brand row is the product mark, not a collapse control. */
+  .brand-collapse-hint {
+    display: none;
+  }
+
   /* --- The trigger ------------------------------------------------------- */
   .mobile-nav-btn {
     display: inline-flex;
@@ -61,7 +66,7 @@
        has to read as a layer over the page, not as a page change. */
     display: flex;
     width: min(280px, 84vw);
-    background: var(--bg-surface);
+    background: var(--bg-sidebar);
     z-index: 60; /* over .drawer-overlay (50), under .modal-overlay (100) */
     transform: translateX(-100%);
     /* Visibility, not only transform: an off-canvas rail is still in the tab
@@ -97,7 +102,7 @@
     position: fixed;
     inset: 0;
     z-index: 55;
-    background: rgba(9, 9, 11, 0.55);
+    background: var(--scrim);
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
@@ -174,7 +179,7 @@
   .manual-application-status,
   .tracker-title-meta p,
   .scrape-monitor-header p {
-    font-size: 12.5px;
+    font-size: var(--text-sm);
   }
 
   .meta-chip,
@@ -185,7 +190,7 @@
   }
 
   .job-summary-snippet {
-    font-size: 13.5px;
+    font-size: var(--text-md);
   }
 
   /* The match ring's "%" is 10.5px on a desktop; give it a little more room
@@ -275,12 +280,27 @@
     border-color: var(--border-subtle);
   }
 
+  /* The card keeps its ambient shadow on touch; only the hover lift is
+     removed, otherwise a phone would render a flatter card than a desktop. */
+  .kanban-card,
+  .kanban-card:hover {
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* The same rule for job cards: the tap must not flatten a card that has its
+     own ambient elevation. */
+  .job-card,
+  .job-card:hover {
+    box-shadow: var(--shadow-sm);
+  }
+
   .kanban-card-archived:hover {
-    border-color: rgba(239, 68, 68, 0.28);
+    border-color: var(--accent-rose);
   }
 
   .action-btn.primary:hover {
-    background: var(--primary-blue);
+    background: var(--control-primary-bg);
+    border-color: var(--control-primary-bg);
     transform: none;
   }
 
@@ -428,11 +448,11 @@
   }
 
   .jobs-grid-container {
-    gap: 12px;
+    gap: 10px;
   }
 
   .job-card {
-    padding: 16px;
+    padding: 16px 14px;
   }
 
   /* A single-line, ellipsised title is wrong on a narrow card: two lines. */
@@ -469,6 +489,17 @@
   .kanban-col {
     min-height: 260px;
     scroll-snap-align: start;
+    border-left: 1px solid var(--rule);
+  }
+
+  .kanban-col:first-child {
+    border-left: 0;
+  }
+
+  /* The swipe board is one horizontal strip: the stacked-lane rules from
+     tracker.css must not draw a line across the top of every column. */
+  .kanban-col + .kanban-col {
+    border-top: 0;
   }
 
   /* --- Drawer: full screen, safe-area aware ----------------------------- */
@@ -652,5 +683,13 @@
   .app-sidebar,
   .sidebar-scrim {
     transition-duration: 1ms;
+  }
+}
+
+/* The sidebar toggle is a desktop/tablet mode switch. On a phone the sidebar
+   is the drawer, which is always labelled, so there is no mode to switch. */
+@media (max-width: 768px) {
+  .sidebar-toggle {
+    display: none;
   }
 }

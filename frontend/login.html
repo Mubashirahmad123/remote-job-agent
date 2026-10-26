@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Sign in · Remote Job Agent</title>
-  <meta name="theme-color" content="#0c0d0e">
-  <script src="js/theme.js"></script>
+  <meta name="theme-color" content="#0f1320">
+  <script src="js/theme.js?v=9"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/variables.css">
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/mobile.css">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/variables.css?v=9">
+  <link rel="stylesheet" href="css/base.css?v=9">
+  <link rel="stylesheet" href="css/components.css?v=9">
+  <link rel="stylesheet" href="css/mobile.css?v=9">
   <style>
     /* Login page — standalone, no dashboard layout, no JS storage of secrets. */
     .login-shell {
@@ -31,7 +31,7 @@
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-lg);
       padding: 32px 28px;
-      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      box-shadow: var(--shadow-md);
     }
     .login-brand {
       display: flex;
@@ -43,23 +43,25 @@
       width: 34px;
       height: 34px;
       border-radius: var(--radius-md);
-      background: var(--primary-blue-glow);
-      color: var(--primary-blue);
+      background: var(--control-primary-bg);
+      color: var(--text-on-fill);
       display: flex;
       align-items: center;
       justify-content: center;
+      box-shadow: var(--shadow-sm);
     }
     .login-brand .brand-title {
-      font-family: var(--font-mono);
+      font-family: var(--font-sans);
       font-weight: 600;
       font-size: 13px;
-      letter-spacing: 0.08em;
+      letter-spacing: -0.005em;
       color: var(--text-primary);
     }
     .login-title {
       margin: 0 0 6px;
-      font-size: 20px;
-      font-weight: 700;
+      font-size: var(--text-2xl);
+      font-weight: 600;
+      letter-spacing: -0.022em;
       color: var(--text-primary);
     }
     .login-sub {
@@ -88,15 +90,15 @@
       font-size: 16px;
       font-family: var(--font-sans);
       color: var(--text-primary);
-      background: var(--bg-surface-elevated);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
+      background: var(--bg-inset);
+      border: 1px solid var(--control-border);
+      border-radius: var(--radius-md);
       outline: none;
-      transition: border-color var(--transition-fast);
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
     }
     .login-field input:focus {
       border-color: var(--border-focus);
-      box-shadow: 0 0 0 3px var(--primary-blue-glow);
+      box-shadow: 0 0 0 3px var(--ring);
     }
     .login-error {
       min-height: 18px;
@@ -141,6 +143,6 @@
       <p class="login-footnote">Sessions last 7 days. Sign out from the dashboard header to end yours early.</p>
     </div>
   </main>
-  <script src="js/login.js"></script>
+  <script src="js/login.js?v=9"></script>
 </body>
 </html>

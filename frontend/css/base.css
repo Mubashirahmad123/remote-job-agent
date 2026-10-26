@@ -1,5 +1,10 @@
 /* =============================================================================
-   BASE.CSS — Minimalist Global Resets, Contrast Typography & Clean Background
+   BASE.CSS — Global reset, typography floor, focus and scrollbars
+
+   The type system is deliberately small: four UI sizes plus one display size
+   for the page title and one figure size for KPI numbers. Every number in the
+   product is tabular so columns of figures stack; no component sets its own
+   body font.
    ============================================================================= */
 
 *, *::before, *::after {
@@ -25,6 +30,7 @@ body {
   font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: 1.5;
+  letter-spacing: -0.003em;
   min-height: 100dvh;
   overflow-x: hidden;
   transition: background-color var(--transition-normal), color var(--transition-normal);
@@ -36,9 +42,27 @@ body {
   font-feature-settings: "tnum" 1;
 }
 
+/* Display sizes are optically tightened; body text is not. Instrument Sans
+   carries more character in the lowercase, so headings only need a light
+   negative tracking rather than the cramped -0.03em that generic grotesks do. */
+h1, h2, h3, h4 {
+  letter-spacing: -0.018em;
+  line-height: var(--leading-tight);
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+a {
+  color: var(--primary-text);
+  text-underline-offset: 2px;
+}
+
 ::selection {
   background: var(--primary);
-  color: #ffffff;
+  color: var(--text-on-fill);
 }
 
 /* Form controls do not inherit type from their ancestors: without this, every
@@ -109,7 +133,33 @@ button, [role="button"], .nav-item, .mobile-nav-btn, .role-pill, .view-toggle-bt
   display: none !important;
 }
 
+/* Disabled copy is quieter but still readable (>=3:1) and is always paired
+   with a changed shape or cursor, never with colour alone. */
+[disabled],
+.is-disabled {
+  color: var(--text-disabled);
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-panel {
+    animation: none;
+  }
+
+  .pulse-emerald,
+  .pulse-amber,
+  .pulse-red {
+    animation: none;
+  }
+
+  /* The job cards' entrance is decorative; the list is complete without it. */
+  .jobs-grid-container.is-entering .job-card,
+  .job-card:hover {
+    animation: none;
+    transform: none;
+  }
 }

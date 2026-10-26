@@ -184,4 +184,14 @@ class TestFetchDeduplication:
         # Kept deliberately: board triage history in PRODUCTION.md refers to
         # these names. Dedupe happens at fetch time, not by deleting config.
         assert "RemoteOKAPI" in sc.MASTER_BOARDS
-        assert "FounditIN" in sc.MASTER_BOARDS
+
+    def test_dead_endpoint_boards_are_dropped(self):
+        """§6 (2026-10-21): boards whose endpoint can never serve jobs are
+        removed from the config instead of burning retries every run —
+        TimesJobs (TLS fail-closed + out of region), Naukri + FounditIN
+        (bot wall, India-focused, outside ALLOWED_COUNTRY_TERMS), and
+        WorkInStartups (405 on GET for every non-browser client)."""
+        import agents.scrapper as sc
+
+        for dropped in ("TimesJobs", "Naukri", "FounditIN", "WorkInStartups"):
+            assert dropped not in sc.MASTER_BOARDS

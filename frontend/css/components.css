@@ -1,9 +1,16 @@
 /* =============================================================================
    COMPONENTS.CSS — Buttons, chips, modals, toasts
 
-   One solid action per screen, and it is a value contrast (near-white on dark,
-   near-black on light), not a hue. Everything else is a 1px edge that fills
-   in on hover.
+   Button hierarchy is explicit, not implied by position:
+
+     primary   solid indigo, white ink        one per screen
+     secondary tinted surface + visible edge  the default action
+     tertiary  quiet ink, no edge             low-stakes action
+     danger    rose tint, rose ink            destructive only
+     success   emerald tint, emerald ink      confirmations
+
+   Disabled and loading are shape states as well as colour states, so they are
+   still unambiguous without colour vision.
    ============================================================================= */
 
 /* --- Buttons --------------------------------------------------------------- */
@@ -13,14 +20,16 @@
   justify-content: center;
   gap: 7px;
   height: var(--control-height);
-  padding: 0 12px;
+  padding: 0 13px;
   border-radius: var(--radius-md);
   font-family: var(--font-sans);
   font-size: var(--text-md);
   font-weight: 500;
+  letter-spacing: -0.002em;
   cursor: pointer;
   transition: color var(--transition-fast), background-color var(--transition-fast),
-    border-color var(--transition-fast);
+    border-color var(--transition-fast), box-shadow var(--transition-fast),
+    transform var(--transition-fast);
   border: 1px solid transparent;
   text-decoration: none;
   white-space: nowrap;
@@ -32,34 +41,53 @@
   flex-shrink: 0;
 }
 
-.action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.action-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
-.action-btn:disabled svg {
-  animation: spinBusy 1.2s linear infinite;
+/* Disabled keeps its shape and its label; only the charge is removed. A
+   spinning icon on every disabled button was misleading, so it is gone. */
+.action-btn:disabled {
+  background: var(--bg-inset);
+  border-color: var(--border-subtle);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.action-btn.is-loading {
+  cursor: progress;
+}
+
+.action-btn.is-loading svg,
+.action-btn[aria-busy="true"] svg {
+  animation: spinBusy 900ms linear infinite;
 }
 
 @keyframes spinBusy {
   to { transform: rotate(360deg); }
 }
 
-/* The single primary action on a screen. */
+/* The single primary action on a screen: the accent itself. */
 .action-btn.primary {
   background: var(--control-primary-bg);
   border-color: var(--control-primary-bg);
   color: var(--control-primary-ink);
   font-weight: 600;
+  box-shadow: var(--shadow-sm);
 }
 
 .action-btn.primary:hover:not(:disabled) {
   background: var(--control-primary-bg-hover);
   border-color: var(--control-primary-bg-hover);
+  box-shadow: var(--shadow-accent);
 }
 
+/* Secondary is a tinted surface with a visible edge — it must read as a
+   control on both the page and a card. */
 .action-btn.secondary {
-  background: transparent;
+  background: var(--bg-surface);
   border-color: var(--control-border);
   color: var(--text-secondary);
 }
@@ -70,6 +98,37 @@
   color: var(--text-primary);
 }
 
+.action-btn.tertiary {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+
+.action-btn.tertiary:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.action-btn.danger {
+  background: var(--accent-rose-bg);
+  border-color: transparent;
+  color: var(--accent-rose);
+}
+
+.action-btn.danger:hover:not(:disabled) {
+  border-color: var(--accent-rose);
+}
+
+.action-btn.success {
+  background: var(--accent-emerald-bg);
+  border-color: transparent;
+  color: var(--accent-emerald);
+}
+
+.action-btn.success:hover:not(:disabled) {
+  border-color: var(--accent-emerald);
+}
+
 .action-btn.small {
   height: 28px;
   padding: 0 10px;
@@ -78,7 +137,7 @@
 
 .action-btn.large {
   height: 38px;
-  padding: 0 16px;
+  padding: 0 17px;
   font-size: var(--text-base);
 }
 
@@ -90,12 +149,12 @@
   width: var(--control-height);
   height: var(--control-height);
   border-radius: var(--radius-md);
-  background: var(--bg-surface-elevated);
-  border: 1px solid var(--control-border);
+  background: var(--primary-soft);
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-primary);
+  color: var(--primary-text);
   font-weight: 600;
   font-size: var(--text-xs);
   cursor: pointer;
@@ -109,16 +168,16 @@
   height: var(--control-height);
   padding: 0 9px 0 4px;
   border-radius: var(--radius-md);
-  background: transparent;
-  border: 1px solid var(--control-border);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
 }
 
 .session-chip .avatar-initials {
   width: 24px;
   height: 24px;
   border-radius: var(--radius-sm);
-  background: var(--text-primary);
-  color: var(--bg-canvas);
+  background: var(--primary-soft);
+  color: var(--primary-text);
   font-weight: 600;
   font-size: var(--text-2xs);
   display: flex;
@@ -155,13 +214,14 @@
   font-variant-numeric: tabular-nums;
   line-height: 1;
   padding: 3px 7px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
 .badge-tag {
-  background: var(--bg-surface-elevated);
+  background: var(--bg-inset);
+  border-color: var(--border-subtle);
   color: var(--text-secondary);
 }
 
@@ -177,7 +237,7 @@
 }
 
 .badge-indigo {
-  background: var(--bg-surface-elevated);
+  background: var(--primary-soft);
   color: var(--primary-text);
 }
 
@@ -193,11 +253,63 @@
   background: var(--accent-emerald);
 }
 
+/* --- Range control ---------------------------------------------------------
+   Native range tracks render as bright OS chrome in both themes, which is the
+   one control that refuses to belong to the palette. This is the smallest
+   restyle that makes the track and thumb theme-aware. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--rule);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--rule);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+input[type="range"]:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 3px;
+}
+
 /* --- Modal ----------------------------------------------------------------- */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.62);
+  background: var(--overlay);
   z-index: 100;
   display: flex;
   align-items: center;
@@ -207,8 +319,8 @@
 
 .modal-box {
   background: var(--bg-surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   width: 90%;
   max-width: 800px;
   max-height: 90vh;
@@ -220,9 +332,9 @@
 }
 
 .modal-header {
-  height: 50px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  height: 52px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--rule);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -251,11 +363,11 @@
 
 .modal-close-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-surface-elevated);
+  background: var(--bg-surface-hover);
 }
 
 .modal-body {
-  padding: 16px;
+  padding: 18px;
   overflow-y: auto;
 }
 
@@ -287,7 +399,7 @@
 }
 
 /* --- Toast -----------------------------------------------------------------
-   One dark chip in both themes, because it floats over the page rather than
+   One deep chip in both themes, because it floats over the page rather than
    being part of it. The entry is a transition, not a keyframe: toasts
    interrupt each other and a keyframe would restart from zero. */
 .app-toast {
@@ -297,7 +409,7 @@
   max-width: min(420px, calc(100vw - 32px));
   background: var(--bg-inverse);
   color: var(--text-on-inverse);
-  padding: 10px 14px;
+  padding: 11px 15px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-md);

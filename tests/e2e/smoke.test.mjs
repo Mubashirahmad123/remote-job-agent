@@ -249,6 +249,29 @@ describe('happy path — live API', () => {
     );
   });
 
+  test('the desktop sidebar folds and opens from the panel itself', () => {
+    const doc = ctx.window.document;
+    const root = doc.documentElement;
+    const brand = doc.getElementById('sidebarBrand');
+    assert.ok(brand, 'the sidebar brand must be the collapse control');
+    assert.equal(brand.getAttribute('role'), 'button');
+    assert.equal(brand.getAttribute('aria-controls'), 'appSidebar');
+    assert.equal(doc.getElementById('btnSidebarToggle'), null, 'the old foot button must be gone');
+    assert.equal(doc.getElementById('btnSidebarToggleTop'), null, 'the header button must be gone');
+
+    brand.click();
+    assert.equal(root.getAttribute('data-sidebar'), 'collapsed', 'one click on the panel did not fold it');
+    assert.equal(brand.getAttribute('aria-expanded'), 'false');
+    assert.match(brand.getAttribute('aria-label'), /Expand/);
+    assert.equal(ctx.window.localStorage.getItem('rja-sidebar'), 'collapsed', 'the choice was not stored');
+
+    brand.click();
+    assert.equal(root.getAttribute('data-sidebar'), 'expanded', 'the second click did not open the panel');
+    assert.equal(brand.getAttribute('aria-expanded'), 'true');
+    assert.match(brand.getAttribute('aria-label'), /Collapse/);
+    assert.equal(ctx.window.localStorage.getItem('rja-sidebar'), 'expanded');
+  });
+
   test('toasts carry no inline placement, so the phone can re-anchor them', () => {
     // Placement lives in css/components.css (and css/mobile.css moves it above
     // the home indicator). An inline style would win over both and put half the
@@ -593,5 +616,30 @@ describe('header layout contract', () => {
       assert.ok(widths[i] < widths[i - 1], `breakpoints out of order: ${widths.join(', ')}`);
     }
     assert.ok(widths.includes(768), 'the sidebar-hiding 768px breakpoint must survive');
+  });
+
+  test('the collapsed sidebar is a scoped mode, never a second layout', () => {
+    // The rail rules are keyed off <html data-sidebar="collapsed"> inside the
+    // >=769px tier, so a phone drawer can never inherit the icon rail and the
+    // expanded column stays the base styling.
+    const css = stripComments(read('css/layout.css'));
+    const vars = stripComments(read('css/variables.css'));
+    assert.match(
+      css,
+      /\[data-sidebar="collapsed"\]\s+\.app-sidebar\s*\{/,
+      'collapsed rail rules must be scoped to [data-sidebar="collapsed"]',
+    );
+    assert.match(vars, /--sidebar-width:\s*252px/, 'the expanded sidebar width is missing');
+    assert.match(vars, /--rail-width:\s*56px/, 'the collapsed rail width is missing');
+  });
+
+  test('every local script and stylesheet is cache-stamped', () => {
+    // A versioned <link> next to an unversioned <script> is how a new button
+    // ships into a page still running the old handler: the markup updates and
+    // the click does nothing. Both halves of the bundle must carry ?v=.
+    for (const name of ['index.html', 'login.html']) {
+      const bare = [...read(name).matchAll(/(?:src|href)="((?:js|css)\/[^"?]+)"/g)].map((m) => m[1]);
+      assert.deepEqual(bare, [], `${name} has unversioned assets: ${bare.join(', ')}`);
+    }
   });
 });

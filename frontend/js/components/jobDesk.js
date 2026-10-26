@@ -208,11 +208,11 @@ JobAgent.jobDesk = {
   _stateBanner() {
     const { loading, errors, usingLive } = JobAgent.store.state;
     if (loading.jobs) {
-      return `<div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-muted); background: var(--bg-card); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">Loading live jobs from <code>/api/jobs</code>…</div>`;
+      return `<div class="jobs-state-note">Loading live jobs from <code>/api/jobs</code>…</div>`;
     }
     if (errors.jobs) {
       const src = usingLive ? '' : 'No cached data to fall back on.';
-      return `<div style="grid-column: 1 / -1; padding: 16px 20px; color: var(--accent-rose); background: var(--accent-rose-bg); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); font-size: var(--text-sm);">API error: ${errors.jobs} ${src}</div>`;
+      return `<div class="jobs-state-note is-error">API error: ${errors.jobs} ${src}</div>`;
     }
     return '';
   },
@@ -231,28 +231,33 @@ JobAgent.jobDesk = {
     if (this.jobsGridContainer) {
       if (jobs.length === 0 && !JobAgent.store.state.loading.jobs) {
         this.jobsGridContainer.innerHTML = banner + `
-          <div style="grid-column: 1 / -1; padding: 48px; text-align: center; color: var(--text-muted); background: var(--bg-card); border-radius: var(--radius-lg); border: 1px dashed var(--border-subtle);">
-            <p style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">No remote jobs match current filters</p>
-            <p style="font-size: 12.5px;">Try lowering the minimum score slider or clearing role/location filters.</p>
+          <div class="jobs-empty-state">
+            <p class="jobs-empty-title">No remote jobs match current filters</p>
+            <p class="jobs-empty-hint">Try lowering the minimum score slider or clearing role/location filters.</p>
           </div>
         `;
       } else {
         const selected = JobAgent.store.state.selectedJob;
         const selectedId = selected ? String(selected.id) : null;
         const stackOf = (job) => Array.isArray(job.tech_stack) ? job.tech_stack : [];
-        this.jobsGridContainer.innerHTML = banner + jobs.map(job => `
+        this.jobsGridContainer.innerHTML = banner + jobs.map(job => {
+          const stack = stackOf(job);
+          const visibleTags = stack.slice(0, 4);
+          const extraTags = stack.length - visibleTags.length;
+          const title = this.escapeHtml(job.job_title);
+          return `
           <div class="job-card ${selectedId === String(job.id) ? 'is-selected' : ''}" data-id="${String(job.id).replace(/"/g, '&quot;')}">
-            <div class="match-score-badge ${this.getScoreTierClass(job.match_score)}" title="ATS Match Score">
-              <span class="score-val">${job.match_score}</span>
-              <span class="score-unit">%</span>
-            </div>
-            <div class="job-card-top">
+            <div class="job-card-head">
+              <div class="match-score-badge ${this.getScoreTierClass(job.match_score)}" title="ATS Match Score">
+                <span class="score-val">${job.match_score}</span>
+                <span class="score-unit">%</span>
+              </div>
               <div class="job-title-group">
-                <h3 class="job-role-title">${this.escapeHtml(job.job_title)}</h3>
+                <h3 class="job-role-title" title="${title}">${title}</h3>
                 <div class="job-company-name">
-                  <span>${this.escapeHtml(job.company)}</span>
-                  <span>•</span>
-                  <span class="text-muted" style="font-size: 11.5px;">${this.escapeHtml(job.posted_text)}</span>
+                  <span class="job-company">${this.escapeHtml(job.company)}</span>
+                  <span class="job-sep" aria-hidden="true">·</span>
+                  <span class="job-posted">${this.escapeHtml(job.posted_text)}</span>
                 </div>
               </div>
             </div>
@@ -266,7 +271,8 @@ JobAgent.jobDesk = {
             <p class="job-summary-snippet">${this.escapeHtml(this.plainText(job.summary).slice(0, 220))}</p>
 
             <div class="job-tech-pills">
-              ${stackOf(job).slice(0, 6).map(t => `<span class="tech-tag">${this.escapeHtml(t)}</span>`).join('')}
+              ${visibleTags.map(t => `<span class="tech-tag">${this.escapeHtml(t)}</span>`).join('')}
+              ${extraTags > 0 ? `<span class="tech-tag tech-tag-more">+${extraTags}</span>` : ''}
             </div>
 
             <div class="job-card-footer">
@@ -281,7 +287,8 @@ JobAgent.jobDesk = {
               </div>
             </div>
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
     }
 
@@ -314,6 +321,13 @@ JobAgent.jobDesk = {
           </td>
         </tr>
       `).join('');
+    }
+
+    // 3. Entrance motion — only when the view is entered, never on a filter
+    // re-render, so typing in the search box does not make the list flicker.
+    if (this.pendingEntrance) {
+      this.pendingEntrance = false;
+      this._playCardEntrance();
     }
 
     // Bind item click interactions
@@ -356,5 +370,24 @@ JobAgent.jobDesk = {
         }
       });
     });
+  },
+
+  /** Re-render the grid and play the one-time entrance animation. */
+  playEntrance() {
+    this.pendingEntrance = true;
+    this.render();
+  },
+
+  _playCardEntrance() {
+    const grid = this.jobsGridContainer;
+    if (!grid || !grid.querySelector('.job-card')) return;
+    grid.classList.remove('is-entering');
+    // Force a style flush so a second visit re-runs the animation.
+    void grid.offsetWidth;
+    grid.classList.add('is-entering');
+    window.clearTimeout(this._entranceTimer);
+    this._entranceTimer = window.setTimeout(() => {
+      grid.classList.remove('is-entering');
+    }, 900);
   }
 };

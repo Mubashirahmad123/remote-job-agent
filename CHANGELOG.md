@@ -1,5 +1,167 @@
 # CHANGELOG.md
 
+## 2026-10-21 (b) — review follow-up: title signals, zero-scoring, rejection rules, ranking transparency
+
+Five findings from the second review of the same 2026-10-18 run, verified
+against the live code and the **current** cached CV profile before fixing:
+
+1. **preferred_titles no longer silently empty** — the cached profile now
+   carries `['Software Engineer', 'Full Stack Developer']` (dashboard CV
+   Studio edit), so the title-alignment bonus is live. Hardened anyway:
+   when the list is empty, `_extract_title_keywords` derives the same role
+   keywords from the CV's experience titles; a deliberately-set non-empty
+   list is respected as-is.
+2. **Zero-scoring incomplete descriptions fixed** — "Software Engineer" with
+   no recognizable tech skills scored a hard 0 (the no-skills early return
+   bypassed even the capped path). It now scores capped title/seniority
+   signal (reason: "No recognizable tech skills; title signals only") and
+   lands in the maybe range instead of the void.
+3. **`\bintegration engineer\b` removed from TITLE_ONLY_PATTERNS** — it
+   rejected "Backend Integration Engineer (APIs)" before scoring. The
+   enterprise platforms it guarded (Mulesoft, NetSuite, D365, SAP, ERP, ETL)
+   keep their own tool patterns, so "Mulesoft Integration Engineer" is still
+   rejected.
+4. **Match quality vs ranking separated** — `rank_score` is now stored on
+   each job alongside `match_score` (CV fit, the gate) and `ranking_score`
+   (match + freshness), with the three documented at the ranking step; the
+   top-3 log line prints "Match: X | Rank: Y".
+5. **Per-job score breakdown** — `score()` returns a `breakdown` dict
+   (core_coverage, core_credit, exact/tooling/title/seniority bonuses,
+   cap_applied) so any explanation can be checked against the numbers that
+   produced it. Verified: with today's populated preferred_titles the
+   title bonus IS active (the audit-time "bonus always zero" claim was true
+   only for the empty-titles snapshot).
+
+Deliberately unchanged, per the review's own recommendation: no
+sentence-transformers/faiss install, no scoring-weight changes — the C1
+decision from the 2026-10-21 (a) entry already matches it.
+
+## 2026-10-21 (a) — audit remediation: matcher, dedup, sheets backoff, board breaker, PM quick wins
+
+Implementation pass over `AUDIT.md` (2026-10-18) and `PM.md` §1a quick wins,
+done one finding at a time. Regression coverage in `tests/test_audit_fixes.py`.
+
+### Matching engine (C1, C2, C4, PM-1, PM-4)
+
+- **C2 — coverage inversion fixed** (`tools/cv_matcher.py`): the main term is
+  now a concave (sqrt) credit instead of linear coverage. A 3/5 core match —
+  the audit's failing case — moved from ~55 (LOW) to ~79 (PASS); strict
+  ordering preserved. Genuine zero-overlap stays a hard 0. Postings with **no
+  recognizable core stack** (stub text) no longer die at 0: title/tooling
+  signals score, capped by `NO_CORE_STACK_CEILING = 55` so they land in the
+  maybe range for triage instead of passing unverified.
+- **C1 — threshold decision documented, not silently re-tuned**: `MIN_SCORE`
+  stays 70 in both modes; the recalibration IS the C2/C3 fixes (re-enabling
+  sentence-transformers/faiss was rejected as a heavy torch dependency). The
+  active mode + gate are now printed every run so future changes are
+  deliberate.
+- **C4 — LOW MATCH lines print the computed `match_reason`** (was computed,
+  stored, and hidden — the exact change that would have exposed C3
+  immediately).
+- **PM-4 — body rejection patterns require a role noun**: bare
+  `\bcybersecurity\b` became `\bcybersecurity (engineer|analyst|...)`. The
+  BeyondTrust Cloud Engineer collateral case is fixed; titles keep the bare
+  pattern.
+- **PM-1 — tier bars are env-configurable** (`TOP_MATCH_THRESHOLD`,
+  `GOOD_MATCH_THRESHOLD` following `MIN_MATCH_SCORE`) so the sheet routing
+  and the scorer gate can never silently disagree.
+
+### Funnel integrity (Bugs 1–4, Bug 6 input quality)
+
+- **Bug 1 — missing-URL drops are counted** (`missing_url` in stats + run
+  log); the audit's vanishing 4 jobs can no longer disappear silently.
+- **Bug 2 — cross-board dedup pass** keyed on `(title, company)` alone
+  (`tools/deduplicator.py: title_company_key`); same-opening-different-URL
+  duplicates collapse, `cross_board_dupes` counted.
+- **Bug 3 — freshness day 7 now 0** (was +2 via the `<= 7` branch);
+  **Bug 4 — future-dated postings get no boost** (one day ahead = timezone
+  skew → today's boost; further ahead → 0).
+- **C3 — all nine stub summaries replaced with real card text**
+  (`agents/scrapper.py`): `_card_description()` extracts per-board
+  description nodes with a card-text fallback, `_stack_from()` derives
+  tech_stack from title **+ body** (RSS parsers included). Stub strings
+  ("Himalayas remote listing", ...) are gone — they scored such jobs 0
+  unconditionally and defeated the country filter.
+
+### Reliability (Bug 5, §6)
+
+- **Bug 5 — Sheets writes back off and isolate**: `_sheets_backoff()` retries
+  429/5xx with 1/2/4s + jitter; each phase (ALL JOBS append → tier appends →
+  STATS → cleanup → formatting) fails independently instead of one exception
+  skipping STATS + cleanup; STATS is written every run; formatting is skipped
+  when nothing structural changed (the observed 429 source).
+- **§6 — board circuit breaker**: after 3 consecutive failed runs a board is
+  skipped for 5 runs (`cache/board_health.json`, gitignored), with recovery
+  auto-reset and the skip surfaced in the tracker. TimesJobs dropped
+  (fail-closed TLS + out of region; burned 3 retries every run).
+- **§6 — cached gspread client**: one authorized client per spreadsheet key
+  for the process lifetime (`tools/sheet_writer.py`), ending the repeated
+  "Connected to spreadsheet" handshakes and token refreshes per run.
+- **§6 — favicon 204**: browsers auto-request `/favicon.ico`; the static
+  mount 404ed it into the logs every page load. Now a deliberate 204.
+- **§6 — yield-per-LLM-call accounting**: `generate_with_fallback` counts
+  every provider ATTEMPT (a Gemini 503 + Groq fallback = 2 attempts — the
+  audit's exact cost scenario); `scrape_all` resets at run start and records
+  attempts + provider split into the YieldTracker after the Crawl4AI pass
+  (`tracker.llm()`, a new `llm` jobs/attempts column in the board table and
+  the JSONL log). The yield-floor decision stays MANUAL — one provider
+  outage must not auto-disable a board.
+- **C5 — CV selection no longer double-scores**: `CVLibrary.pick_best_scored`
+  returns the winning result; curator reuses it. The misleading
+  `Best CV … (score 0)` log line only prints with >1 CV registered.
+- **B8 — `days_ago()` is real again** and the age filter is deliberate
+  config: `SCRAPER_MAX_AGE_DAYS > 0` enables it in `scrape_all` (default 0 =
+  the documented bypass, PO decision #4).
+
+### §6 fleet fixes
+
+- **TheMuse fixed, not dropped**: the old URL's slice (`category=Computer
+  and IT` + `category=Software Engineer`) landed on IT-support pages —
+  20/20 correctly rejected, board yielded 0 every run. New URL verified
+  live (`category=Software Engineering` + full-name `level=` values; both
+  filters honored, 93538 → 56665). **Root cause of the 0 was actually
+  `_accept_job`**: it stuffed the full HTML description into the
+  `tech_stack` check, so `NON_DEV_FILTER` matched single tool/role words
+  anywhere in the body — "Software Engineer, Hardware Test & Automation"
+  died because its own text says "hardware". Fixed for ALL API parsers
+  (title gate unchanged; body feeds only the role-word check; downstream
+  `BODY_REJECTION_PATTERNS` still guards body text). The Muse now yields
+  ~4-5 dev jobs per page of 20.
+- **Dropped with evidence**: WorkInStartups (405 on GET for every
+  non-browser client, verified via the scraper and an independent fetch),
+  Naukri (bot wall + India-focused, outside ALLOWED_COUNTRY_TERMS), and
+  FounditIN (same naukri.com endpoint).
+
+### PM quick wins (Q1–Q8)
+
+- **Q1 (P0)**: hardcoded `SESSION_COOKIE_SECURE=true` removed from
+  `docker-compose.yml` — bare-IP HTTP login works again via the
+  `X-Forwarded-Proto` auto-detect; forced Secure broke the documented first
+  deployment.
+- **Q2**: `_warn_multi_worker()` in `create_app` shouts when
+  `WEB_CONCURRENCY > 1` (per-process cache/registry/limiter consequences).
+- **Q3**: `.env.example` synced — added `SEMANTIC_WEIGHT`, `KEYWORD_WEIGHT`,
+  `AUTO_APPLY_DAILY_CAP`, `SCRAPER_TIMEOUT`, `SUBMIT_ARTIFACT_DIR`,
+  `SUBMIT_HEADLESS`, `SNAPSHOT_FILE`, `PW_DIAG_LINES`,
+  `JOBSPY_COUNTRY_INDEED/LOCATION/PROXIES`, plus the new tier/breaker/date
+  knobs; obsolete `ALLOWED_COUNTRIES` removed; `SUBMIT_ENABLED`/`SUBMIT_DRY_RUN`
+  absence documented (armed only via `LIVE_SUBMIT.md`).
+- **Q4**: `api/deps.py` token compares unified on `_bearer_matches`
+  (`hmac.compare_digest`) at both call sites.
+- **Q6**: scrape-run errors carry the `api/errors.py` incident-id pattern
+  (traceback → server log, action + id → run record) instead of raw exception
+  text; `test_worker_error_recorded` pins the new contract.
+- **Q7**: `api/review_worker.py` thread start catches `Exception`, not
+  `BaseException` (interpreter exits surfaced as KeyError → 500).
+- **Q8**: `LIVE_SUBMIT.md` 90s-timeout entry reconciled — repair status
+  documented, live rerun explicitly still open (A5).
+
+Not done this pass (by decision, not omission): PM-2 dashboard UI (backend
+`MAYBE_MATCHES` tab shipped opt-in; jobDesk view is B-phase frontend work),
+PM-3 CV variant registration (needs real tagged CV files from the operator),
+PM-5 manual sheet review, Q5 frontend sweep, and the B3 demo-leak e2e suite.
+
+
 ## 2026-10-17 — fix rate-limit Retry-After boundary overflow (Windows flake)
 
 - The sliding-window limiter computed `retry_after` as `int(remaining) + 1`.

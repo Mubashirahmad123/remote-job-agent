@@ -12,30 +12,32 @@
   <!-- One status-bar colour, matching the app's own default scheme. theme.js
        rewrites this on every theme change, so the bar follows the app rather
        than the OS. -->
-  <meta name="theme-color" content="#171719">
+  <meta name="theme-color" content="#0f1320">
   <!-- Loaded before the stylesheets so the stored scheme is on <html> at first
        paint (theme.js updates the theme-color meta above as well). -->
-  <script src="js/theme.js"></script>
+  <script src="js/theme.js?v=9"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   
   <!-- Modular Component Stylesheets (Easy Debugging & Zero Bundling).
        The ?v= stamp changes with the design: a browser that cached the old
        sheet under the bare path re-fetches this one, so a restyle can never
-       be masked by a stale stylesheet. -->
-  <link rel="stylesheet" href="css/variables.css?v=3">
-  <link rel="stylesheet" href="css/base.css?v=3">
-  <link rel="stylesheet" href="css/layout.css?v=3">
-  <link rel="stylesheet" href="css/components.css?v=3">
-  <link rel="stylesheet" href="css/dashboard.css?v=3">
-  <link rel="stylesheet" href="css/jobs.css?v=3">
-  <link rel="stylesheet" href="css/resume.css?v=3">
-  <link rel="stylesheet" href="css/autoapply.css?v=3">
-  <link rel="stylesheet" href="css/tracker.css?v=3">
-  <link rel="stylesheet" href="css/scrape-monitor.css?v=3">
+       be masked by a stale stylesheet. The same stamp is on every <script>
+       at the foot of the page for the same reason — an unversioned JS file
+       is how a fixed control can keep looking broken in an open tab. -->
+  <link rel="stylesheet" href="css/variables.css?v=9">
+  <link rel="stylesheet" href="css/base.css?v=9">
+  <link rel="stylesheet" href="css/layout.css?v=9">
+  <link rel="stylesheet" href="css/components.css?v=9">
+  <link rel="stylesheet" href="css/dashboard.css?v=9">
+  <link rel="stylesheet" href="css/jobs.css?v=9">
+  <link rel="stylesheet" href="css/resume.css?v=9">
+  <link rel="stylesheet" href="css/autoapply.css?v=9">
+  <link rel="stylesheet" href="css/tracker.css?v=9">
+  <link rel="stylesheet" href="css/scrape-monitor.css?v=9">
   <!-- Last: the phone/touch layer overrides the desktop component files. -->
-  <link rel="stylesheet" href="css/mobile.css?v=3">
+  <link rel="stylesheet" href="css/mobile.css?v=9">
 </head>
 <body class="theme-dark">
   <!-- App Shell -->
@@ -43,14 +45,20 @@
     
     <!-- Sidebar Navigation -->
     <aside class="app-sidebar" id="appSidebar">
-      <div class="sidebar-brand">
+      <!-- The brand row is the sidebar's own collapse control: click the
+           panel to fold it to the rail, click the rail to open it again.
+           No separate button; Enter and Space do the same from the keyboard. -->
+      <div class="sidebar-brand" id="sidebarBrand" role="button" tabindex="0"
+           aria-controls="appSidebar" aria-expanded="true"
+           aria-label="Collapse sidebar" title="Collapse sidebar">
         <div class="brand-icon">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
         </div>
         <div class="brand-meta">
           <span class="brand-title">JOB AGENT</span>
-          <span class="brand-badge">PRO v3.1</span>
+          <span class="brand-badge" title="Build 7">PRO v3.3</span>
         </div>
+        <svg class="brand-collapse-hint" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
       </div>
 
       <nav class="sidebar-nav">
@@ -119,6 +127,7 @@
           <button class="mobile-nav-btn" id="btnMobileNav" aria-controls="appSidebar" aria-expanded="false" aria-label="Open navigation menu" title="Open navigation menu">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
           </button>
+
           <div class="breadcrumb-container">
             <h1 class="breadcrumb-current" id="currentViewTitle">Command Deck</h1>
           </div>
@@ -515,7 +524,7 @@
                 </div>
                 <button class="action-btn secondary small" id="btnEditProfile">Edit</button>
               </div>
-              <div id="profileStatusNote" role="status" style="font-size: 11.5px; color: var(--text-muted); padding: 0 20px 4px;"></div>
+              <div id="profileStatusNote" role="status" style="font-size: 11.5px; color: var(--text-muted); padding-bottom: 6px;"></div>
 
               <div class="profile-summary-grid">
                 <div class="profile-field">
@@ -829,22 +838,22 @@
   <!-- js/data/mockData.js removed 2026-10-03: the file was never in the repo,
        so every JobAgent.MOCK_* global was undefined and every "mock fallback"
        branch was dead code. Empty/error states are rendered honestly instead. -->
-  <script src="js/api.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/store.js"></script>
-  <script src="js/escape.js"></script>
-  <script src="js/components/toast.js"></script>
+  <script src="js/api.js?v=9"></script>
+  <script src="js/auth.js?v=9"></script>
+  <script src="js/store.js?v=9"></script>
+  <script src="js/escape.js?v=9"></script>
+  <script src="js/components/toast.js?v=9"></script>
   <!-- Swipe-to-dismiss primitives. Must load before navigation.js (nav drawer)
        and jobDrawer.js (detail sheet), both of which hand it a surface. -->
-  <script src="js/components/gestures.js"></script>
-  <script src="js/components/navigation.js"></script>
-  <script src="js/components/scrapeMonitor.js"></script>
-  <script src="js/components/dashboard.js"></script>
-  <script src="js/components/jobDesk.js"></script>
-  <script src="js/components/jobDrawer.js"></script>
-  <script src="js/components/resumeStudio.js"></script>
-  <script src="js/components/autoApply.js"></script>
-  <script src="js/components/tracker.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/components/gestures.js?v=9"></script>
+  <script src="js/components/navigation.js?v=9"></script>
+  <script src="js/components/scrapeMonitor.js?v=9"></script>
+  <script src="js/components/dashboard.js?v=9"></script>
+  <script src="js/components/jobDesk.js?v=9"></script>
+  <script src="js/components/jobDrawer.js?v=9"></script>
+  <script src="js/components/resumeStudio.js?v=9"></script>
+  <script src="js/components/autoApply.js?v=9"></script>
+  <script src="js/components/tracker.js?v=9"></script>
+  <script src="js/app.js?v=9"></script>
 </body>
 </html>

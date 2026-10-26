@@ -189,11 +189,11 @@ live: `jobs[], tracker[], stats, skills, health, usingLive, dataSource(sheets|sn
 
 | File | Owns | Live source | Element IDs |
 |---|---|---|---|
-| `navigation.js` | tab switching, off-canvas nav drawer below 768px (open/close, scrim, Escape, focus return) | — | `navDashboard…`, `currentViewTitle`, `btnMobileNav`, `appSidebar`, `sidebarScrim` |
+| `navigation.js` | tab switching, off-canvas nav drawer below 768px (open/close, scrim, Escape, focus return), and the desktop sidebar expand/collapse from the panel itself (brand row or empty surface; no dedicated button) | - | `navDashboard…`, `currentViewTitle`, `btnMobileNav`, `sidebarBrand`, `appSidebar`, `sidebarScrim` |
 | `gestures.js` | swipe-to-dismiss primitive (`swipeToDismiss(el, {axis, direction, handle, canStart, onProgress, onDismiss})`) with 1:1 tracking, axis lock, rubber-banding and velocity projection | — | — (called by `navigation.js` and `jobDrawer.js`) |
-| `theme.js` (in `js/`, loaded in `<head>`) | the light/dark scheme: sets `data-theme` on `<html>` before first paint, persists the choice under `localStorage['rja-theme']`, and is the only owner of the toggle wiring | — | `btnThemeToggle`, `themeIconDark/Light` |
+| `theme.js` (in `js/`, loaded in `<head>`) | the light/dark scheme: sets `data-theme` on `<html>` before first paint, persists the choice under `localStorage['rja-theme']`, and is the only owner of the toggle wiring. It also applies the stored sidebar mode (`rja-sidebar`) as `data-sidebar` before first paint | - | `btnThemeToggle`, `themeIconDark/Light` |
 | `dashboard.js` | bento metrics, sidebar count badges, sources grid, skills cloud | `/api/stats` (`by_source`, `tabs`) plus tracker counts for the pipeline card; skill cloud now live from `/api/skills` (`skills[].name/pct`, no mock fallback — empty renders an honest note) | `metricTotalJobs/TopMatches/DailyCap/Interviews`, `activeJobsBadge`, `topMatchCountBadge`, `metricPipelineFootnote`, `sourcesGrid`, `topSkillsCloud` |
-| `jobDesk.js` | filters, grid/table views, count, newest-first ordering | `store.state.jobs` (client-side filter + `posted_date_iso` desc sort with `scraped_at` fallback, undated last; backend handles `q/source/tab/limit`) | `jobFilterSearch`, `rolePillGroup`, `scoreRange`, `location/source/statusFilter`, `jobsGridContainer/TableBody`, `filteredJobCount` (`(source: N)` suffix) |
+| `jobDesk.js` | filters, a responsive 1/2/3/4-column card grid and a dense table view, count, newest-first ordering, one stagger entrance when the view is opened | `store.state.jobs` (client-side filter + `posted_date_iso` desc sort with `scraped_at` fallback, undated last; backend handles `q/source/tab/limit`) | `jobFilterSearch`, `rolePillGroup`, `scoreRange`, `location/source/statusFilter`, `jobsGridContainer/TableBody`, `filteredJobCount` (`(source: N)` suffix) |
 | `jobDrawer.js` | slide-over detail | receives job object (defensive: string-or-array stack, missing skills/CV) | `jobDetailDrawer`, `drawerBody`, `btnDrawerApplyNow/Save` |
 | `tracker.js` | persisted-only kanban status cycling + professional manual-add modal | `GET/POST/PATCH /api/tracker`; fill-only/package statuses render in Review; active cards cycle via backend-valid statuses `applied/review→interviewing→offer→rejected`; terminal archive statuses (`rejected/withdrawn/ghosted`) stay archived on click; manual adds use an in-app validated modal; per-card pending guard; failed writes never cycle locally; confirmed writes with failed GETs direct the user to Sync | `kanbanColApplied/Review/Interview/Offer/Rejected`, `count*`, `btnSyncTrackerSheets`, `btnNewTrackedJob`, `manualApplicationModal` |
 | `resumeStudio.js` | CV upload (local demo), tailor engine, profile edit + variants panels, Resume/Cover-Letter preview tabs + Open-PDF | `POST /api/resume` (renders the returned `resume_markdown` — escaped first — in the scrollable preview pane; demo sheet only when no real markdown) + `/api/cover-letter`, `GET` + `PUT /api/cv/profile`, `GET /api/cv/variants` (quiet fallback to dynamic demo preview when 404/501/unreachable) | `tailorJobSelect`, `btnGenerateTailored`, `cvVariantList`, `btnEditProfile`, `profSkills`, `generatedPreviewCard`, `tabPreviewResume`, `tabPreviewCover`, `btnOpenPdf` |
@@ -217,9 +217,47 @@ live: `jobs[], tracker[], stats, skills, health, usingLive, dataSource(sheets|sn
   max-height `min(600px, 70vh)`). Its offline fallback is a *dynamic*
   preview built from the selected job + parsed profile — never
   hardcoded fixture HTML. The preview card starts hidden until first generate.
-- Skills cloud is still a static demo until `GET /api/skills` lands — don't mistake it
-  for live data. Auto-Apply opens visible review windows for supported ATS forms,
+- Skills cloud is live from `GET /api/skills`; an empty response renders an
+  honest note, never fixture data. Auto-Apply opens visible review windows for supported ATS forms,
   leaves them open for manual submission, and never clicks submit. The daily-cap
   slider is enforced (per-day persisted count blocks the queue at the cap).
   Untrusted content (job fields, toasts, tracker cards, source names) is escaped
   via `JobAgent.escapeHtml`; only `http(s)` posting URLs are ever assigned.
+
+## 6. Design system
+
+`DESIGN.md` documents the tokens and the rules; `frontend/css/variables.css` is
+the only place they exist. The short version:
+
+- **Tokens only.** No hex/rgba outside `variables.css` (including inline
+  `style=` in JS templates — use `var(--token)`). Both themes define every
+  token name. A new colour means a new pair of values, not a literal.
+- **Surfaces are a ladder**: `--bg-sidebar` < `--bg-inset` < `--bg-canvas` <
+  `--bg-surface` < `--bg-surface-elevated` < `--bg-surface-hover`. Cards are
+  lighter than the page in both themes; the sidebar is always deeper.
+- **Ink by role**: `--text-primary` (titles/figures), `--text-secondary`
+  (labels/body), `--text-muted` (metadata), `--text-disabled`. A fill is not an
+  ink: `--primary` paints surfaces, `--primary-text` is accent ink, and solid
+  CTAs use `--control-primary-bg` / `--control-primary-ink`.
+- **Type**: Instrument Sans via `--font-sans`; JetBrains Mono only for literal
+  data (`--font-mono`). Use the `--text-*` scale rather than literal px, and
+  keep figures tabular.
+- **Buttons**: `.action-btn` + exactly one of `primary | secondary | tertiary |
+  danger | success`, optional `small`/`large`/`full-width`. Loading is
+  `.is-loading` or `aria-busy="true"`; disabled keeps its label and shape.
+- **Badges**: `badge-tag | badge-emerald | badge-amber | badge-indigo |
+  badge-rose`, plus the status-specific classes. Tint + ink, no outline.
+- **Sidebar mode**: `<html data-sidebar="collapsed">` switches the labelled
+  252px column to the 56px icon rail at ≥769px. `theme.js` applies
+  `localStorage['rja-sidebar']` before paint; `navigation.js` owns the brand
+  row (`#sidebarBrand`) as the control — click the panel to fold it, click the
+  rail to open it, no separate button — plus its `aria-expanded`, its keyboard
+  (Enter/Space) path, and the stored value. The phone drawer ignores the mode
+  and is always labelled; there the brand row carries no role or tab stop.
+- **Cache stamp**: bump the `?v=N` query on every `css/*.css` **and every
+  `js/*.js`** in `index.html` / `login.html` when either changes (currently
+  `v=9`). CSS-only stamping left an old `navigation.js` wired to a new button
+  — the control rendered but did nothing until a hard refresh.
+- **Check a visual change** in a real browser at 1440/1024/768/390 in both
+  themes (console errors, horizontal overflow, screenshot review, contrast),
+  then run the e2e suites under `tests/e2e/` and `pytest tests/`.

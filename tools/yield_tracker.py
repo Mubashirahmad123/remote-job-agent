@@ -41,6 +41,19 @@ class YieldTracker:
         e["status"] = status
         e["fetched"] = fetched
 
+    def llm(self, board: str, attempts: int, providers: dict | None = None):
+        """Record LLM usage for a board (§6: yield-per-LLM-call).
+
+        Attempts, not successes — a 503 followed by a fallback IS cost.
+        `llm_jobs` snapshots the board's already-recorded fetched count so
+        the yield (jobs per call) is computable from one JSONL line.
+        """
+        e = self._entry(board)
+        e["llm_attempts"] = attempts
+        e["llm_jobs"] = e.get("fetched", 0)
+        if providers:
+            e["llm_providers"] = providers
+
     def stage(self, stage: str, per_source: dict):
         """Record a pipeline stage (dev_filter, country, curated_in, ...)."""
         for source, count in per_source.items():
@@ -63,16 +76,20 @@ class YieldTracker:
     def print_table(self):
         """Print per-board yield sorted by saved desc."""
         print(f"\n=== BOARD YIELD ===")
-        print(f"  {'Board':<22} {'fetch':>5} {'dev':>5} {'ctry':>5} {'dedup':>5} {'saved':>5}  status")
+        print(f"  {'Board':<22} {'fetch':>5} {'dev':>5} {'ctry':>5} {'dedup':>5} {'saved':>5} {'llm':>9}  status")
         rows = sorted(
             self.boards.items(),
             key=lambda kv: kv[1].get("saved", kv[1].get("country", 0)),
             reverse=True,
         )
         for board, s in rows:
+            llm_cell = "-"
+            if s.get("llm_attempts"):
+                llm_cell = f"{s.get('llm_jobs', 0)}/{s['llm_attempts']}"
             print(f"  {board:<22} "
                   f"{s.get('fetched', '-'):>5} "
                   f"{s.get('dev_filter', '-'):>5} "
                   f"{s.get('country', s.get('post_country', '-')):>5} "
                   f"{s.get('post_dedup', '-'):>5} "
-                  f"{s.get('saved', '-'):>5}  {s.get('status', '')}")
+                  f"{s.get('saved', '-'):>5} "
+                  f"{llm_cell:>9}  {s.get('status', '')}")

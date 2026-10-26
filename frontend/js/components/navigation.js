@@ -21,6 +21,9 @@ JobAgent.navigation = {
     this.btnSyncSheets = document.getElementById('btnSyncSheets');
     this.btnScrapeNow = document.getElementById('btnScrapeNow');
     this.scrapeStatusCard = document.getElementById('scrapeStatusCard');
+    // The sidebar's own brand row is the control: click the panel to fold it
+    // to the rail, click the rail to open it. There is no separate button.
+    this.sidebarBrand = document.getElementById('sidebarBrand');
 
     // Off-canvas nav drawer (phones). The sidebar is a 256px rail beside a
     // desktop window and a third of a phone screen, so below the 768px tier
@@ -57,6 +60,33 @@ JobAgent.navigation = {
       this.sidebarScrim.addEventListener('click', () => this.closeMobileNav());
     }
 
+    // The sidebar mode (expanded labelled column / icon rail) is a persisted
+    // UI preference. js/theme.js applies the stored value before first paint;
+    // this owns the click, the ARIA state and the value that gets stored.
+    this.syncSidebarAffordance();
+    if (this.sidebarBrand) {
+      this.sidebarBrand.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        this.toggleSidebarFromSurface();
+      });
+      this.sidebarBrand.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+        ev.preventDefault();
+        this.toggleSidebarFromSurface();
+      });
+    }
+
+    // Clicking the panel's own surface is the same gesture. Destinations
+    // (nav items, the live-run card) and real controls keep their click.
+    if (this.sidebar) {
+      this.sidebar.addEventListener('click', (ev) => {
+        if (ev.target.closest('.nav-item, .scrape-status-box, .sidebar-brand, button, a, input, select, textarea')) {
+          return;
+        }
+        this.toggleSidebarFromSurface();
+      });
+    }
+
     // The drawer can be pushed away with a swipe, and it inherits the
     // velocity of the release: a flick closes it even if it barely moved.
     if (this.sidebar && JobAgent.gestures) {
@@ -88,7 +118,12 @@ JobAgent.navigation = {
     // page locked (body.nav-open) with no visible way to unlock it.
     if (typeof window.matchMedia === 'function') {
       const wide = window.matchMedia('(min-width: 769px)');
-      const onChange = (e) => { if (e && e.matches) this.closeMobileNav(); };
+      const onChange = (e) => {
+        if (e && e.matches) this.closeMobileNav();
+        // Crossing either way changes what the brand row is: a collapse
+        // control above 768px, a plain product mark in the drawer below it.
+        this.syncSidebarAffordance();
+      };
       if (typeof wide.addEventListener === 'function') {
         wide.addEventListener('change', onChange);
       } else if (typeof wide.addListener === 'function') {
@@ -176,6 +211,80 @@ JobAgent.navigation = {
     this.toggleMobileNav(false);
   },
 
+  currentSidebarMode() {
+    return document.documentElement.getAttribute('data-sidebar') === 'collapsed'
+      ? 'collapsed'
+      : 'expanded';
+  },
+
+  /**
+   * The brand row is a control only on the desktop/tablet column. Below 768px
+   * the panel is the drawer, so the row goes back to being a plain mark: no
+   * role, no tab stop, no tooltip, and no ARIA naming a mode it cannot set.
+   */
+  syncSidebarAffordance() {
+    if (!this.sidebarBrand) return;
+    const mobile = typeof window.matchMedia === 'function'
+      && window.matchMedia('(max-width: 768px)').matches;
+    if (mobile) {
+      this.sidebarBrand.removeAttribute('role');
+      this.sidebarBrand.removeAttribute('tabindex');
+      this.sidebarBrand.removeAttribute('aria-controls');
+      this.sidebarBrand.removeAttribute('aria-expanded');
+      this.sidebarBrand.removeAttribute('aria-label');
+      this.sidebarBrand.removeAttribute('title');
+      return;
+    }
+    this.sidebarBrand.setAttribute('role', 'button');
+    this.sidebarBrand.setAttribute('tabindex', '0');
+    this.sidebarBrand.setAttribute('aria-controls', 'appSidebar');
+    this.syncSidebarToggle();
+  },
+
+  /** Make the brand row describe the mode that is actually on screen. */
+  syncSidebarToggle() {
+    if (!this.sidebarBrand) return;
+    const collapsed = this.currentSidebarMode() === 'collapsed';
+    const label = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    this.sidebarBrand.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    this.sidebarBrand.setAttribute('aria-label', label);
+    this.sidebarBrand.setAttribute('title', label);
+  },
+
+  /** A click on the panel is only a mode change on the desktop/tablet column;
+   *  below 768px the panel is the drawer, and the drawer stays labelled. */
+  toggleSidebarFromSurface() {
+    if (typeof window.matchMedia === 'function'
+        && window.matchMedia('(max-width: 768px)').matches) {
+      return;
+    }
+    this.toggleSidebar();
+  },
+
+  /**
+   * Switch the sidebar between the labelled column and the icon rail.
+   * The phone drawer ignores this: a drawer is always labelled.
+   */
+  setSidebarMode(mode, remember) {
+    const next = mode === 'collapsed' ? 'collapsed' : 'expanded';
+    document.documentElement.setAttribute('data-sidebar', next);
+    if (remember !== false) {
+      try {
+        localStorage.setItem('rja-sidebar', next);
+      } catch (_) {
+        /* storage disabled: the choice lasts for this page only */
+      }
+    }
+    this.syncSidebarToggle();
+  },
+
+  toggleSidebar() {
+    this.setSidebarMode(
+      this.currentSidebarMode() === 'collapsed' ? 'expanded' : 'collapsed',
+      true
+    );
+  },
+
   switchTab(tabKey) {
     JobAgent.store.setTab(tabKey);
 
@@ -205,7 +314,9 @@ JobAgent.navigation = {
 
     // Refresh specific view if needed
     if (tabKey === 'jobs' && JobAgent.jobDesk) {
-      JobAgent.jobDesk.render();
+      // Entering the view is the one moment the cards animate in; filter
+      // changes later re-render without replaying the entrance.
+      JobAgent.jobDesk.playEntrance();
     } else if (tabKey === 'tracker' && JobAgent.tracker) {
       JobAgent.tracker.render();
     }

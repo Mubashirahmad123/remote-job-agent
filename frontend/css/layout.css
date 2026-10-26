@@ -1,9 +1,11 @@
 /* =============================================================================
    LAYOUT.CSS — App shell: icon rail, header, view canvas
 
-   The shell is the same tone as the page; the panels inside it are a step
-   darker. The rail is an icon column at >=1024px, a labelled 232px column on
-   tablets, and the off-canvas drawer on phones (css/mobile.css poses it).
+   The shell is a ladder, not one flat colour: the sidebar is always deeper
+   than the page, the header sits on the page tone, and the panels inside it
+   are lighter than both. Above 768px the sidebar is a labelled 252px column
+   that collapses to a 56px icon rail on request; below 768px css/mobile.css
+   poses it as the off-canvas drawer.
    ============================================================================= */
 
 .app-layout {
@@ -23,7 +25,7 @@
   height: 100dvh;
   padding-top: env(safe-area-inset-top, 0px);
   padding-left: env(safe-area-inset-left, 0px);
-  background: var(--bg-canvas);
+  background: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
@@ -42,24 +44,62 @@
   gap: 12px;
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  position: relative;
+  transition: background-color var(--transition-fast);
 }
 
+/* The panel itself is the control. No bordered "Collapse" button: the brand
+   row reads as part of the chrome and gains a quiet hover surface, while the
+   chevron says which way the panel will move. */
+@media (min-width: 769px) {
+  .sidebar-brand {
+    cursor: pointer;
+  }
+
+  .sidebar-brand:hover {
+    background: var(--bg-surface-hover);
+  }
+
+  .sidebar-brand:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: -2px;
+  }
+}
+
+.brand-collapse-hint {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.55;
+  transition: opacity var(--transition-fast), transform var(--transition-normal);
+}
+
+.sidebar-brand:hover .brand-collapse-hint,
+.sidebar-brand:focus-visible .brand-collapse-hint {
+  opacity: 1;
+}
+
+/* The one solid accent in the chrome outside the active row: the product mark.
+   It anchors the sidebar corner in both themes without a decorative gradient. */
 .brand-icon {
   width: 30px;
   height: 30px;
   border-radius: var(--radius-md);
-  background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-primary);
+  background: var(--control-primary-bg);
+  border: 1px solid transparent;
+  color: var(--text-on-fill);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
 
 .brand-title {
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   font-size: 13px;
   color: var(--text-primary);
   flex: 1;
@@ -115,27 +155,46 @@
 
 .nav-item:hover {
   color: var(--text-primary);
-  background: var(--bg-surface-elevated);
+  background: var(--bg-surface-hover);
 }
 
 .nav-item:hover .nav-icon {
   color: var(--text-primary);
 }
 
-/* The active item is ink plus a 1px accent marker, never a tinted pill. */
+/* The active row is a tinted accent surface with a 2px marker on the inner
+   edge. The tint is what makes "where am I" readable at a glance; the marker
+   gives it a hard edge so it survives a low-contrast theme. */
+.nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
 .nav-item.active {
-  color: var(--text-primary);
-  background: transparent;
+  color: var(--primary-text);
+  background: var(--primary-soft);
   font-weight: 600;
 }
 
+.nav-item.active::before {
+  opacity: 1;
+}
+
 .nav-item.active .nav-label {
-  color: var(--text-primary);
+  color: var(--primary-text);
   font-weight: 600;
 }
 
 .nav-item.active .nav-icon {
-  color: var(--text-primary);
+  color: var(--primary-text);
 }
 
 .nav-icon {
@@ -162,6 +221,11 @@
   background: transparent;
   color: var(--text-muted);
   border: 1px solid var(--border-subtle);
+}
+
+.nav-item.active .nav-counter {
+  color: var(--primary-text);
+  border-color: var(--border-active);
 }
 
 .nav-chip-emerald {
@@ -192,6 +256,7 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   flex-shrink: 0;
 }
 
@@ -314,10 +379,10 @@
 .breadcrumb-current {
   color: var(--text-primary);
   /* The page title: the one h1 on the screen. */
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 600;
-  letter-spacing: -0.015em;
-  line-height: 1.25;
+  letter-spacing: -0.022em;
+  line-height: 1.2;
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -339,8 +404,8 @@
   width: var(--control-height);
   height: var(--control-height);
   border-radius: var(--radius-md);
-  background: transparent;
-  border: 1px solid var(--control-border);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   display: flex;
   align-items: center;
@@ -352,7 +417,7 @@
 
 .theme-toggle-btn:hover {
   background: var(--bg-surface-elevated);
-  color: var(--text-primary);
+  color: var(--primary-text);
   border-color: var(--border-strong);
 }
 
@@ -364,7 +429,7 @@
 
 .view-panel {
   display: none;
-  padding: 24px;
+  padding: 28px 28px 40px;
   animation: fadeIn 150ms ease-out forwards;
 }
 
@@ -380,32 +445,39 @@
    only thing in the column that touches the accent: a 1px bar on the rail's
    inner edge.
    ============================================================================= */
-@media (min-width: 1024px) {
-  .app-sidebar {
+/* =============================================================================
+   COLLAPSED SIDEBAR (<html data-sidebar="collapsed">) — the icon rail
+
+   The expanded sidebar is the base styling: a labelled 252px column. This
+   block is the alternate mode, so the same layout works at 1024 as on a
+   tablet and the only thing that changes is one attribute on <html>.
+   ============================================================================= */
+@media (min-width: 769px) {
+  html[data-sidebar="collapsed"] .app-sidebar {
     width: var(--rail-width);
   }
 
-  .app-main {
+  html[data-sidebar="collapsed"] .app-main {
     margin-left: var(--rail-width);
   }
 
-  .sidebar-brand {
+  html[data-sidebar="collapsed"] .sidebar-brand {
     padding: 0;
     justify-content: center;
     border-bottom: 1px solid var(--rule);
   }
 
-  .brand-meta {
+  html[data-sidebar="collapsed"] .brand-meta {
     display: none;
   }
 
-  .sidebar-nav {
+  html[data-sidebar="collapsed"] .sidebar-nav {
     padding: 10px 8px;
     gap: 2px;
     align-items: center;
   }
 
-  .nav-item {
+  html[data-sidebar="collapsed"] .nav-item {
     justify-content: center;
     gap: 0;
     width: 38px;
@@ -416,9 +488,9 @@
 
   /* Labels and counters stay in the DOM (the phone drawer needs them) but are
      removed from the visual rail. */
-  .nav-item .nav-label,
-  .nav-item .nav-counter,
-  .nav-item .nav-chip-emerald {
+  html[data-sidebar="collapsed"] .nav-item .nav-label,
+  html[data-sidebar="collapsed"] .nav-item .nav-counter,
+  html[data-sidebar="collapsed"] .nav-item .nav-chip-emerald {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -430,26 +502,27 @@
     border: 0;
   }
 
-  .nav-icon {
+  html[data-sidebar="collapsed"] .nav-icon {
     width: 18px;
     height: 18px;
   }
 
-  /* The one accent in the chrome: a 1px line on the rail's inner border,
-     exactly as tall as the icon. */
-  .nav-item.active::before {
-    content: "";
-    position: absolute;
+  /* The rail's active marker sits on the sidebar's inner edge, exactly as tall
+     as the icon: a 2px accent bar that reads from across a desk. */
+  html[data-sidebar="collapsed"] .nav-item.active::before {
+    left: auto;
     right: -9px;
     top: 50%;
+    bottom: auto;
     transform: translateY(-50%);
-    width: 1px;
+    width: 2px;
     height: 18px;
-    background: var(--primary);
+    border-radius: var(--radius-pill) 0 0 var(--radius-pill);
+    opacity: 1;
   }
 
   /* The status dot still reports "running" on the rail, at the icon's corner. */
-  .nav-pulse-dot {
+  html[data-sidebar="collapsed"] .nav-pulse-dot {
     position: absolute;
     top: 7px;
     right: 8px;
@@ -459,7 +532,7 @@
 
   /* Tooltip: the rail is icon-only, so every control names itself on hover
      and on keyboard focus. */
-  .nav-item::after {
+  html[data-sidebar="collapsed"] .nav-item::after {
     content: attr(data-tip);
     position: absolute;
     left: calc(100% + 12px);
@@ -480,19 +553,19 @@
     z-index: 80;
   }
 
-  .nav-item:hover::after {
+  html[data-sidebar="collapsed"] .nav-item:hover::after,
+  html[data-sidebar="collapsed"] .nav-item:focus-visible::after {
     opacity: 1;
     visibility: visible;
   }
 
   /* The live-run card collapses to a status tile at the rail's foot: the dot
      still reports the state, the 2px bar still reports progress, and the
-     element's title carries the run summary on hover. On tablet and in the
-     phone drawer it expands to the full card again. */
-  .sidebar-status-box {
+     element's title carries the run summary on hover. */
+  html[data-sidebar="collapsed"] .sidebar-status-box {
     width: 38px;
     height: 38px;
-    margin: 8px auto 12px;
+    margin: 6px auto 12px;
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -504,14 +577,14 @@
     border-radius: var(--radius-md);
   }
 
-  .status-indicator-row {
+  html[data-sidebar="collapsed"] .status-indicator-row {
     gap: 0;
     justify-content: center;
   }
 
-  .status-title,
-  .status-sub,
-  .status-stat-label {
+  html[data-sidebar="collapsed"] .status-title,
+  html[data-sidebar="collapsed"] .status-sub,
+  html[data-sidebar="collapsed"] .status-stat-label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -521,10 +594,23 @@
     white-space: nowrap;
   }
 
-  .status-stat-bar {
+  html[data-sidebar="collapsed"] .status-stat-bar {
     width: 22px;
     height: 2px;
     margin: 0;
+  }
+
+  /* The panel's own hint flips to point out of the rail, tucked under the
+     mark so the collapse is reversible by the same click that made it. */
+  html[data-sidebar="collapsed"] .brand-collapse-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 5px;
+    width: 10px;
+    height: 10px;
+    margin: 0;
+    transform: translateX(-50%) rotate(180deg);
+    opacity: 0.7;
   }
 }
 

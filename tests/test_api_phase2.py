@@ -86,7 +86,7 @@ class TestStartScrape:
         final = _wait_for(client, first.json()["run_id"])
         assert final["status"] == "done"
 
-    def test_worker_error_recorded(self, client, monkeypatch):
+    def test_worker_error_recorded(self, client, monkeypatch, caplog):
         def boom(progress, tracker=None):
             raise RuntimeError("boards exploded")
 
@@ -95,17 +95,33 @@ class TestStartScrape:
         assert r.status_code == 202
         final = _wait_for(client, r.json()["run_id"])
         assert final["status"] == "error"
-        assert "boards exploded" in final["error"]
         assert final["finished_at"]
+        # Q6 (2026-10-18): the record carries the incident-id pattern (same
+        # contract as api/errors.py) instead of raw exception text — the
+        # message must NOT reach the dashboard, the full traceback must go
+        # to the server log, and the id in the record must be greppable
+        # there.
+        assert "boards exploded" not in final["error"]
+        assert "Scrape failed" in final["error"]
+        assert "incident" in final["error"]
+        # Full traceback landed in the server log under that incident id
+        # (caplog records it; "Captured log call" above shows the same).
+        assert "boards exploded" in caplog.text
 
     def test_no_heavy_imports_at_startup(self, client, monkeypatch):
         monkeypatch.setattr(
             runs, "_run_simple_pipeline", lambda progress, tracker=None: {"scraped": 0, "curated": 0}
         )
+        before = set(sys.modules)
         r = client.post("/api/scrape")
         assert r.status_code == 202
-        assert "agents.curator" not in sys.modules
-        assert "main" not in sys.modules
+        # The contract (api/runs.py docstring) is that the API never imports
+        # the pipeline itself. It may already be present in sys.modules when
+        # another test file imported agents.curator first (order-dependent),
+        # so assert on what the RUN added, not on global absence.
+        added = set(sys.modules) - before
+        assert "agents.curator" not in added
+        assert "main" not in added
 
 
 class TestGetScrape:

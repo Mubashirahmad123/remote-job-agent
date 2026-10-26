@@ -23,6 +23,7 @@
   'use strict';
 
   var KEY = 'rja-theme';
+  var SIDEBAR_KEY = 'rja-sidebar';
   var DEFAULT_THEME = 'dark';
   var root = document.documentElement;
 
@@ -86,7 +87,7 @@
     // stale the next time the palette moves.
     var colour = getComputedStyle(document.documentElement)
       .getPropertyValue('--bg-canvas')
-      .trim() || (theme === 'dark' ? '#0b0c0e' : '#f7f8fa');
+      .trim() || (theme === 'dark' ? '#0f1320' : '#e4e6f2');
     var metas = document.querySelectorAll('meta[name="theme-color"]');
     for (var i = 0; i < metas.length; i += 1) {
       metas[i].setAttribute('content', colour);
@@ -111,6 +112,20 @@
 
   // The stored choice, else the app's own default, before the first paint.
   apply(readStored() || DEFAULT_THEME);
+
+  // The sidebar's expanded/collapsed shape is the same kind of pre-paint
+  // preference as the scheme: applying it here means someone who collapsed the
+  // sidebar never sees it flash open while the body parses. navigation.js owns
+  // the toggle and persists the change.
+  (function applySidebarMode() {
+    var mode = 'expanded';
+    try {
+      if (localStorage.getItem(SIDEBAR_KEY) === 'collapsed') mode = 'collapsed';
+    } catch (_) {
+      /* storage disabled: the expanded default is the safe one */
+    }
+    root.setAttribute('data-sidebar', mode);
+  })();
 
   // The button lives in the header, which is parsed after this file. The wiring
   // waits for the document, and the theme is applied once more so the icon and

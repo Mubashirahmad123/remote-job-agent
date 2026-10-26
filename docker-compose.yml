@@ -103,8 +103,9 @@ services:
       # Caddy terminates TLS and forwards X-Forwarded-{For,Proto}. Without
       # these, request.client.host is always Caddy's container IP (so login
       # rate limiting would key on one shared bucket for every user) and
-      # request.url.scheme is always http (so the session cookie's Secure flag
-      # would silently depend on SESSION_COOKIE_SECURE=true below).
+      # request.url.scheme is always http (so the session cookie's Secure
+      # flag would never engage — cookie_secure() auto-detects from this
+      # header; see api/auth.py).
       #
       # NEVER set this to "*". This used to be "*", on the reasoning that it was
       # safe because the port is only published to 127.0.0.1 and the docker
@@ -147,9 +148,14 @@ services:
       - TZ=${TZ:-Asia/Kolkata}
       - API_HOST=0.0.0.0
       - API_PORT=8000
-      # Caddy terminates TLS in front of the api container, so the session
-      # cookie must carry Secure via env (the api itself sees plain HTTP).
-      - SESSION_COOKIE_SECURE=true
+      # Q1 (P0, PM.md 2026-10-18): SESSION_COOKIE_SECURE=true removed. The
+      # documented FIRST deployment is bare-IP HTTP (deploy/DEPLOY_ORACLE.md),
+      # and browsers refuse Secure cookies over plain http — the documented
+      # login silently failed live. api/auth.py cookie_secure() auto-detects:
+      # Secure only when the request arrived as https (Caddy sets
+      # X-Forwarded-Proto and the proxy args above trust the internal
+      # subnet). Set SESSION_COOKIE_SECURE explicitly in .env only to force
+      # a value either way.
     ports:
       # Localhost-only escape hatch (SSH tunnel); public access is via Caddy.
       - "127.0.0.1:8000:8000"

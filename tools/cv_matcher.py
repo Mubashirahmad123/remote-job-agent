@@ -5,6 +5,7 @@ No API calls — runs entirely offline.
 """
 
 import re
+import math
 from typing import Dict, List, Set
 from pathlib import Path
 import json
@@ -119,7 +120,13 @@ TITLE_ONLY_PATTERNS = [
     r"\bsalesforce\b", r"\bapex\b", r"\bvisualforce\b", r"\bsalesforce developer\b",
     r"\bnetsuite\b", r"\bdynamics 365\b", r"\bd365\b", r"\bsap\b", r"\berp\b",
     r"\bservicenow\b", r"\bworkday\b", r"\bsharepoint\b",
-    r"\bmulesoft\b", r"\bintegration engineer\b", r"\betl\b", r"\bdata engineer\b(?!.*software)",
+    # Review fix (2026-10-21, item 3): bare `\bintegration engineer\b` was
+    # removed — backend/API integration roles are target dev work, and the
+    # pattern rejected "Backend Integration Engineer (APIs)" before scoring
+    # even started. The enterprise-integration platforms it guarded against
+    # keep their own tool patterns (mulesoft, netsuite, d365, sap, erp, etl),
+    # so "Mulesoft Integration Engineer" is still rejected.
+    r"\bmulesoft\b", r"\betl\b", r"\bdata engineer\b(?!.*software)",
     r"\bmainframe\b", r"\bcobol\b", r"\bas400\b", r"\brpg\b",
     r"\bmanufacturing\b", r"\bfabrication\b", r"\bwelding\b", r"\baeronautical\b",
     r"\bcomint\b", r"\bcesm\b", r"\bcecm\b",  # military/intel systems
@@ -148,10 +155,16 @@ TITLE_ONLY_PATTERNS = [
 
 # Strict body signals: only multi-word, unambiguous role phrases. Single
 # generic words (content, seo, principal, analyst...) must NOT appear here.
+# PM-4 (AUDIT 2026-10-18): bare `\bcybersecurity\b` rejected BeyondTrust's
+# Cloud Engineer because the company blurb mentions security — "works at a
+# security company" is not a rejection reason. Body patterns must name a
+# ROLE: require the role noun after it (titles keep the bare pattern).
 BODY_REJECTION_PATTERNS = [
     r"\bservice desk\b", r"\bhelp desk\b", r"\btechnical support\b",
     r"\bnetwork engineer\b", r"\bnetwork administrator\b",
-    r"\bsecurity engineer\b", r"\bcybersecurity\b", r"\bpenetration tester\b",
+    r"\bsecurity engineer\b",
+    r"\bcybersecurity (engineer|analyst|specialist|consultant|architect|administrator|manager)\b",
+    r"\bpenetration tester\b",
     r"\bdata scientist\b", r"\bdata analyst\b", r"\bmachine learning\b",
     r"\bquality assurance\b", r"\bqa engineer\b", r"\btest engineer\b",
     r"\bgame developer\b", r"\bgame designer\b",
@@ -176,6 +189,13 @@ CORE_CATEGORIES = {
     "postgresql", "mysql", "sql", "mongodb", "redis", "sqlite",
     "react native", "flutter", "ios", "android",
 }
+
+# C2/C3 (AUDIT 2026-10-18): ceiling for postings with NO recognizable core
+# stack (stub summaries, tooling-only text, boards that ship no description).
+# Kept below the default MIN_SCORE (70) so such jobs can enter the
+# maybe-bucket for human review but can never pass the gate on title text
+# alone — core fit is unverified there by definition.
+NO_CORE_STACK_CEILING = 55
 
 # =============================================================================
 # SCORING ENGINE
@@ -217,13 +237,40 @@ class CVMatcher:
 
     def _extract_title_keywords(self) -> Set[str]:
         """Extract role keywords from CV (e.g., 'backend', 'frontend', 'fullstack')."""
-        titles = self.cv_profile.get("preferred_titles", [])
-        text = " ".join(titles).lower()
+        role_words = ["backend", "frontend", "fullstack", "full stack", "web", "software", "mobile", "api"]
+        text = " ".join(self.cv_profile.get("preferred_titles", [])).lower()
+
+        # Review fix (2026-10-21): an empty preferred_titles list silently
+        # disabled the title-alignment bonus for every job. The CV's own
+        # experience titles are the same signal — derive from them when the
+        # explicit list yields nothing, so a "Software Engineer" CV still
+        # recognizes "Software Engineer" postings even when the profile
+        # metadata is incomplete. A deliberately-set non-empty list is
+        # respected as-is (a user redirecting careers must not be overridden
+        # by stale experience titles).
+        if not text.strip():
+            text = " ".join(
+                (exp.get("title") or "") for exp in self.cv_profile.get("experience", [])
+            ).lower()
+
         keywords = set()
-        for word in ["backend", "frontend", "fullstack", "full stack", "web", "software", "mobile", "api"]:
+        for word in role_words:
             if word in text:
                 keywords.add(word.replace(" ", ""))
         return keywords
+
+    def _title_bonus(self, title: str) -> int:
+        """Title-alignment bonus, capped so title text can't dominate.
+
+        Shared by every scoring path (main, no-core-stack, no-skills) so the
+        bonus means the same thing everywhere.
+        """
+        bonus = 0
+        title_norm = (title or "").lower()
+        for kw in self.cv_title_keywords:
+            if kw in title_norm.replace(" ", ""):
+                bonus += 10
+        return min(bonus, 10)
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -300,11 +347,19 @@ class CVMatcher:
         job_skills = self._job_text_to_skills(job_text)
 
         if not job_skills:
-            # Full schema (same keys as the main return) so consumers can
-            # rely on result["has_core_signal"] etc. without .get() guards.
+            # Review fix (2026-10-21, item 2): a generic title ("Software
+            # Engineer") over an incomplete description used to be a hard 0
+            # — discarding relevant opportunities because the posting text
+            # was thin. Title/seniority agreement is still real signal:
+            # score it, capped below the gate (same contract as the
+            # no-core-stack path below), so these land in the maybe range
+            # instead of dying before a human sees them.
+            title_bonus = self._title_bonus(title)
+            cv_seniority = self.cv_profile.get("seniority", "mid").lower()
+            seniority_bonus = 5 if cv_seniority in title.lower() else 0
             return {
-                "score": 0,
-                "match_reason": "No recognizable tech skills in job",
+                "score": min(NO_CORE_STACK_CEILING, title_bonus + seniority_bonus),
+                "match_reason": "No recognizable tech skills; title signals only",
                 "cv_skills_found": len(self.cv_skills),
                 "job_skills_found": 0,
                 "core_job_skills": 0,
@@ -313,6 +368,15 @@ class CVMatcher:
                 "overlap": 0,
                 "direct_matches": [],
                 "expanded_matches": [],
+                "breakdown": {
+                    "core_coverage": 0.0,
+                    "core_credit": 0.0,
+                    "exact_bonus": 0,
+                    "tooling_bonus": 0,
+                    "title_bonus": title_bonus,
+                    "seniority_bonus": seniority_bonus,
+                    "cap_applied": "no_skills",
+                },
             }
 
         core_job_skills = job_skills & CORE_CATEGORIES
@@ -341,51 +405,68 @@ class CVMatcher:
         if core_job_skills:
             core_coverage = len(core_matches) / len(core_job_skills)
         else:
-            # No recognizable core stack in the posting — coverage stays 0
-            # and the has_core_signal gate below zeroes all bonuses too,
-            # so such jobs always score 0.
             core_coverage = 0
 
         # Gate: without at least one core-stack overlap (CV skill ∩ job's
-        # language/framework/db), title/tooling/seniority bonuses must not
-        # lift the score. Without this, a job with core_coverage = 0 could
-        # still reach ~20 from title_bonus + bonus_points + seniority_bonus
-        # alone (flat-20 cluster of unrelated titles).
+        # language/framework/db), the main path below cannot fire. Without
+        # this, a job with core_coverage = 0 could still reach ~20 from
+        # title_bonus + bonus_points + seniority_bonus alone (flat-20
+        # cluster of unrelated titles).
         has_core_signal = len(core_matches) > 0
 
+        # Raw alignment signals — each path below decides how much of them
+        # it trusts.
+        #
         # Small bonus for matching generic/tooling skills (git, agile, testing, docker, etc.)
-        bonus_points = min(len(bonus_matches) * 2, 5) if has_core_signal else 0
+        bonus_points = min(len(bonus_matches) * 2, 5)
 
         # Bonus: exact (non-synonym) core matches weighted higher.
-        # Gated explicitly (not just by implication) so a future redefinition
-        # of core_matches can't silently re-open the flat-20 hole.
-        exact_bonus = len(direct_matches & CORE_CATEGORIES) * 3 if has_core_signal else 0
+        exact_bonus = len(direct_matches & CORE_CATEGORIES) * 3
 
         # Title alignment bonus — capped so title text alone can't dominate the score
-        title_bonus = 0
-        job_title_norm = title.lower()
-        if has_core_signal:
-            for kw in self.cv_title_keywords:
-                if kw in job_title_norm.replace(" ", ""):
-                    title_bonus += 10
-        title_bonus = min(title_bonus, 10)
+        title_bonus = self._title_bonus(title)
 
         # Seniority alignment
-        seniority_bonus = 0
+        job_title_norm = title.lower()
         cv_seniority = self.cv_profile.get("seniority", "mid").lower()
-        if has_core_signal and cv_seniority in job_title_norm:
-            seniority_bonus = 5
+        seniority_hit = cv_seniority in job_title_norm
 
-        score = min(100, int(core_coverage * 70 + exact_bonus + bonus_points + title_bonus + seniority_bonus))
+        # Review fix (2026-10-21, item 5): the per-job breakdown travels
+        # with the result so a score explanation can always be checked
+        # against the numbers that produced it.
+        core_credit = math.sqrt(core_coverage) if (core_job_skills and has_core_signal) else 0.0
 
-        matched_skills = sorted(all_matches)[:10]
-        if not has_core_signal:
-            match_reason = "No core stack overlap"
-        # Defensive fallback only: has_core_signal=True implies all_matches
-        # is non-empty (it ⊇ core_matches), so this branch is unreachable
-        # today. Kept so the reason is never an empty "Matched: ".
-        else:
+        if core_job_skills and has_core_signal:
+            # Main path: the posting names a core stack and the CV overlaps
+            # it. C2 fix (AUDIT 2026-10-18): the credit is concave (sqrt),
+            # not linear. Linear coverage structurally punished detailed
+            # postings — the more core skills a job listed, the lower the
+            # score (3/5 matched scored ~42 + bonuses ≈ 55 → LOW MATCH).
+            # sqrt credits partial coverage substantially while preserving
+            # strict ordering (0.2 -> 0.45, 0.6 -> 0.77, 1.0 -> 1.0), so a
+            # richer, more realistic posting is no longer a penalty.
+            score = min(100, int(core_credit * 70 + exact_bonus + bonus_points
+                                 + title_bonus + (5 if seniority_hit else 0)))
+            matched_skills = sorted(all_matches)[:10]
             match_reason = f"Matched: {', '.join(matched_skills)}" if matched_skills else "Weak skill overlap"
+        elif core_job_skills:
+            # Posting names a core stack the CV does not touch at all — a
+            # genuine zero (e.g. Golang/Kubernetes posting vs a Python/React
+            # CV). The gate keeps unrelated titles from lifting this (the
+            # flat-20 hole documented above).
+            score = 0
+            match_reason = "No core stack overlap"
+        else:
+            # No recognizable core stack in the posting text (stub summary,
+            # tooling-only text, or a board that ships no description).
+            # Previously always 0 — which is how real-sounding titles from
+            # stub boards died silently (C3, AUDIT 2026-10-18). Title and
+            # tooling agreement is real but unverified signal: score it,
+            # capped below the default MIN_SCORE so these land in the
+            # maybe-bucket for human triage instead of a false full pass.
+            score = min(NO_CORE_STACK_CEILING,
+                        bonus_points + title_bonus + (5 if seniority_hit else 0))
+            match_reason = "No core stack listed; title/tooling signals only"
 
         return {
             "score": score,
@@ -398,6 +479,17 @@ class CVMatcher:
             "overlap": len(all_matches),
             "direct_matches": sorted(direct_matches),
             "expanded_matches": sorted(expanded_matches - direct_matches),
+            "breakdown": {
+                "core_coverage": round(core_coverage, 3),
+                "core_credit": round(core_credit, 3),
+                "exact_bonus": exact_bonus,
+                "tooling_bonus": bonus_points,
+                "title_bonus": title_bonus,
+                "seniority_bonus": 5 if seniority_hit else 0,
+                "cap_applied": ("no_core_stack" if not core_job_skills
+                                else "no_core_signal" if not has_core_signal
+                                else None),
+            },
         }
 
 

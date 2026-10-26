@@ -26,15 +26,18 @@
   gap: 8px;
 }
 
-/* Five lanes read as one board: columns divided by a 1px rule on the page
-   ground, not five floating cards. */
+/* Five lanes read as one board: a single raised face divided by rules, so an
+   empty tracker still looks like a board rather than a hole in the page. */
 .kanban-board {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 0;
   align-items: stretch;
-  border-top: 1px solid var(--rule);
-  border-bottom: 1px solid var(--rule);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
 .kanban-col {
@@ -77,8 +80,8 @@
 
 .col-title {
   font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -89,11 +92,11 @@
   font-size: var(--text-xs);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-inset);
   color: var(--text-muted);
-  border: 0;
+  border: 1px solid var(--border-subtle);
 }
 
 .kanban-cards-area {
@@ -117,6 +120,7 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   padding: 11px 12px;
   cursor: pointer;
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
@@ -376,6 +380,9 @@
   .kanban-col:nth-child(2n) {
     border-right: 0;
   }
+  .kanban-col:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
 }
 
 @media (max-height: 700px) {
@@ -406,8 +413,13 @@
 
   .kanban-col {
     border-right: 0;
+    border-bottom: 0;
     min-height: 0;
     padding: 10px 0 14px;
+  }
+
+  .kanban-col + .kanban-col {
+    border-top: 1px solid var(--rule);
   }
 
   .kanban-col:last-child {

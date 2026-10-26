@@ -148,6 +148,205 @@ full rate-limit/auth/proxy/timing suites pass on Windows (85 tests); the full
 Linux lock-only suite has not rerun since, so the 1042 figure predates that
 fix by exactly those two added tests.
 
+## 1a. Phased roadmap — five-role team audit (2026-10-18)
+
+On 2026-10-18 a read-only audit (software architect, senior dev, software
+engineer, junior-dev repo sweep, QA; PM consolidation) reviewed everything
+still open against clean `main` @ `dae0f3863`. This section schedules that
+audit's output: it adds owners, effort and acceptance criteria to §1's
+checklist without contradicting it. **Verdict:** ship-ready after Phases A+B;
+production-live after C; submit expansion only through D's gate chain — which
+may legitimately dead-end at reCAPTCHA (recorded, never bypassed).
+
+### Key audit findings (evidence for traceability)
+
+- **P0 — live-login landmine:** `docker-compose.yml:152` hardcodes
+  `SESSION_COOKIE_SECURE=true` while the documented first deployment is
+  bare-IP HTTP (`deploy/DEPLOY_ORACLE.md:86`); browsers refuse `Secure`
+  cookies over plain http, so the documented login silently fails live.
+  Fix: drop the hardcoded env, rely on auto-detect via `X-Forwarded-Proto`
+  (`api/auth.py:850-858`; `deploy/Caddyfile:30` already sets the header and
+  the trusted subnet is configured). The TestClient smoke cannot catch this
+  (no browser cookie semantics).
+- **P0 — dashboard misleads twice:** `frontend/js/navigation.js:67-78`
+  double-wires `btnSyncSheets` (fake 800ms spinner + unconditional
+  "sync complete" toast beside the real handler at `app.js:51-64`);
+  `frontend/js/resumeStudio.js:587-596` claims "Uploaded & Parsed" although
+  no upload endpoint exists.
+- **P0 — verification debt:** hosted CI green is pinned to commit `0971322`,
+  predating the rate-limit, markdown-extraction and `/health` fixes; the
+  Linux lock-only figure (1042) is stale by the same fixes; the Windows full
+  run's exact failure node IDs were never captured; `ubuntu-latest` begins
+  its 26.04 migration on 2026-10-19.
+- **P1 — `PUT /api/cv/profile` has zero tests** (`api/routers/cv.py:35-60`;
+  `tests/test_api_cv.py` covers only the GETs).
+- **P1 — submit claims lack heartbeat/fencing** (`api/apply_claims.py` uses
+  a fixed 15-min staleness vs the fill path's heartbeats + 30-min watchdog):
+  a hung browser >15 min could allow a second concurrent submission.
+- **P1 — ops hardening absent:** no compose healthchecks
+  (`/api/health/live` is the intended probe), no log rotation
+  (`logs/scraper.log` unbounded + docker json-file defaults), no automated
+  `data/apply_submit.db` backup (credential store — loss = lockout), no
+  monitoring.
+- **P1 — demo fallbacks can mislead:** corrupt demo artifacts served under
+  real-looking filenames (`resumeStudio.js:525-560`), `generate()` silently
+  falls back to the demo shrink engine on any API error, drawer "Save"
+  toasts a bookmark it never saves, `jobDesk` table view has no
+  loading/error/empty states, dashboard `_trackerColumn` omits
+  `needs_review` (drift vs `tracker.js`).
+- **Code stubs:** `agents/scrapper.py:176-178` `days_ago()` returns 0 "to
+  bypass filtering for now" (date filtering non-functional); ~12 env vars
+  read by code are missing from `.env.example`; obsolete `ALLOWED_COUNTRIES`
+  still listed there.
+- **Audit-confirmed clean:** mock-data leak paths in `store.js` (none
+  shipped), safety-gate architecture (fail-closed, defense-in-depth holds,
+  no structural fragility), endpoint test coverage generally excellent.
+
+### Quick wins (≤1h each; land in Phase B unless noted)
+
+| # | Task | Owner |
+|---|---|---|
+| Q1 | Drop hardcoded `SESSION_COOKIE_SECURE` from compose → auto-detect via `X-Forwarded-Proto` (verified live in Phase C) | Senior Dev |
+| Q2 | Multi-worker startup warning in `create_app` (`--workers>1` / `WEB_CONCURRENCY>1`) — the §2.1b seam itself stays unbuilt | Senior Dev |
+| Q3 | `.env.example` sync: add `SEMANTIC_WEIGHT`, `KEYWORD_WEIGHT`, `AUTO_APPLY_DAILY_CAP`, `SCRAPER_TIMEOUT`, `SUBMIT_ARTIFACT_DIR`, `SUBMIT_HEADLESS`, `SNAPSHOT_FILE`, `PW_DIAG_LINES`, `JOBSPY_COUNTRY_INDEED/LOCATION/PROXIES`; delete obsolete `ALLOWED_COUNTRIES`; document why `SUBMIT_ENABLED`/`SUBMIT_DRY_RUN` are intentionally absent (armed only via `LIVE_SUBMIT.md`) | Junior Dev |
+| Q4 | `hmac.compare_digest` in `api/deps.py:137,361` (unify with `_bearer_matches`) | Senior Dev |
+| Q5 | Dead/stale frontend sweep: `store.js:41,242,295`, `tracker.js:437-438`, `resumeStudio.js:226-228`; stop labeling live snapshot data "mock" | Junior Dev |
+| Q6 | `api/runs.py:264` raw exception text → `api/errors.py` incident-id pattern | Senior Dev |
+| Q7 | `api/review_worker.py` catch `Exception`, not `BaseException` (thread death currently → KeyError → 500) | Senior Dev |
+| Q8 | Resolve the `LIVE_SUBMIT.md` 90s-timeout open item (doc reconciliation) | Junior Dev |
+
+**Status update 2026-10-21:** Q1–Q4 and Q6–Q8 are implemented and tested
+(`CHANGELOG.md` 2026-10-21 entries; `tests/test_audit_fixes.py` plus updated
+contract tests). Q5 (frontend dead-code sweep) remains open. The same pass
+implemented the AUDIT.md 2026-10-18 findings: C1 (decision documented, gate
+mode logged), C2 (sqrt coverage credit + capped no-core-stack path), C3 (all
+nine stub summaries replaced with real card text), C4 (match_reason printed),
+C5 (no double-scoring), Bugs 1–5, §6 circuit breaker + board drops + cached
+gspread client + yield-per-LLM-call accounting, B8 (functional `days_ago()`
+behind `SCRAPER_MAX_AGE_DAYS`, default 0), PM-1 (configurable tier bars) and
+PM-2's backend (opt-in `MAYBE MATCHES` tab).
+Open from that audit: PM-2 dashboard UI, PM-3 (needs real CV variants),
+PM-5 manual review, and the B3 demo-leak e2e suite.
+
+**Review follow-up 2026-10-21 (second review of the same run) — all five
+items closed:** title keywords are now derived from the CV's experience
+titles when `preferred_titles` is empty (the cached profile carries
+`['Software Engineer', 'Full Stack Developer']` today, so the bonus is
+live; the hardening covers the empty case); incomplete-description
+zero-scores are capped into the maybe range instead of dying at 0;
+`\bintegration engineer\b` was removed from the title rejection patterns
+(enterprise tool patterns — Mulesoft/SAP/ERP/D365/ETL — retained, so
+"Backend Integration Engineer (APIs)" now scores while "Mulesoft
+Integration Engineer" is still rejected); `rank_score` is stored on each
+job and documented as distinct from `match_score` (CV fit, the gate) and
+`ranking_score` (match + freshness); and `CVMatcher.score` returns a
+per-job `breakdown` dict so any explanation is checkable against the
+numbers that produced it — which also resolved the review's inconsistency
+flag (the "title bonus always zero" claim was true only for the
+audit-time empty-titles snapshot). No semantic dependencies and no scoring
+weight changes, matching the review's own recommendation and the C1
+decision above.
+
+### Phase A — Release gate
+
+Goal: `main` provably release-ready — all suites green at HEAD on all
+platforms, live fill fix verified, HTTP login fixed.
+
+| # | Task | Owner | Eff | Acceptance | Depends |
+|---|---|---|---|---|---|
+| A1 | Integrate phase-3 portability: cherry-pick the code hunks of `40e5fc1ab` (nine `utf-8` fixes + url_guard path normalization), drop its stale doc hunks; fix the four latent bare `read_text()` calls | Senior Dev | M | url_guard case RED→GREEN on Windows with `PYTHONIOENCODING` unset; no doc churn | — |
+| A2 | Windows full-run disposition: `bash -n` probe guard in `test_docker_locked_dependencies.py`; diagnose CrewAI SDK failures before any skip (they guard the deliberate rollback); rerun with `-rf` capturing exact node IDs | QA | M | Full Windows run classified pass/fixed/justified-skip with node-ID evidence; zero unexplained skips | A1 |
+| A3 | Linux lock-only full rerun on current `main` | QA | S | Green; count reconciled (1042 + 2 rate-limit + 16 markdown cases) and explained in TESTER.md | A1 |
+| A4 | Fresh hosted CI at HEAD, all five jobs; record the Ubuntu-runner pin-or-ride decision | QA | S | All jobs green at HEAD; decision recorded | PO #3 |
+| A5 | Live Chrome fill-only rerun of the handoff fix (runbook in `LIVE_SUBMIT.md`: DB backup, disarmed check, 180s default, Regenerate the packaged demo, stage timings, pending→terminal polling, screenshot GET 200, zero intent/submit calls) | QA | M | Run log with stage timings + screenshot 200; slow step identified; no submission | — |
+| A6 | Cookie-secure fix + regression test (Q1): plain-HTTP login sets a non-Secure cookie; proxied HTTPS sets Secure | Senior Dev | S | Test green; compose carries no hardcoded secure env | — |
+
+Exit: A1–A6 done, reviewer APPROVE on the diff, §4 DoD green.
+
+### Phase B — Harden & fix
+
+Goal: the UI stops lying, the highest-value test gaps close, the vuln
+baseline ratchets.
+
+| # | Task | Owner | Eff | Acceptance | Depends |
+|---|---|---|---|---|---|
+| B1 | Fix double-wired `btnSyncSheets` (`navigation.js:67-78`): remove fake spinner + unconditional toast | Software Engineer | S | Exactly one handler; toast reflects the real outcome | — |
+| B2 | Fix fake upload success (`resumeStudio.js:587-596`): no "Uploaded & Parsed" without an endpoint | Software Engineer | S | Honest disabled/error state; caught by B3 | — |
+| B3 | Demo-leak e2e suite (+ double-wiring + 401-mid-action recovery cases) | Software Engineer | M | Suite fails on any success-claim without a real API success; runs in CI | B1, B2 |
+| B4 | Honest-demo pass: non-real filenames + explicit demo toast for corrupt demo artifacts; no silent `runShrinkEngine` fallback; Save toast, drawer boilerplate and identity panel labeled demo | Software Engineer | M | Every demo path visibly labeled; B3 extended | B3 |
+| B5 | Table parity + taxonomy: jobDesk TABLE loading/error/empty states; `_trackerColumn` includes `needs_review`; remove dead `appliedPackagesList` | Software Engineer | S | Table- and taxonomy-parity e2e green | B3 |
+| B6 | Tests for `PUT /api/cv/profile` (currently zero) | Senior Dev | S | Happy/invalid/partial-merge cases in `test_api_cv.py` | — |
+| B7 | Submit-claim heartbeat/fencing parity with the fill path — or a documented single-supervised-run assumption | Senior Dev | M | Concurrent-claim rejection tested, or sign-off note in `LIVE_SUBMIT.md` before any dry run | A5 |
+| B8 | `days_ago()` stub (`agents/scrapper.py:176-178`): restore date filtering per PO #4 | Junior Dev | S | Date filter functional + tested, or bypass documented as deliberate | PO #4 |
+| B9 | Backend test/fix bundle: runs-registry watchdog (or documented restart caveat), bad-tab-400 + non-PNG-screenshot tests; `ApplyOut` response_model only after verifying UI review-polling fields survive (PO #5) | Senior Dev | M | Targeted tests green; decision recorded | — |
+| B10 | Vuln ratchet wave 1: lxml, pdfminer, then pillow→12.1.1 — one at a time: bounded pin → `uv pip compile --universal` → full suites → docker CI → audit → prune FIXED-only baseline lines | QA | M | Baseline shrinks only via FIXED lines; suites + docker CI green each step | A4 |
+| B11 | Vuln ratchet wave 2: crawl4ai→0.8.0 (drives the JS scraper; highest regression risk) | QA | L | JS-rendered scraper smoke passes post-bump; audit rerun | B10 |
+
+Exit: B1–B9 done (B10/B11 may trail), demo-leak suite green, reviewer APPROVE.
+
+### Phase C — Deploy & verify live
+
+Goal: first real Oracle VM deployment, healthy and observed.
+
+| # | Task | Owner | Eff | Acceptance | Depends |
+|---|---|---|---|---|---|
+| C1 | Compose hardening: `/api/health/live` healthchecks, log rotation (scraper.log + json-file caps), automated `data/apply_submit.db` backup + restore drill, healthchecks.io ping after `run_scraper`, external uptime probe | Senior Dev | M | `compose ps` healthy; restore drill passes; logs capped | A |
+| C2 | Oracle deployment + assertion checklist: compose ps healthy; `/api/health/live` 200 in+out; `data_source:sheets`; cookie login over HTTP (validates A6); one Scrape Now e2e; Caddy cert; restart persistence; Chromium launch; no secrets in image | QA | M | Checklist fully green, recorded in §1; deployment status moves "prepared" → "verified" | C1, A6 |
+| C3 | Real-browser Playwright matrix: 375/768/1440 viewports, keyboard-only pass, login/idle flow, CSP violation capture (the jsdom blind spot) | Software Engineer | L | Suite green; zero CSP violations; evidence recorded | B4, B5 |
+| C4 | Scheduler soak: overlap, exception-survival, `seen_jobs` corruption tests + 24–48h soak on the VM | QA | M | No stuck runs; corruption recovers; soak log archived | C2 |
+| C5 | Reconcile §1 + TESTER.md counts and statuses after all verification | PM | S | §1 reflects live-verified state; stale figures replaced | C2–C4 |
+
+Exit: C1–C5 done → production use authorized.
+
+### Phase D — Submit expansion (gated, in order, fail-closed)
+
+| # | Task | Owner | Eff | Acceptance | Depends |
+|---|---|---|---|---|---|
+| D1 | Greenhouse full-path DRY RUN (`SUBMIT_DRY_RUN=true`, stops pre-click, immediate disarm after) — never executed to date | QA | M | Runbook log: fill→review→metadata-guard→stop-before-click; `SUBMIT_ENABLED` still False | A5, B7 |
+| D2 | Form-structure snapshot gate: field-schema hash captured at fill time (`agents/auto_applier.py`), recomputed at submit refill (`api/apply.py`) beside the existing metadata guard; mismatch → 409 `SubmitRejected` → fresh review | Senior Dev (spec: Architect) | M | Shape-only-drift case RED→GREEN; gates unattended use only; supervised path unchanged | D1 |
+| D3 | Armed-run decision + post-submit observation: separately-approved armed run; reCAPTCHA outcome recorded honestly — may close the track | PM + QA | S | Decision recorded; zero captcha evasion; post-submit page observed or track closed | D2, PO #2 |
+| D4 | Expand to N=3 boards + UI submit-toggle decision | PM | S | Only after D3; toggle decision documented with the field-snapshot caveat | D3 |
+
+### Backlog additions (audit, 2026-10-18)
+
+- a11y bundle (kanban keyboard access, dialog semantics/focus traps,
+  `aria-live` toasts, theme persistence, toast queue) — real debt; nothing
+  gates on it.
+- Orphan-element inventory e2e (would have caught `appliedPackagesList`).
+- Sheets quota/backoff fake-gspread tests (429/403 backoff, partial-batch
+  resume).
+- Idle-timeout e2e (login → expire → 401 → redirect → re-login; modal input
+  loss on redirect).
+- `api/apply_state.py` DDL-per-connect cleanup — perf nit at this scale.
+- Mutable base/uv image tags — accepted; hash-pinning is heavy for a
+  personal deploy.
+- Lever confirmation-copy test — stays deferred (no paid Lever account).
+
+### Decisions needed from the product owner
+
+1. **Hot badge threshold** — ≥85 (documented) vs ≥70. Recommend: keep 85.
+2. **Armed submit at all?** — if D3 confirms reCAPTCHA blocks, close the
+   automatable-submit track permanently (keep fill-and-review only).
+   Recommend: decide on D1/D2 evidence; default close.
+3. **Ubuntu runner** — pin `ubuntu-24.04` for the release window (26.04
+   migration starts 2026-10-19), re-ride later. Recommend: pin for Phase A.
+4. **`days_ago()` date filtering** — restore, or keep the bypass as
+   documented deliberate config.
+5. **`ApplyOut` response_model** — recommend leaving the raw dict on
+   personal `main`; revisit for the future `user` product.
+6. **Submit-claim concurrency** — fund the heartbeat/fencing work (B7) only
+   if D3 keeps the track open; otherwise document the single-supervised-run
+   assumption.
+
+### Deliberately not doing (audit-confirmed)
+
+No Redis/Celery/cache-backend seam (Q2 warning only), no per-actor rate caps,
+no runs-registry persistence; no CV upload or active-upload switching (future
+`user` track); no Lever submit path; no `AUTO_APPLY_CONFIRM` revival or blind
+CLI submit; no `zhipuai` SDK (`tools/glm_client.py` stays); no captcha bypass
+ever; no Scenario B multi-tenancy. Tests never touch live Sheets, LLM APIs or
+real browsers; secrets stay out of logs and images.
+
 ## 2. Implemented Phase 2 — Action API reference
 
 Goal: dashboard buttons do real work, behind the existing safety gates.

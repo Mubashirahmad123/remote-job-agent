@@ -339,8 +339,38 @@ async def _lifespan(app: FastAPI):
     yield
 
 
+def _warn_multi_worker() -> None:
+    """Q2 (PM quick win, 2026-10-18): loud startup warning for >1 worker.
+
+    The Sheet cache (90s TTL), the scrape-run registry and the in-process
+    rate limiters are per-process state (PM.md §2.1b). With N workers each
+    holds its own copy: N x the Google Sheets reads (quota burn) and two
+    users can see different data depending on which worker answers. The
+    shared cache-backend seam is deliberately NOT built until multi-worker
+    is actually needed — this warning is the whole Phase 2.1 deliverable.
+    `--workers` is not visible to the app process; WEB_CONCURRENCY is the
+    env every launcher (uvicorn/Docker) honors for it.
+    """
+    raw = (os.getenv("WEB_CONCURRENCY") or "").strip()
+    try:
+        workers = int(raw) if raw else 1
+    except ValueError:
+        workers = 1
+    if workers > 1:
+        warnings.warn(
+            f"MULTI-WORKER: WEB_CONCURRENCY={workers} with the in-process "
+            "Sheet cache means each worker holds its OWN cache and run "
+            "registry — duplicate Google Sheets reads (quota burn) and "
+            "cross-worker data inconsistency. Run --workers 1 "
+            "(PRODUCTION.md) or build the shared cache backend "
+            "(PM.md §2.1b) first.",
+            stacklevel=2,
+        )
+
+
 def create_app() -> FastAPI:
     _enforce_bind_guard()
+    _warn_multi_worker()
 
     # The docs routes are ALWAYS created — disabling them here would 404 for a
     # logged-in operator too, since FastAPI would never register the paths.
@@ -403,6 +433,14 @@ def create_app() -> FastAPI:
     # Serve the dashboard UI same-origin so file:// CORS ("null" origin) is
     # never an issue: open http://127.0.0.1:8000/ instead of index.html.
     # Mounted LAST so /api/*, /docs, and the / gate above always win.
+    # PM-6 (AUDIT 2026-10-18): browsers auto-request /favicon.ico on every
+    # page load; with no asset the static mount 404ed it into the logs each
+    # time. 204 says "deliberately none" without inventing an asset — the
+    # dashboard itself doesn't reference one.
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> Response:
+        return Response(status_code=204)
+
     if FRONTEND_DIR.is_dir():
         app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 

@@ -16,7 +16,7 @@
 }
 
 .safety-control-card {
-  background: transparent;
+  background: var(--bg-inset);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 14px;
@@ -73,29 +73,15 @@
 }
 
 .mode-switch-btn.active {
-  background: transparent;
-  color: var(--text-primary);
+  background: var(--primary-soft);
+  color: var(--primary-text);
   font-weight: 600;
-}
-
-.mode-switch-btn.active::after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 1px;
-  height: 1px;
-  background: var(--primary);
 }
 
 .mode-switch-btn.danger.active {
   background: var(--accent-rose-bg);
   color: var(--accent-rose);
   font-weight: 600;
-}
-
-.mode-switch-btn.danger.active::after {
-  background: var(--accent-rose);
 }
 
 .mode-switch-btn .dot {
@@ -107,11 +93,14 @@
 .mode-switch-btn .dot.green { background: var(--accent-emerald); }
 .mode-switch-btn .dot.red { background: var(--accent-rose); }
 
-/* Phase 2a: submit toggle is locked — visibly inert, not just unhandled. */
+/* Phase 2a: submit toggle is locked — visibly inert, not just unhandled. The
+   strike-through is the shape signal; colour alone is never the message. */
 .mode-switch-btn:disabled {
-  opacity: 0.45;
+  background: var(--bg-inset);
+  color: var(--text-disabled);
   cursor: not-allowed;
   text-decoration: line-through;
+  text-decoration-color: var(--accent-rose);
 }
 
 .control-slider-box {
@@ -256,8 +245,8 @@
   display: inline-block;
   margin-top: 7px;
   color: var(--primary-text);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 .screenshot-preview {

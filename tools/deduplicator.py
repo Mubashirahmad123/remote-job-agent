@@ -22,6 +22,24 @@ def job_fingerprint(job: dict) -> str:
     return hashlib.md5(key.encode("utf-8")).hexdigest()
 
 
+def title_company_key(job: dict) -> str:
+    """Cross-board duplicate key: same title at same company = same opening.
+
+    Bug 2 (AUDIT 2026-10-18): the URL-bearing fingerprint cannot catch the
+    same job posted on two boards (different URLs by construction), so
+    duplicates like "Software Engineer I, Fullstack (Search)" x2 survived
+    dedup. This key deliberately ignores the URL. Whitespace is collapsed so
+    a board that renders "Senior  Engineer" matches "Senior Engineer".
+    """
+    title = " ".join((job.get("job_title") or "").strip().lower().split())
+    company = " ".join((job.get("company") or "").strip().lower().split())
+    if not title or not company:
+        # Missing half the key — a match here would be a false positive
+        # (two unrelated "Unknown"-company jobs share nothing else).
+        return ""
+    return f"{title}::{company}"
+
+
 def add_job_fingerprint(job: dict) -> dict:
     """Attach a fingerprint to a job if it does not already have one."""
     job.setdefault("job_fingerprint", job_fingerprint(job))

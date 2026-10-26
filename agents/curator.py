@@ -158,16 +158,25 @@ def _calculate_freshness_boost(posted_date_iso: str) -> int:
             return 0
         
         days_old = (date.today() - posted).days
-        
+
         if days_old < 0:
-            return 20
+            # Bug 4 (AUDIT 2026-10-18): a future-dated posting is garbage
+            # data (bad board clock or parse), not an extra-fresh job — it
+            # must not outrank genuinely fresh postings. A -1 skew is a
+            # legitimate timezone artifact (posted late in a UTC+X board),
+            # so treat exactly one day ahead as "today"; anything further
+            # ahead gets no boost at all.
+            return FRESHNESS_BOOST[0] if days_old >= -1 else 0
         elif days_old == 0:
             return FRESHNESS_BOOST[0]
         elif days_old == 1:
             return FRESHNESS_BOOST[1]
         elif days_old <= 3:
             return FRESHNESS_BOOST[2]
-        elif days_old <= 7:
+        elif days_old <= 6:
+            # Bug 3 (AUDIT 2026-10-18): the map says day 7 -> 0; the old
+            # `<= 7` branch awarded day-7 jobs FRESHNESS_BOOST[4] = +2.
+            # Days 4-6 only, so day 7 falls through to the 0 it was given.
             return FRESHNESS_BOOST[4]
         elif days_old <= 30:
             return FRESHNESS_BOOST[7]
@@ -365,10 +374,15 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     seen_urls = set(existing_urls)
     unique_jobs = []
     duplicates = 0
+    missing_url = 0
     
     for job in raw_jobs:
         url = (job.get("apply_url") or "").split("?")[0].strip()
         if not url:
+            # Bug 1 (AUDIT 2026-10-18): these jobs were dropped without a
+            # trace — the run's own math (155 - 15 = 140 expected, 136
+            # counted) proved 4 jobs vanished silently. Counted now.
+            missing_url += 1
             continue
         if url in seen_urls:
             duplicates += 1
@@ -376,7 +390,30 @@ def curate(raw_jobs: list, tracker=None) -> dict:
         seen_urls.add(url)
         unique_jobs.append(job)
     
-    print(f"   Original: {len(raw_jobs)} | Duplicates: {duplicates} | Unique: {len(unique_jobs)}")
+    print(f"   Original: {len(raw_jobs)} | Duplicates: {duplicates} | Missing URL: {missing_url} | Unique: {len(unique_jobs)}")
+
+    # ── Step 2b: Cross-board (title+company) deduplication ──
+    # Bug 2 (AUDIT 2026-10-18): the URL-bearing fingerprint cannot catch
+    # the same opening posted on two boards — different URLs by
+    # construction — so "Software Engineer I, Fullstack (Search)" x2 and
+    # "Software Engineer, AI Coding Tasks" x4+ survived dedup. Second pass
+    # keyed on (title, company) alone; jobs with a missing half of the key
+    # are never collapsed (see title_company_key).
+    print("\n🔄 Cross-board deduplication (title+company)...")
+    from tools.deduplicator import title_company_key
+    seen_title_company = set()
+    cross_board_dupes = 0
+    still_unique = []
+    for job in unique_jobs:
+        key = title_company_key(job)
+        if key and key in seen_title_company:
+            cross_board_dupes += 1
+            continue
+        if key:
+            seen_title_company.add(key)
+        still_unique.append(job)
+    unique_jobs = still_unique
+    print(f"   Cross-board duplicates: {cross_board_dupes} | Remaining: {len(unique_jobs)}")
 
     # ── Step 3: Fingerprint deduplication ──
     # NOTE: non-mutating check here. seen_hashes is only updated for jobs
@@ -413,6 +450,8 @@ def curate(raw_jobs: list, tracker=None) -> dict:
             "stats": {
                 "original_jobs": len(raw_jobs),
                 "url_duplicates": duplicates,
+                "missing_url": missing_url,
+                "cross_board_dupes": cross_board_dupes,
                 "fp_duplicates": fp_duplicates,
                 "unique_jobs_added": 0
             },
@@ -420,7 +459,18 @@ def curate(raw_jobs: list, tracker=None) -> dict:
         }
 
     # ── Step 4: Rejection engine + scoring ──
-    print(f"\n🔍 Rejection engine + CV scoring (min: {MIN_SCORE})...")
+    # C1 (AUDIT 2026-10-18): the gate is one honest score in either mode.
+    # Re-enabling sentence-transformers/faiss-cpu was rejected deliberately
+    # (heavy torch dependency for a personal deploy); the recalibration is
+    # instead fixing the structural scorer bugs that made keyword-only
+    # scores artificially low — the linear coverage inversion (C2 in
+    # tools/cv_matcher.py) and the stub summaries fed to the scorer
+    # (C3 in agents/scrapper.py). The active mode is logged so a future
+    # threshold change is a conscious decision against a visible baseline.
+    if SEMANTIC_AVAILABLE and CV_MATCHING_ENABLED:
+        print(f"\n🔍 Rejection engine + CV scoring (min: {MIN_SCORE}, blended keyword+semantic)...")
+    else:
+        print(f"\n🔍 Rejection engine + CV scoring (min: {MIN_SCORE}, keyword-only)...")
     
     # New run = retry prior failures; successful embeddings persist on disk.
     embedding_cache = CVEmbeddingCache() if SEMANTIC_AVAILABLE else None
@@ -456,19 +506,33 @@ def curate(raw_jobs: list, tracker=None) -> dict:
         selected_cv_path = ""
         selected_cv_name = ""
         scoring_profile = CV_PROFILE  # fallback to global primary profile
+        picked_score_result = None
 
         if not _CV_LIBRARY.is_empty:
-            picked_path, picked_profile, _ = _CV_LIBRARY.pick_best(job)
+            # C5 (AUDIT 2026-10-18): reuse the score computed during CV
+            # selection instead of re-scoring the same job with the same
+            # CV a second time. The duck-typed fallback keeps fake library
+            # objects that only expose pick_best (tests) working.
+            if hasattr(_CV_LIBRARY, "pick_best_scored"):
+                picked_path, picked_profile, picked_score_result = _CV_LIBRARY.pick_best_scored(job)
+            else:
+                picked_path, picked_profile, _ = _CV_LIBRARY.pick_best(job)
             if picked_path and picked_profile:
                 selected_cv_path = picked_path
                 selected_cv_name = Path(picked_path).name
                 scoring_profile = picked_profile
 
         if CV_MATCHING_ENABLED and scoring_profile:
-            scorer = _get_matcher_for_profile(scoring_profile, selected_cv_path or "primary")
-            score_result = scorer.score(job)
+            if picked_score_result is None:
+                scorer = _get_matcher_for_profile(scoring_profile, selected_cv_path or "primary")
+                picked_score_result = scorer.score(job)
+            score_result = picked_score_result
             keyword_score = score_result.get("score", 0)
             match_reason = score_result.get("match_reason", "")
+            # Review item (2026-10-21, score transparency): the per-job
+            # breakdown travels with the job, so "why 28 and not 70" is
+            # answerable from the saved result without re-scoring.
+            job["score_breakdown"] = score_result.get("breakdown")
 
             # Use the very same CV selected above, never another CV's cache.
             # With no library selection, only the configured primary is valid.
@@ -518,7 +582,12 @@ def curate(raw_jobs: list, tracker=None) -> dict:
 
         if base_score < MIN_SCORE:
             low_match += 1
-            print(f"   ⚠️ LOW MATCH ({base_score:.0f}{freshness:+d}): {job.get('job_title', '')[:50]}")
+            # C4 (AUDIT 2026-10-18): match_reason was computed and stored
+            # but never printed, so "No recognizable tech skills in job"
+            # (stub summaries — C3) and "No core stack overlap" hid behind
+            # bare numbers. Printing it makes a scoring-input problem
+            # visible in the run log itself.
+            print(f"   ⚠️ LOW MATCH ({base_score:.0f}{freshness:+d}): {job.get('job_title', '')[:50]} — {match_reason}")
             continue
 
         print(f"   ✅ MATCH ({base_score:.0f}{freshness:+d}): {job.get('job_title', '')[:50]}")
@@ -539,6 +608,8 @@ def curate(raw_jobs: list, tracker=None) -> dict:
             "stats": {
                 "original_jobs": len(raw_jobs),
                 "url_duplicates": duplicates,
+                "missing_url": missing_url,
+                "cross_board_dupes": cross_board_dupes,
                 "fp_duplicates": fp_duplicates,
                 "rejected": rejected,
                 "low_match": low_match,
@@ -567,11 +638,24 @@ def curate(raw_jobs: list, tracker=None) -> dict:
         return score
     
     ranked_jobs = sorted(scored_jobs, key=rank_score, reverse=True)
-    
+
+    # Review fix (2026-10-21, item 4): three different numbers travel with a
+    # job and must never be mistaken for one another —
+    #   match_score   : CV-match quality ONLY (what the MIN_SCORE gate uses).
+    #   ranking_score : match_score + freshness (freshness never gates).
+    #   rank_score    : the ordering composite below (salary/company/stack/
+    #                   title-length tie-breaks) — display order, NOT a CV
+    #                   match measure. Stored on the job so the dashboard
+    #                   can label it honestly instead of implying the rank
+    #                   reflects fit.
+    for job in ranked_jobs:
+        job["rank_score"] = rank_score(job)
+
     print(f"   Top 3 jobs:")
     for i, job in enumerate(ranked_jobs[:3], 1):
         ms = job.get("match_score", "N/A")
-        print(f"   {i}. {job.get('job_title', '')} at {job.get('company', '')} (Score: {ms})")
+        print(f"   {i}. {job.get('job_title', '')} at {job.get('company', '')} "
+              f"(Match: {ms} | Rank: {job.get('rank_score')})")
 
     # ── Step 6: Save to sheet ──
     print(f"\n💾 Saving {len(ranked_jobs)} jobs to Google Sheet...")
@@ -595,6 +679,8 @@ def curate(raw_jobs: list, tracker=None) -> dict:
             "stats": {
                 "original_jobs": len(raw_jobs),
                 "url_duplicates": duplicates,
+                "missing_url": missing_url,
+                "cross_board_dupes": cross_board_dupes,
                 "fp_duplicates": fp_duplicates,
                 "rejected": rejected,
                 "low_match": low_match,
