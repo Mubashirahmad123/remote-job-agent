@@ -21,44 +21,88 @@ JobAgent.navigation = {
     this.btnSyncSheets = document.getElementById('btnSyncSheets');
     this.btnScrapeNow = document.getElementById('btnScrapeNow');
     this.scrapeStatusCard = document.getElementById('scrapeStatusCard');
-    this.btnThemeToggle = document.getElementById('btnThemeToggle');
-    this.themeIconDark = document.getElementById('themeIconDark');
-    this.themeIconLight = document.getElementById('themeIconLight');
+
+    // Off-canvas nav drawer (phones). The sidebar is a 256px rail beside a
+    // desktop window and a third of a phone screen, so below the 768px tier
+    // it slides in from the left instead — and it is the only way to reach a
+    // view other than the one the app opened on.
+    this.btnMobileNav = document.getElementById('btnMobileNav');
+    this.sidebar = document.getElementById('appSidebar');
+    this.sidebarScrim = document.getElementById('sidebarScrim');
+    this.navOpen = false;
+    this.navClosing = false;
+    this.navCloseTimer = null;
 
     this.bindEvents();
   },
 
   bindEvents() {
-    // Theme Toggle Handler (Clean Minimalist Dark <-> Clean Enterprise Light)
-    if (this.btnThemeToggle) {
-      this.btnThemeToggle.addEventListener('click', () => {
-        const isDark = document.body.classList.contains('theme-dark');
-        if (isDark) {
-          document.body.classList.remove('theme-dark');
-          document.body.classList.add('theme-light');
-          document.documentElement.setAttribute('data-theme', 'light');
-          if (this.themeIconDark) this.themeIconDark.classList.add('hidden');
-          if (this.themeIconLight) this.themeIconLight.classList.remove('hidden');
-          JobAgent.toast.show('Switched to Minimalist Light Mode.');
-        } else {
-          document.body.classList.remove('theme-light');
-          document.body.classList.add('theme-dark');
-          document.documentElement.setAttribute('data-theme', 'dark');
-          if (this.themeIconDark) this.themeIconDark.classList.remove('hidden');
-          if (this.themeIconLight) this.themeIconLight.classList.add('hidden');
-          JobAgent.toast.show('Switched to High-Contrast Dark Mode.');
-        }
-      });
-    }
+    // The theme toggle is owned by js/theme.js (loaded in <head> so the stored
+    // scheme applies before first paint). Wiring it here as well attached a
+    // second click listener, and because both read `data-theme` at click time
+    // the second one flipped the theme straight back — one click, no change.
     this.navItems.forEach(item => {
       item.addEventListener('click', () => {
         this.switchTab(item.dataset.tab);
       });
     });
 
+    if (this.btnMobileNav) {
+      this.btnMobileNav.addEventListener('click', () => {
+        this.toggleMobileNav(!this.navOpen);
+      });
+    }
+
+    if (this.sidebarScrim) {
+      this.sidebarScrim.addEventListener('click', () => this.closeMobileNav());
+    }
+
+    // The drawer can be pushed away with a swipe, and it inherits the
+    // velocity of the release: a flick closes it even if it barely moved.
+    if (this.sidebar && JobAgent.gestures) {
+      JobAgent.gestures.swipeToDismiss(this.sidebar, {
+        axis: 'x',
+        direction: -1, // pushing it back to the left dismisses
+        dismissThreshold: 0.3,
+        canStart: () => (this.navOpen || this.navClosing)
+          && window.matchMedia('(max-width: 768px)').matches,
+        // Caught on its way out: cancel the dismissal and let the finger take
+        // over from wherever the drawer happens to be. The thought and the
+        // gesture happen in parallel.
+        onGrab: () => {
+          if (!this.navClosing || this.navOpen) return;
+          this.navOpen = true;
+          this.navClosing = false;
+          this.sidebar.classList.add('is-open');
+          if (this.sidebarScrim) this.sidebarScrim.classList.add('is-open');
+          document.body.classList.add('nav-open');
+        },
+        onProgress: (ratio) => {
+          if (this.sidebarScrim) this.sidebarScrim.style.opacity = String(Math.max(0, 1 - ratio));
+        },
+        onDismiss: () => this.closeMobileNav(),
+      });
+    }
+
+    // A drawer left open across a rotation into desktop width would leave the
+    // page locked (body.nav-open) with no visible way to unlock it.
+    if (typeof window.matchMedia === 'function') {
+      const wide = window.matchMedia('(min-width: 769px)');
+      const onChange = (e) => { if (e && e.matches) this.closeMobileNav(); };
+      if (typeof wide.addEventListener === 'function') {
+        wide.addEventListener('change', onChange);
+      } else if (typeof wide.addListener === 'function') {
+        wide.addListener(onChange); // Safari < 14
+      }
+    }
+
     // Escape closes drawer/modals
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        if (this.navOpen) {
+          this.closeMobileNav();
+          return;
+        }
         if (JobAgent.jobDrawer) JobAgent.jobDrawer.close();
         if (JobAgent.autoApply) JobAgent.autoApply.closeModal();
       }
@@ -82,6 +126,56 @@ JobAgent.navigation = {
     }
   },
 
+  /**
+   * Open or close the off-canvas nav drawer.
+   *
+   * Focus moves into the drawer when it opens and back to the trigger when it
+   * closes, so the control that opened it is never a keyboard trap.
+   */
+  toggleMobileNav(open) {
+    if (!this.sidebar) return;
+    this.navOpen = Boolean(open);
+
+    this.sidebar.classList.toggle('is-open', this.navOpen);
+    if (this.sidebarScrim) {
+      this.sidebarScrim.classList.toggle('is-open', this.navOpen);
+      // The drag gesture may have left an inline opacity behind.
+      this.sidebarScrim.style.opacity = '';
+    }
+    document.body.classList.toggle('nav-open', this.navOpen);
+    // A drag in flight must not survive a programmatic open/close.
+    this.sidebar.style.transform = '';
+    if (this.btnMobileNav) {
+      this.btnMobileNav.setAttribute('aria-expanded', this.navOpen ? 'true' : 'false');
+      this.btnMobileNav.setAttribute(
+        'aria-label',
+        this.navOpen ? 'Close navigation menu' : 'Open navigation menu'
+      );
+    }
+
+    if (!this.navOpen) {
+      // The drawer is on its way out; it stays grabbable until it lands.
+      this.navClosing = true;
+      clearTimeout(this.navCloseTimer);
+      this.navCloseTimer = setTimeout(() => { this.navClosing = false; }, 400);
+    } else {
+      this.navClosing = false;
+      clearTimeout(this.navCloseTimer);
+    }
+
+    if (this.navOpen) {
+      const first = this.sidebar.querySelector('.nav-item');
+      if (first && typeof first.focus === 'function') first.focus();
+    } else if (this.btnMobileNav && typeof this.btnMobileNav.focus === 'function') {
+      this.btnMobileNav.focus();
+    }
+  },
+
+  closeMobileNav() {
+    if (!this.navOpen) return;
+    this.toggleMobileNav(false);
+  },
+
   switchTab(tabKey) {
     JobAgent.store.setTab(tabKey);
 
@@ -96,6 +190,18 @@ JobAgent.navigation = {
     if (this.currentViewTitle) {
       this.currentViewTitle.textContent = this.titles[tabKey] || 'Command Deck';
     }
+
+    // Changing views from the drawer closes it — the drawer is the phone's
+    // menu, and the menu is done once something has been picked.
+    this.closeMobileNav();
+
+    // A new view starts at the top. On a phone the last view could have been
+    // scrolled a long way down, and arriving halfway into the next one reads as
+    // a rendering bug. `scrollingElement` rather than window.scrollTo(): the
+    // e2e suite runs jsdom, which implements no scrolling and reports
+    // window.scrollTo() as an error.
+    const scroller = document.scrollingElement;
+    if (scroller) scroller.scrollTop = 0;
 
     // Refresh specific view if needed
     if (tabKey === 'jobs' && JobAgent.jobDesk) {

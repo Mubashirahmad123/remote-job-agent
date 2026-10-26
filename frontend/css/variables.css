@@ -1,86 +1,231 @@
 /* =============================================================================
-   VARIABLES.CSS — Minimalist Modern Design Tokens (High-Contrast & Dual Theme)
+   VARIABLES.CSS — Design tokens
+
+   The product reads as a monitoring terminal: panels are a step DARKER than
+   the page they sit on, the accent appears only as a 1px line, and every
+   figure is tabular. Nothing here is decorative; the tone steps are the only
+   elevation.
+
+   Rules that keep the themes honest:
+
+   1. A FILL is not an INK. `--primary` is the accent line / ring colour.
+      `--primary-text` is the same hue tuned for text and icons. Components
+      that need a solid call-to-action use `--control-primary-bg` and
+      `--control-primary-ink` (a value pair, not a hue).
+   2. A SIGNAL has a foreground and a tint. `--signal-*-fg` passes 4.5:1 on
+      `--signal-*-bg` and on the panel, in its own theme.
+   3. Light and dark share every token name; only the values change.
+      Components must not hardcode a colour — add a token here instead.
    ============================================================================= */
 
 :root {
-  /* Minimalist Modern Dark (Default) — Neutral Slate & High Contrast */
-  --bg-canvas: #0c0d0e;
-  --bg-surface: #141518;
-  --bg-surface-glass: rgba(20, 21, 24, 0.92);
-  --bg-surface-elevated: #1c1d22;
-  --bg-surface-hover: #25272e;
-  --bg-card: #141518;
+  /* Tells the browser which scheme native widgets (select popups, scrollbars,
+     date pickers, the caret) belong to. */
+  color-scheme: dark;
 
-  /* Borders & Dividers */
-  --border-subtle: rgba(255, 255, 255, 0.12);
-  --border-active: #3b82f6;
-  --border-focus: #3b82f6;
-  --border-glass: rgba(255, 255, 255, 0.16);
+  /* --- Ground & panels ----------------------------------------------------
+     The page is lighter than the panels. A card therefore reads as a
+     recessed instrument, not a floating sheet. Four tone steps:
+     inset < panel < ground < raised. */
+  --bg-canvas: #171719;
+  --bg-surface: #131217;
+  --bg-card: #131217;
+  --bg-surface-elevated: #212023;
+  --bg-surface-hover: #26252a;
+  --bg-surface-glass: rgba(19, 18, 23, 0.94);
+  --bg-inset: #0f0e12;
 
-  /* High-Contrast Text Hierarchy (WCAG AAA) */
+  /* --- Lines -------------------------------------------------------------
+     `--rule` divides rows inside a panel; `--border-subtle` outlines it;
+     `--border-strong` is the edge of a control that must be seen. */
+  --rule: #1b1a1f;
+  --border-subtle: #222224;
+  --border-strong: #3a3a3e;
+  --border-active: #4a8ad6;
+  --border-focus: #6ea3e0;
+  --border-glass: #2b2a30;
+  --ring: rgba(74, 138, 214, 0.35);
+  --control-border: #33333a;
+
+  /* --- Ink ---------------------------------------------------------------
+     Three legible steps, measured on the panel (#131217):
+     primary 18.4:1 · secondary 10.9:1 · muted 5.6:1. */
   --text-primary: #ffffff;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --text-inverse: #0c0d0e;
+  --text-secondary: #c9c9cd;
+  --text-muted: #8a8c92;
+  --text-inverse: #131217;
+  --text-on-fill: #0b0c0e;
 
-  /* Refined Signal Accents */
-  --primary-blue: #3b82f6;
-  --primary-blue-glow: rgba(59, 130, 246, 0.25);
-  --accent-cyan: #0ea5e9;
-  --accent-cyan-bg: rgba(14, 165, 233, 0.14);
-  --accent-emerald: #10b981;
-  --accent-emerald-bg: rgba(16, 185, 129, 0.14);
-  --accent-amber: #f59e0b;
-  --accent-amber-bg: rgba(245, 158, 11, 0.14);
-  --accent-rose: #ef4444;
-  --accent-rose-bg: rgba(239, 68, 68, 0.14);
+  /* --- Accent ------------------------------------------------------------
+     Never a filled surface. 1px lines, rings, focus, the active marker. */
+  --primary: #4a8ad6;
+  --primary-hover: #6ea3e0;
+  --primary-foreground: #0b0c0e;
+  --primary-text: #7fb2e8;      /* ink use: 7.9:1 on the panel */
+  --primary-glow: rgba(74, 138, 214, 0.10);
 
-  /* Typography */
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  /* Solid call-to-action. One per screen; a value contrast, not a hue. */
+  --control-primary-bg: #f2f2f3;
+  --control-primary-ink: #131217;
+  --control-primary-bg-hover: #ffffff;
 
-  /* Layout Constants */
-  --sidebar-width: 256px;
-  --header-height: 64px;
+  /* Back-compat aliases. New code should say `--primary` (line) or
+     `--primary-text` (ink). */
+  --primary-blue: var(--primary);
+  --primary-blue-glow: var(--primary-glow);
+
+  /* --- Signals -----------------------------------------------------------
+     `-fg` for text/icons, `-bg` for the tint behind it. */
+  --signal-emerald-fg: #44a282;
+  --signal-emerald-bg: #16241f;
+  --signal-amber-fg: #d9a441;
+  --signal-amber-bg: #241f14;
+  --signal-rose-fg: #e5566f;
+  --signal-rose-bg: #261619;
+  --signal-cyan-fg: #5aa9d6;
+  --signal-cyan-bg: #14212b;
+
+  --accent-emerald: var(--signal-emerald-fg);
+  --accent-emerald-bg: var(--signal-emerald-bg);
+  --accent-amber: var(--signal-amber-fg);
+  --accent-amber-bg: var(--signal-amber-bg);
+  --accent-rose: var(--signal-rose-fg);
+  --accent-rose-bg: var(--signal-rose-bg);
+  --accent-cyan: var(--signal-cyan-fg);
+  --accent-cyan-bg: var(--signal-cyan-bg);
+  --accent-danger: var(--signal-rose-fg);
+
+  /* --- Console -----------------------------------------------------------
+     The scraper terminal stays dark in both themes: a log surface is a log
+     surface. Its ink is therefore the dark-theme set in both themes. */
+  --bg-console: #0b0a0d;
+  --bg-console-well: #0d0c10;
+  --text-console: #d8d8dc;
+  --text-console-muted: #8a8c92;
+  --console-primary: #7fb2e8;
+  --console-cyan: #5aa9d6;
+  --console-emerald: #44a282;
+  --console-amber: #d9a441;
+  --console-rose: #e5566f;
+
+  /* An inverted chip (toast). Dark in both themes, lighter than the panel so
+     it lifts without a glow. */
+  --bg-inverse: #26252a;
+  --text-on-inverse: #ffffff;
+
+  /* --- Elevation ---------------------------------------------------------
+     Only things that truly float carry a shadow: cards get a 1px edge and a
+     short drop, overlays get the larger pair. */
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.24);
+  --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.48);
+
+  /* --- Type --------------------------------------------------------------
+     Public Sans for the interface, JetBrains Mono only for literal data
+     (logs, run ids, code). Figures are tabular everywhere — set in base.css. */
+  --font-sans: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --text-2xs: 11px;          /* the legibility floor: nothing renders smaller */
+  --text-xs: 11.5px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-base: 13px;
+  --text-lg: 15px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 26px;
+  --leading-tight: 1.22;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* --- Space ------------------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* --- Layout ------------------------------------------------------------ */
+  --rail-width: 56px;          /* desktop icon rail */
+  --sidebar-width: 232px;      /* labelled rail, tablet tier and the drawer */
+  --header-height: 56px;
   --drawer-width: 520px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --control-height: 34px;
+  --row-height: 44px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
   --radius-pill: 9999px;
 
-  /* Snappy Transitions */
+  /* --- Motion ------------------------------------------------------------ */
   --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-normal: 250ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-drawer: 320ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Minimalist Clean Light Theme (Enterprise Slate) */
+/* =============================================================================
+   LIGHT THEME
+
+   Not an inversion, and not white cards on grey. The page is the lightest
+   surface and the panels are a step darker, so the same "recessed instrument"
+   reading survives. Ink is near-black; every signal is a 700-level value so
+   badge text clears 4.5:1 on its own tint.
+   ============================================================================= */
+
 [data-theme="light"] {
-  --bg-canvas: #f8fafc;
-  --bg-surface: #ffffff;
-  --bg-surface-glass: rgba(255, 255, 255, 0.94);
-  --bg-surface-elevated: #f1f5f9;
-  --bg-surface-hover: #e2e8f0;
-  --bg-card: #ffffff;
+  color-scheme: light;
 
-  --border-subtle: #e2e8f0;
-  --border-active: #2563eb;
-  --border-focus: #2563eb;
-  --border-glass: rgba(0, 0, 0, 0.08);
+  --bg-canvas: #f7f6f1;
+  --bg-surface: #efece5;
+  --bg-card: #efece5;
+  --bg-surface-elevated: #e6e2d9;
+  --bg-surface-hover: #ded9cf;
+  --bg-surface-glass: rgba(247, 246, 241, 0.95);
+  --bg-inset: #f3f1ea;
 
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-  --text-inverse: #ffffff;
+  --rule: #e4e0d7;
+  --border-subtle: #ded9cf;
+  --border-strong: #c9c3b7;
+  --border-active: #2f6fb8;
+  --border-focus: #2f6fb8;
+  --border-glass: #d8d2c7;
+  --ring: rgba(47, 111, 184, 0.28);
+  --control-border: #cdc7bb;
 
-  --primary-blue: #2563eb;
-  --primary-blue-glow: rgba(37, 99, 235, 0.18);
-  --accent-cyan: #0284c7;
-  --accent-cyan-bg: rgba(2, 132, 199, 0.1);
-  --accent-emerald: #059669;
-  --accent-emerald-bg: rgba(5, 150, 105, 0.1);
-  --accent-amber: #d97706;
-  --accent-amber-bg: rgba(217, 119, 6, 0.1);
-  --accent-rose: #dc2626;
-  --accent-rose-bg: rgba(220, 38, 38, 0.1);
+  /* #5c5a54 is 5.8:1 on the panel (#efece5) and 6.0:1 on the page, so
+     11.5px metadata is legible instead of "light grey on near-white". */
+  --text-primary: #17150f;
+  --text-secondary: #3a3833;
+  --text-muted: #5c5a54;
+  --text-inverse: #f7f6f1;
+  --text-on-fill: #ffffff;
+
+  --primary: #2f6fb8;
+  --primary-hover: #1f4e88;
+  --primary-foreground: #ffffff;
+  --primary-text: #275f9f;      /* 6.0:1 on the panel */
+  --primary-glow: rgba(47, 111, 184, 0.10);
+
+  /* On light, the one solid action is ink, not accent. */
+  --control-primary-bg: #1a1a1e;
+  --control-primary-ink: #ffffff;
+  --control-primary-bg-hover: #000000;
+
+  --signal-emerald-fg: #126b4f;
+  --signal-emerald-bg: #e4f0ea;
+  --signal-amber-fg: #8a5a12;
+  --signal-amber-bg: #f7eede;
+  --signal-rose-fg: #a83342;
+  --signal-rose-bg: #f8e7e8;
+  --signal-cyan-fg: #1f5f86;
+  --signal-cyan-bg: #e6eef4;
+
+  --bg-inverse: #1a1a1e;
+  --text-on-inverse: #ffffff;
+
+  --shadow-sm: 0 1px 0 rgba(22, 22, 26, 0.06);
+  --shadow-md: 0 12px 28px rgba(22, 22, 26, 0.10);
+  --shadow-lg: 0 24px 64px rgba(22, 22, 26, 0.16);
 }

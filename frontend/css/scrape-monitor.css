@@ -1,45 +1,62 @@
 /* SCRAPE MONITOR — operational run view */
 
-.scrape-monitor-container { display: flex; flex-direction: column; gap: 18px; }
+.scrape-monitor-container { display: flex; flex-direction: column; gap: 16px; }
 .scrape-monitor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
-.scrape-monitor-header h2 { margin: 0; font-size: 22px; color: var(--text-primary); }
-.scrape-monitor-header p { margin: 5px 0 0; color: var(--text-muted); font-size: 13px; }
-.scrape-monitor-status { border: 1px solid var(--border-subtle); border-radius: var(--radius-pill); padding: 7px 11px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.scrape-monitor-status.is-running { color: var(--primary-blue); border-color: var(--primary-blue); }
-.scrape-monitor-status.is-success { color: var(--accent-emerald); border-color: var(--accent-emerald); }
-.scrape-monitor-status.is-warning { color: var(--accent-amber); border-color: var(--accent-amber); }
-.scrape-monitor-status.is-danger { color: var(--accent-rose); border-color: var(--accent-rose); }
-.scrape-monitor-meta { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
-.scrape-progress-track { height: 6px; overflow: hidden; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-pill); }
-.scrape-progress-bar { height: 100%; width: 4%; background: var(--primary-blue); border-radius: inherit; transition: width 300ms ease; }
-.scrape-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.scrape-stat { padding: 15px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
-.scrape-stat span { display: block; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-.scrape-stat strong { display: block; margin-top: 6px; color: var(--text-primary); font-family: var(--font-mono); font-size: 22px; }
-.scrape-monitor-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 18px; }
-.scrape-monitor-panel { min-width: 0; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 18px; }
-.scrape-monitor-panel h3 { margin: 0 0 13px; color: var(--text-primary); font-size: 14px; }
-.scrape-terminal { height: 330px; overflow: auto; padding: 14px; background: #090a0d; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: #e2e8f0; font: 12px/1.8 var(--font-mono); }
+.scrape-monitor-header h2 { margin: 0; font-size: var(--text-lg); font-weight: 600; letter-spacing: -0.01em; color: var(--text-primary); }
+.scrape-monitor-header p { margin: 4px 0 0; color: var(--text-muted); font-size: var(--text-sm); }
+/* Status is a chip, like every other state in the app: pale tint, no outline. */
+.scrape-monitor-status { border: 0; border-radius: var(--radius-sm); padding: 3px 7px; font-size: var(--text-xs); font-weight: 500; white-space: nowrap; background: var(--bg-surface-elevated); color: var(--text-secondary); }
+.scrape-monitor-status.is-running { color: var(--primary-text); background: var(--bg-surface-elevated); }
+.scrape-monitor-status.is-success { color: var(--accent-emerald); background: var(--accent-emerald-bg); }
+.scrape-monitor-status.is-warning { color: var(--accent-amber); background: var(--accent-amber-bg); }
+.scrape-monitor-status.is-danger { color: var(--accent-rose); background: var(--accent-rose-bg); }
+.scrape-monitor-meta { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
+
+/* A 2px rail with no frame: the run's progress is a line, not a widget. It
+   doubles as the view's top rule while idle. */
+.scrape-progress-track { height: 2px; overflow: hidden; background: var(--rule); border: 0; border-radius: 0; }
+.scrape-progress-bar { height: 100%; width: 100%; transform: scaleX(0); transform-origin: left center; background: var(--primary); border-radius: inherit; transition: transform 300ms ease; }
+
+/* The four run figures sit in one divided strip, matching the Command Deck. */
+.scrape-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; }
+/* Before the first run the summary has no children; an empty bordered box
+   would render as a second hairline under the progress rail. */
+.scrape-stat-grid:empty { display: none; }
+.scrape-stat { padding: 12px 14px; background: transparent; border: 0; border-right: 1px solid var(--rule); border-radius: 0; min-width: 0; }
+.scrape-stat:last-child { border-right: 0; }
+.scrape-stat span { display: block; color: var(--text-muted); font-size: var(--text-2xs); font-weight: 400; }
+.scrape-stat strong { display: block; margin-top: 4px; color: var(--text-primary); font-family: var(--font-sans); font-size: var(--text-xl); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+.scrape-monitor-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 16px; }
+.scrape-monitor-panel { min-width: 0; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 16px; }
+.scrape-monitor-panel h3 { margin: 0 0 10px; color: var(--text-primary); font-size: var(--text-md); font-weight: 600; }
+.scrape-terminal { min-height: 120px; max-height: 330px; overflow: auto; padding: 12px; background: var(--bg-console); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-console); font: 11.5px/1.75 var(--font-mono); }
 .scrape-event { display: grid; grid-template-columns: 62px 100px minmax(0, 1fr); gap: 9px; white-space: pre-wrap; }
-.scrape-event time { color: #64748b; }
-.scrape-event-prefix { color: var(--accent-cyan); font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.scrape-event.level-error .scrape-event-prefix, .scrape-event.level-error > span:last-child { color: var(--accent-rose); }
-.scrape-event.level-warning .scrape-event-prefix, .scrape-event.level-warning > span:last-child { color: var(--accent-amber); }
-.scrape-board-list, .scrape-history-list { display: flex; flex-direction: column; gap: 6px; max-height: 330px; overflow: auto; }
-.scrape-board-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) 64px 42px; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); color: var(--text-secondary); font-size: 12px; }
-.scrape-board-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
-.scrape-board-row b { color: var(--accent-cyan); font-family: var(--font-mono); text-align: right; }
-.scrape-board-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+.scrape-event time { color: var(--text-console-muted); }
+.scrape-event-prefix { color: var(--console-cyan); font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.scrape-event.level-error .scrape-event-prefix, .scrape-event.level-error > span:last-child { color: var(--console-rose); }
+.scrape-event.level-warning .scrape-event-prefix, .scrape-event.level-warning > span:last-child { color: var(--console-amber); }
+
+/* Boards and runs are rows divided by rules, not a stack of bordered cards. */
+.scrape-board-list, .scrape-history-list { display: flex; flex-direction: column; gap: 0; max-height: 330px; overflow: auto; border-top: 1px solid var(--rule); }
+.scrape-board-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) 64px 42px; align-items: center; gap: 8px; padding: 8px 2px; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; color: var(--text-secondary); font-size: var(--text-xs); }
+.scrape-board-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); font-weight: 500; }
+.scrape-board-row b { color: var(--text-secondary); font-family: var(--font-sans); font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+.scrape-board-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted); }
 .scrape-board-row.is-success .scrape-board-dot { background: var(--accent-emerald); }
 .scrape-board-row.is-warning .scrape-board-dot { background: var(--accent-amber); }
 .scrape-board-row.is-danger .scrape-board-dot { background: var(--accent-rose); }
-.scrape-history-item { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px; text-align: left; color: var(--text-secondary); background: transparent; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); cursor: pointer; }
-.scrape-history-item:hover, .scrape-history-item.active { border-color: var(--border-active); background: var(--bg-surface-elevated); }
+
+.scrape-history-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 8px 8px 6px; text-align: left; color: var(--text-secondary); background: transparent; border: 0; border-bottom: 1px solid var(--rule); border-left: 1px solid transparent; border-radius: 0; cursor: pointer; }
+.scrape-history-item:hover { background: var(--bg-surface-elevated); }
+.scrape-history-item.active { border-left-color: var(--primary); background: var(--bg-surface-elevated); }
 .scrape-history-item strong, .scrape-history-item small { display: block; }
-.scrape-history-item strong { color: var(--text-primary); font-size: 12px; }
-.scrape-history-item small { margin-top: 3px; color: var(--text-muted); font: 10px var(--font-mono); }
-.scrape-history-count { color: var(--accent-cyan); font: 11px var(--font-mono); }
-.scrape-empty { padding: 18px 4px; color: var(--text-muted); font-size: 12px; }
+.scrape-history-item strong { color: var(--text-primary); font-size: var(--text-xs); font-weight: 500; }
+.scrape-history-item small { margin-top: 2px; color: var(--text-muted); font: var(--text-2xs) var(--font-mono); }
+.scrape-history-count { color: var(--text-secondary); font: var(--text-2xs) var(--font-sans); font-variant-numeric: tabular-nums; }
+.scrape-empty { padding: 14px 2px; color: var(--text-muted); font-size: var(--text-xs); }
+/* Inside the dark console the page's muted ink would disappear. */
+.scrape-terminal .scrape-empty { color: var(--text-console-muted); padding: 0; }
 
 @media (max-width: 900px) {
   .scrape-monitor-grid { grid-template-columns: 1fr; }
@@ -47,6 +64,9 @@
 @media (max-width: 600px) {
   .scrape-monitor-header { flex-direction: column; }
   .scrape-stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .scrape-stat { border-bottom: 1px solid var(--rule); }
+  .scrape-stat:nth-child(2n) { border-right: 0; }
+  .scrape-stat:nth-last-child(-n + 2) { border-bottom: 0; }
   .scrape-event { grid-template-columns: 50px 76px minmax(0, 1fr); gap: 5px; }
-  .scrape-terminal { height: 280px; }
+  .scrape-terminal { max-height: 280px; }
 }

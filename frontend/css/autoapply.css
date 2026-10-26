@@ -16,63 +16,86 @@
 }
 
 .safety-control-card {
-  background: var(--bg-surface-elevated);
+  background: transparent;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 16px;
+  padding: 14px;
 }
 
 .control-label-group strong {
   display: block;
-  font-size: 13.5px;
-  font-weight: 700;
+  font-size: var(--text-md);
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .control-desc {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  margin-top: 3px;
+  margin-top: 2px;
   display: block;
   min-height: 32px;
+  line-height: 1.45;
 }
 
 .mode-switch-container {
   display: flex;
-  background: var(--bg-surface);
+  gap: 2px;
+  background: transparent;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 3px;
-  margin-top: 12px;
+  border-radius: var(--radius-md);
+  padding: 2px;
+  margin-top: 10px;
 }
 
 .mode-switch-btn {
+  position: relative;
   flex: 1;
-  padding: 8px 10px;
+  padding: 6px 8px;
   background: transparent;
   border: none;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  border-radius: 3px;
   cursor: pointer;
+  min-width: 0;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.mode-switch-btn:hover {
+  color: var(--text-primary);
 }
 
 .mode-switch-btn.active {
-  background: var(--accent-emerald-bg);
-  color: var(--accent-emerald);
-  font-weight: 700;
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.mode-switch-btn.active::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 1px;
+  height: 1px;
+  background: var(--primary);
 }
 
 .mode-switch-btn.danger.active {
   background: var(--accent-rose-bg);
   color: var(--accent-rose);
-  font-weight: 700;
+  font-weight: 600;
+}
+
+.mode-switch-btn.danger.active::after {
+  background: var(--accent-rose);
 }
 
 .mode-switch-btn .dot {
@@ -100,13 +123,14 @@
 
 .control-slider-box input[type="range"] {
   flex: 1;
-  accent-color: var(--primary-blue);
+  accent-color: var(--primary);
 }
 
 .slider-badge {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   color: var(--text-primary);
   min-width: 65px;
 }
@@ -125,11 +149,14 @@
 }
 
 .terminal-window {
-  background: #090a0d;
+  background: var(--bg-console);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 16px;
-  height: 260px;
+  /* A log with one line should not be a 260px black slab; it grows with the
+     run and stops at the height the old fixed box had. */
+  min-height: 96px;
+  max-height: 260px;
   overflow-y: auto;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -137,40 +164,43 @@
 }
 
 .term-line {
-  color: #e2e8f0;
+  color: var(--text-console);
 }
 
-.term-cyan { color: var(--accent-cyan); font-weight: 600; }
-.term-indigo { color: var(--primary-blue); font-weight: 600; }
-.term-green { color: var(--accent-emerald); font-weight: 600; }
-.term-amber { color: var(--accent-amber); font-weight: 600; }
+.term-cyan { color: var(--console-cyan); font-weight: 600; }
+.term-indigo { color: var(--console-primary); font-weight: 600; }
+.term-green { color: var(--console-emerald); font-weight: 600; }
+.term-amber { color: var(--console-amber); font-weight: 600; }
 
 .applied-package-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
+  border-top: 1px solid var(--rule);
 }
 
 .applied-package-card {
-  padding: 12px 14px;
-  background: var(--bg-surface-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  padding: 10px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 
 .pkg-title {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--text-md);
+  font-weight: 500;
   color: var(--text-primary);
 }
 
 .pkg-meta {
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .review-results-modal .modal-body {
@@ -193,10 +223,11 @@
 
 .review-result-item {
   min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface-elevated);
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
 }
 
 .review-result-item h4,
@@ -224,7 +255,7 @@
 .review-result-link {
   display: inline-block;
   margin-top: 7px;
-  color: var(--primary-blue);
+  color: var(--primary-text);
   font-size: 12px;
   font-weight: 700;
 }
@@ -241,7 +272,7 @@
   object-fit: contain;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  background: #0b0e14;
+  background: var(--bg-console-well);
 }
 
 .screenshot-preview-fallback {

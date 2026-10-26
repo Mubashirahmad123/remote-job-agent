@@ -15,6 +15,44 @@ JobAgent.jobDrawer = {
     this.btnDrawerRegenerate = document.getElementById('btnDrawerRegenerate');
 
     this.bindEvents();
+    this.bindSheetGesture();
+  },
+
+  /**
+   * The drawer is a bottom sheet on a phone and a side panel on a desktop,
+   * so the drag gesture only exists in sheet mode. Below 600px the sheet is
+   * pulled down to dismiss; above it, the surface is a fixed panel and a drag
+   * would fight the page.
+   */
+  bindSheetGesture() {
+    if (!this.jobDetailDrawer || !JobAgent.gestures) return;
+    const sheetOnly = () => window.matchMedia('(max-width: 600px)').matches;
+
+    JobAgent.gestures.swipeToDismiss(this.jobDetailDrawer, {
+      axis: 'y',
+      direction: 1, // pulling down dismisses
+      dismissThreshold: 0.32,
+      // The sheet is dragged by its grabber. The browser latches touch-action
+      // when the gesture starts, so the region the finger lands on has to be
+      // the one that opted out of the browser's scroll handling — and the
+      // grabber is also the affordance that says the sheet can be moved.
+      handle: this.jobDetailDrawer.querySelector('.drawer-header'),
+      canStart: (delta) => {
+        if (!sheetOnly()) return false;
+        // The content owns the gesture while it is scrolled: a downward drag
+        // there is a scroll, not a dismissal.
+        const body = this.drawerBody;
+        const scrolled = body && body.scrollTop > 0;
+        return !(scrolled && delta > 0);
+      },
+      // Continuous feedback: the scrim lifts with the sheet, so the gesture
+      // reads as one continuous motion rather than a drag plus an animation.
+      onProgress: (ratio) => {
+        if (!this.drawerOverlay) return;
+        this.drawerOverlay.style.opacity = String(Math.max(0, 1 - ratio));
+      },
+      onDismiss: () => this.close(),
+    });
   },
 
   bindEvents() {
@@ -69,7 +107,7 @@ JobAgent.jobDrawer = {
           <div class="drawer-company-row">
             <strong>${esc(job.company)}</strong>
             <span>•</span>
-            <span>📍 ${esc(job.timezone)}</span>
+            <span>${esc(job.timezone)}</span>
             <span>•</span>
             <span class="text-cyan" style="color: var(--accent-cyan);">${esc(job.salary || 'Competitive')}</span>
           </div>
@@ -90,7 +128,7 @@ JobAgent.jobDrawer = {
               <span class="variant-name">${esc(cvName)}</span>
               <span class="variant-meta">Matched by Keyword Overlap & FAISS Cosine Vector</span>
             </div>
-            <span class="badge-emerald">AUTO-PICKED</span>
+            <span class="badge-emerald">Auto-picked</span>
           </div>
         </div>
 
@@ -98,13 +136,13 @@ JobAgent.jobDrawer = {
           <div class="drawer-section-title">Skills Overlap Analysis</div>
           <div class="skills-overlap-box">
             <div style="margin-bottom: 8px;">
-              <span style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Direct Matched Competencies:</span>
-              ${matched.map(s => `<span class="skill-match-tag matched">✓ ${esc(s)}</span>`).join('')}
+              <span style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px;">Direct Matched Competencies:</span>
+              ${matched.map(s => `<span class="skill-match-tag matched">${esc(s)}</span>`).join('')}
             </div>
             ${missing.length > 0 ? `
               <div>
-                <span style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Skills to Emphasize / Bridge:</span>
-                ${missing.map(s => `<span class="skill-match-tag missing">⚠ ${esc(s)}</span>`).join('')}
+                <span style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px;">Skills to Emphasize / Bridge:</span>
+                ${missing.map(s => `<span class="skill-match-tag missing">${esc(s)}</span>`).join('')}
               </div>
             ` : ''}
           </div>
@@ -144,7 +182,7 @@ Role Requirements:
       const packaged = JobAgent.store.isPackaged ? JobAgent.store.isPackaged(fp) : false;
       this.btnDrawerRegenerate.classList.toggle('hidden', !packaged);
       this.btnDrawerRegenerate.title = packaged
-        ? "This job already has a package — rebuild it with a fresh tailored resume + cover letter"
+        ? "This job already has a package. Rebuild it with a fresh tailored resume and cover letter."
         : '';
     }
 
@@ -153,8 +191,16 @@ Role Requirements:
   },
 
   close() {
-    if (this.drawerOverlay) this.drawerOverlay.classList.remove('open');
-    if (this.jobDetailDrawer) this.jobDetailDrawer.classList.remove('open');
+    if (this.drawerOverlay) {
+      this.drawerOverlay.classList.remove('open');
+      // Clear any inline opacity left by the drag gesture, so the overlay
+      // returns to the state its class describes.
+      this.drawerOverlay.style.opacity = '';
+    }
+    if (this.jobDetailDrawer) {
+      this.jobDetailDrawer.classList.remove('open');
+      this.jobDetailDrawer.style.transform = '';
+    }
     JobAgent.store.setSelectedJob(null);
   }
 };

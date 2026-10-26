@@ -90,7 +90,8 @@ JobAgent.dashboard = {
     const total = counts.applied + counts.review + counts.interview + counts.offer + counts.archived;
     const progress = total > 0 ? Math.round(((counts.interview + counts.offer) / total) * 100) : 0;
     const bar = document.getElementById('metricPipelineBar');
-    if (bar) bar.style.width = progress + '%';
+    // Scale, not width: the bar is a 100%-wide track scaled from the left.
+    if (bar) bar.style.transform = `scaleX(${progress / 100})`;
   },
 
   _skillNote(text, color) {
@@ -111,7 +112,7 @@ JobAgent.dashboard = {
     if (!skills) {
       this.topSkillsCloud.innerHTML = this._skillNote(
         error ? `Skill demand unavailable: ${esc(error)}` : 'Skill demand unavailable.',
-        error ? '#f59e0b' : undefined,
+        error ? 'var(--accent-amber)' : undefined,
       );
       return;
     }
@@ -120,13 +121,13 @@ JobAgent.dashboard = {
       const total = this._count(skills.total_jobs, 0);
       this.topSkillsCloud.innerHTML = this._skillNote(
         total > 0
-          ? `No <code>tech_stack</code> data on ${total} active listing${total === 1 ? '' : 's'} yet — run a scrape with enrichment.`
-          : 'No active listings yet — run a scrape to populate skill demand.',
+          ? `No <code>tech_stack</code> data on ${total} active listing${total === 1 ? '' : 's'} yet. Run a scrape with enrichment.`
+          : 'No active listings yet. Run a scrape to populate skill demand.',
       );
       return;
     }
     this.topSkillsCloud.innerHTML = list.map(sk => `
-      <div class="skill-pill" title="${esc(sk.name)} — ${esc(sk.count)} of ${esc(skills.jobs_with_stack)} listings with a stack">
+      <div class="skill-pill" title="${esc(sk.name)}: ${esc(sk.count)} of ${esc(skills.jobs_with_stack)} listings with a stack">
         <span>${esc(sk.name)}</span>
         <span class="skill-pct">${esc(sk.pct)}%</span>
       </div>
@@ -160,8 +161,8 @@ JobAgent.dashboard = {
         // actually happened instead of leaving the loading text on screen.
         const esc = (JobAgent.escapeHtml || ((v) => String(v ?? '')));
         this.sourcesGrid.innerHTML = errors.stats
-          ? `<div style="font-size:12.5px;color:#f59e0b;padding:12px;">Source stats unavailable: ${esc(errors.stats)}</div>`
-          : `<div style="color: var(--text-muted); font-size: 12.5px; padding: 12px;">No live sources yet — run a scrape.</div>`;
+          ? `<div style="font-size:12.5px;color:var(--accent-amber);padding:12px;">Source stats unavailable: ${esc(errors.stats)}</div>`
+          : `<div style="color: var(--text-muted); font-size: 12.5px; padding: 12px;">No live sources yet. Run a scrape.</div>`;
       }
     }
 

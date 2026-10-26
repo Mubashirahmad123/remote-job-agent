@@ -45,7 +45,8 @@ JobAgent.autoApply = {
       const sub = document.getElementById('metricDailyCapSub');
       if (sub) sub.textContent = `Remaining: ${remaining} slot${remaining === 1 ? '' : 's'}`;
       const bar = document.getElementById('metricDailyCapBar');
-      if (bar) bar.style.width = pct + '%';
+      // Scale, not width: the bar is a 100%-wide track scaled from the left.
+      if (bar) bar.style.transform = `scaleX(${pct / 100})`;
     } catch (_) { /* ignore */ }
   },
 
@@ -55,7 +56,7 @@ JobAgent.autoApply = {
       this.btnModeReview.addEventListener('click', () => {
         this.btnModeReview.classList.add('active');
         this.btnModeSubmit.classList.remove('active');
-        this.safetyStatusLabel.textContent = '🛡️ FILL & REVIEW (SAFE)';
+        this.safetyStatusLabel.textContent = 'Fill & review';
         this.safetyStatusLabel.className = 'badge-emerald';
         JobAgent.store.setAutoApply('mode', 'review');
         JobAgent.toast.show('Safety Mode: Form filling only. Auto-submit disabled.');
@@ -164,7 +165,7 @@ JobAgent.autoApply = {
     const used = JobAgent.store.getDailyUsage ? JobAgent.store.getDailyUsage() : 0;
     const remaining = Math.max(0, cap - used);
     if (remaining <= 0) {
-      const msg = `[CAP] Daily cap reached (${used}/${cap} today) — no further fills. Raise the cap slider or try again tomorrow.`;
+      const msg = `[CAP] Daily cap reached (${used}/${cap} today). No further fills. Raise the cap slider or try again tomorrow.`;
       this.appendTerminalLine(msg, 'term-rose');
       JobAgent.toast.show(`Daily cap reached: ${used}/${cap} today. No fills started.`);
       this.syncCapUI();
@@ -193,7 +194,7 @@ JobAgent.autoApply = {
         + ', already tracked=' + (excluded.tracked || 0)
         + ', below ' + threshold + '%=' + (excluded.below_threshold || 0);
       this.appendTerminalLine(
-        '[QUEUE] No new eligible jobs (' + detail + '). Nothing was regenerated — ' +
+        '[QUEUE] No new eligible jobs (' + detail + '). Nothing was regenerated. ' +
         'run a fresh scrape for new matches, or use Regenerate on a specific packaged job.',
         'term-amber'
       );
@@ -201,7 +202,7 @@ JobAgent.autoApply = {
       return;
     }
     if (jobs.length > remaining) {
-      this.appendTerminalLine(`[CAP] ${jobs.length} candidate(s) but only ${remaining} left of ${used}/${cap} today — running the top ${remaining}.`, 'term-amber');
+      this.appendTerminalLine(`[CAP] ${jobs.length} candidate(s) but only ${remaining} left of ${used}/${cap} today. Running the top ${remaining}.`, 'term-amber');
       jobs = jobs.slice(0, remaining);
     }
     this.latestQueueResults = [];
@@ -218,7 +219,7 @@ JobAgent.autoApply = {
           this.latestQueueResults.push(result);
           const needsReview = result.status === 'needs_review';
           const lineClass = result.error || result.status === 'error' ? 'term-rose' : (result.status === 'filled_ready' && !needsReview ? 'term-green' : 'term-amber');
-          this.appendTerminalLine('[' + result.status.toUpperCase() + '] (' + result.tier + ') — ' + result.jobTitle + (result.error ? ': ' + result.error : ''), lineClass);
+          this.appendTerminalLine('[' + result.status.toUpperCase() + '] (' + result.tier + ') ' + result.jobTitle + (result.error ? ': ' + result.error : ''), lineClass);
           if (result.packagePath) this.appendTerminalLine('[PACKAGE] ' + result.packagePath, 'term-amber');
         } catch (error) {
           // A 409 here means the job was packaged or claimed between the
@@ -226,7 +227,7 @@ JobAgent.autoApply = {
           // a stale list). It is a skip, not a failure: do not count it
           // against the cap or show it as an error.
           if (error && error.status === 409) {
-            this.appendTerminalLine('[SKIP] ' + (job.job_title || 'Job') + ' already has a package or a fill for it is already in progress — use Regenerate to rebuild it deliberately.', 'term-amber');
+            this.appendTerminalLine('[SKIP] ' + (job.job_title || 'Job') + ' already has a package or a fill in progress. Use Regenerate to rebuild it.', 'term-amber');
             continue;
           }
           const message = error && error.message ? error.message : String(error);
@@ -257,7 +258,7 @@ JobAgent.autoApply = {
       const reviewWindowCount = this.latestQueueResults.filter((result) => result.browserOpened).length;
       this.renderQueueResults();
       if (attempted === 0) {
-        JobAgent.toast.show('Review queue: those jobs were already packaged — nothing regenerated. Nothing was submitted.');
+        JobAgent.toast.show('Review queue: those jobs were already packaged. Nothing was regenerated. Nothing was submitted.');
         return;
       }
       JobAgent.toast.show('Review queue finished: ' + packageCount + ' package(s), ' + filledCount + ' form(s) filled, ' + reviewWindowCount + ' review window(s) open, ' + failedCount + ' fill failure(s). Nothing was submitted.');
@@ -342,7 +343,7 @@ JobAgent.autoApply = {
           ? 'review-result-status is-warning'
           : 'review-result-status';
       status.textContent = needsReview
-        ? 'needs_review: required fields missing — review manually before any submit'
+        ? 'needs_review: required fields missing. Review manually before any submit.'
           + (result.fieldVerification ? ' (' + result.fieldVerification + ')' : '')
         : result.error
           ? result.status + ': ' + result.error
@@ -370,7 +371,7 @@ JobAgent.autoApply = {
       } else {
         const emptyShot = document.createElement('p');
         emptyShot.className = 'review-result-path';
-        emptyShot.textContent = 'No screenshot yet — package-only (no form fill ran for this ATS).';
+        emptyShot.textContent = 'No screenshot yet. This ATS is package-only, so no form was filled.';
         item.appendChild(emptyShot);
       }
       this.reviewQueueResults.appendChild(item);
@@ -401,7 +402,7 @@ JobAgent.autoApply = {
     if (!directUrl) {
       img.classList.add('hidden');
       fallback.classList.remove('hidden');
-      fallback.textContent = 'No screenshot yet — package-only (no form fill ran for this ATS).';
+      fallback.textContent = 'No screenshot yet. This ATS is package-only, so no form was filled.';
       return;
     }
     // Direct <img> works same-origin (the HttpOnly session cookie rides along).
@@ -414,7 +415,7 @@ JobAgent.autoApply = {
       if (!result.fingerprint || !JobAgent.api.fetchScreenshotBlob) {
         img.classList.add('hidden');
         fallback.classList.remove('hidden');
-        fallback.textContent = 'Screenshot unavailable — open the file path on the server.';
+        fallback.textContent = 'Screenshot unavailable. Open the file path on the server.';
         return;
       }
       try {
@@ -426,7 +427,7 @@ JobAgent.autoApply = {
         img.classList.add('hidden');
         fallback.classList.remove('hidden');
         fallback.textContent = (e && e.code === 'NO_SCREENSHOT')
-          ? 'No screenshot yet — package-only (no form fill ran for this ATS).'
+          ? 'No screenshot yet. This ATS is package-only, so no form was filled.'
           : 'Screenshot unavailable: ' + ((e && e.message) || 'fetch failed');
       }
     };

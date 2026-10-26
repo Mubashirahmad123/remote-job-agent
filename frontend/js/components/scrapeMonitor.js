@@ -15,6 +15,10 @@ JobAgent.scrapeMonitor = {
     this.events = document.getElementById('scrapeMonitorEvents');
     this.history = document.getElementById('scrapeMonitorHistory');
     this.activeRun = null;
+    // Seed the two panels that only render on a run: an empty black terminal
+    // and an empty card read as broken, and no run is the common case.
+    this.renderBoards({});
+    this.renderEvents([]);
     if (this.history) {
       this.history.addEventListener('click', async (event) => {
         const item = event.target.closest('[data-run-id]');
@@ -67,7 +71,11 @@ JobAgent.scrapeMonitor = {
       this.phase.textContent = `${run.phase || run.status} · ${run.run_id}`;
     }
     if (this.progress) {
-      this.progress.style.width = `${Math.max(4, Math.min(100, percent))}%`;
+      // Scale, not width: the bar is a 100%-wide track scaled from the left,
+      // so a progress tick animates on the compositor instead of re-running
+      // layout on every poll.
+      const ratio = Math.max(0.04, Math.min(1, percent / 100));
+      this.progress.style.transform = `scaleX(${ratio})`;
     }
     if (this.summary) {
       this.summary.innerHTML = [

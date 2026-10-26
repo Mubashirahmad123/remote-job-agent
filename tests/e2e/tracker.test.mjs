@@ -182,7 +182,9 @@ describe('tracker — rendering and persisted transitions', () => {
     for (const column of Object.keys(COLS)) {
       const container = ctx.window.document.getElementById(COLS[column]);
       assert.equal(container.querySelectorAll('.kanban-card').length, 0);
-      assert.match(container.textContent, column === 'review' ? /No fill-review/ : /No applications/);
+      // Each lane has its own empty copy now, so assert the state, not the wording.
+      const empty = container.querySelector('.kanban-empty');
+      assert.ok(empty && empty.textContent.trim().length > 0, `${column} shows an empty-state line`);
       assert.equal(text(ctx.window, 'count' + column[0].toUpperCase() + column.slice(1)), '0');
     }
   });

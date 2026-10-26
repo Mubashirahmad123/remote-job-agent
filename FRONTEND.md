@@ -189,7 +189,9 @@ live: `jobs[], tracker[], stats, skills, health, usingLive, dataSource(sheets|sn
 
 | File | Owns | Live source | Element IDs |
 |---|---|---|---|
-| `navigation.js` | tab switching, theme toggle | — | `navDashboard…`, `currentViewTitle` |
+| `navigation.js` | tab switching, off-canvas nav drawer below 768px (open/close, scrim, Escape, focus return) | — | `navDashboard…`, `currentViewTitle`, `btnMobileNav`, `appSidebar`, `sidebarScrim` |
+| `gestures.js` | swipe-to-dismiss primitive (`swipeToDismiss(el, {axis, direction, handle, canStart, onProgress, onDismiss})`) with 1:1 tracking, axis lock, rubber-banding and velocity projection | — | — (called by `navigation.js` and `jobDrawer.js`) |
+| `theme.js` (in `js/`, loaded in `<head>`) | the light/dark scheme: sets `data-theme` on `<html>` before first paint, persists the choice under `localStorage['rja-theme']`, and is the only owner of the toggle wiring | — | `btnThemeToggle`, `themeIconDark/Light` |
 | `dashboard.js` | bento metrics, sidebar count badges, sources grid, skills cloud | `/api/stats` (`by_source`, `tabs`) plus tracker counts for the pipeline card; skill cloud now live from `/api/skills` (`skills[].name/pct`, no mock fallback — empty renders an honest note) | `metricTotalJobs/TopMatches/DailyCap/Interviews`, `activeJobsBadge`, `topMatchCountBadge`, `metricPipelineFootnote`, `sourcesGrid`, `topSkillsCloud` |
 | `jobDesk.js` | filters, grid/table views, count, newest-first ordering | `store.state.jobs` (client-side filter + `posted_date_iso` desc sort with `scraped_at` fallback, undated last; backend handles `q/source/tab/limit`) | `jobFilterSearch`, `rolePillGroup`, `scoreRange`, `location/source/statusFilter`, `jobsGridContainer/TableBody`, `filteredJobCount` (`(source: N)` suffix) |
 | `jobDrawer.js` | slide-over detail | receives job object (defensive: string-or-array stack, missing skills/CV) | `jobDetailDrawer`, `drawerBody`, `btnDrawerApplyNow/Save` |

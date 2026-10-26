@@ -82,7 +82,7 @@ JobAgent.resumeStudio = {
   _note(el, msg, isError) {
     if (!el) return;
     el.textContent = msg || '';
-    el.style.color = isError ? '#f59e0b' : '';
+    el.style.color = isError ? 'var(--accent-amber)' : '';
   },
 
   _jobs() {
@@ -211,7 +211,7 @@ JobAgent.resumeStudio = {
         card.classList.toggle('selected', n === key);
       });
     }
-    if (JobAgent.toast) JobAgent.toast.show(`CV variant selected: ${key} — will be used for tailoring.`);
+    if (JobAgent.toast) JobAgent.toast.show(`CV variant selected: ${key}. It will be used for tailoring.`);
     return true;
   },
 
@@ -232,7 +232,7 @@ JobAgent.resumeStudio = {
       this.tailorJobSelect.dataset.source = 'loading';
       this._note(this.tailorSelectNote, JobAgent.store.state.loading.jobs
         ? 'Loading live jobs from /api/jobs…'
-        : 'Live jobs unavailable — press Scrape Now or check API connection.', false);
+        : 'Live jobs unavailable. Press Scrape Now or check the API connection.', false);
       return;
     }
     this.tailorJobSelect.disabled = false;
@@ -269,7 +269,7 @@ JobAgent.resumeStudio = {
     this._saveSelection(this.tailorJobSelect.value);
     if (!live) {
       this._note(this.tailorSelectNote,
-        'Showing CACHED jobs (mock fallback) — live generation unavailable until the API responds. Press Scrape Now for fresh listings.', true);
+        'Showing cached jobs (mock fallback). Live generation is unavailable until the API responds. Press Scrape Now for fresh listings.', true);
       return;
     }
     const age = this._newestAgeDays();
@@ -278,11 +278,11 @@ JobAgent.resumeStudio = {
       : age === 1 ? ' · newest posted yesterday'
       : ` · newest posted ${age} days ago`);
     if (age != null && age > 3) {
-      // Live-but-old: amber warning (isError=true renders #f59e0b), not the
-      // plain "Live jobs loaded" line that hid staleness before.
+      // Live-but-old: amber warning ink, not the plain "Live jobs loaded"
+      // line that hid staleness before.
       this._note(this.tailorSelectNote,
         `Live jobs loaded (${live} with fingerprints, top 30 by score${ageBit}). `
-        + `Jobs are ${age} days old — press Scrape Now for fresh listings.`, true);
+        + `Jobs are ${age} days old. Press Scrape Now for fresh listings.`, true);
     } else {
       this._note(this.tailorSelectNote,
         `Live jobs loaded (${live} with fingerprints, top 30 by score${ageBit}).`, false);
@@ -317,8 +317,8 @@ JobAgent.resumeStudio = {
       <div class="mock-section-title">TECHNICAL EXPERTISE</div>
       <div class="mock-text">${this.escapeHtml((skills && skills.length ? skills : ['—']).join(', '))}</div>
       <div class="mock-section-title">PROFESSIONAL EXPERIENCE</div>
-      <div class="mock-bullet">• Tailored to ${this.escapeHtml(jobTitle || 'selected role')}${company ? ' @ ' + this.escapeHtml(company) : ''} — keyword-matched bullets</div>`
-      + (demoBadge ? '\n<div class="mock-bullet">• Demo preview — live generation replaces this with LLM output</div>' : '');
+      <div class="mock-bullet">• Tailored to ${this.escapeHtml(jobTitle || 'selected role')}${company ? ' @ ' + this.escapeHtml(company) : ''}. Keyword-matched bullets</div>`
+      + (demoBadge ? '\n<div class="mock-bullet">• Demo preview. Live generation replaces this with LLM output</div>' : '');
   },
 
   /**
@@ -363,7 +363,7 @@ JobAgent.resumeStudio = {
 
   _demoCoverText(jobTitle, company) {
     return `Dear Hiring Team,\n\nI am excited to apply for the ${jobTitle || 'role'}${company ? ' at ' + company : ''}. `
-      + `My background aligns closely with the tech stack and requirements in the posting. (Demo letter — live generation replaces this.)`;
+      + `My background aligns closely with the tech stack and requirements in the posting. (Demo letter. Live generation replaces this.)`;
   },
 
   _coverSheetHtml({ coverText, jobTitle, company, demoBadge }) {
@@ -401,11 +401,11 @@ JobAgent.resumeStudio = {
   switchPreviewTab(which) {
     const next = which === 'cover' ? 'cover' : 'resume';
     if (next === 'cover' && !this._coverHtml) {
-      if (JobAgent.toast) JobAgent.toast.show('No cover letter yet — press Generate first.', 'warn');
+      if (JobAgent.toast) JobAgent.toast.show('No cover letter yet. Press Generate first.', 'warn');
       return;
     }
     if (next === 'resume' && !this._resumeHtml) {
-      if (JobAgent.toast) JobAgent.toast.show('No resume yet — press Generate first.', 'warn');
+      if (JobAgent.toast) JobAgent.toast.show('No resume yet. Press Generate first.', 'warn');
       return;
     }
     this._previewTab = next;
@@ -578,7 +578,7 @@ JobAgent.resumeStudio = {
         if (r && r.fp && r.fp !== 'demo' && r.fp === fp && r.resumeFilename) {
           window.open(JobAgent.api.baseUrl() + '/api/resume/' + encodeURIComponent(r.fp) + '/download', '_blank', 'noopener');
         } else {
-          JobAgent.toast.show('No live PDF to open — select a live job and press Generate first.', 'warn');
+          JobAgent.toast.show('No live PDF to open. Select a live job and press Generate first.', 'warn');
         }
       });
     }
@@ -608,7 +608,7 @@ JobAgent.resumeStudio = {
         + (state !== 'done' && order.indexOf(state) === i ? ' active' : '');
     });
     const labels = {
-      role: 'Role category detected — adjusting tone & skills',
+      role: 'Role category detected. Adjusting tone and skills.',
       resume: 'Generating 1-page ATS resume (LLM)…',
       letter: 'Generating tailored cover letter…',
     };
@@ -629,8 +629,8 @@ JobAgent.resumeStudio = {
       // row ('mock-…'), or an empty store. Say which before running the demo.
       const live = this._liveJobs().length;
       JobAgent.toast.show(live
-        ? 'Selected job has no live fingerprint — showing demo package instead.'
-        : 'No live jobs loaded — running the demo tailor engine instead.', 'warn');
+        ? 'Selected job has no live fingerprint. Showing a demo package instead.'
+        : 'No live jobs loaded. Running the demo tailor engine instead.', 'warn');
       this.runShrinkEngine();
       return;
     }
@@ -654,7 +654,7 @@ JobAgent.resumeStudio = {
       this.showResult(resume, letter);
       JobAgent.toast.show('Tailored resume + cover letter generated successfully!');
     } catch (e) {
-      JobAgent.toast.show('Live generation failed (' + (e && e.message ? e.message : 'unknown error') + ') — showing demo package instead.', 'warn');
+      JobAgent.toast.show('Live generation failed (' + (e && e.message ? e.message : 'unknown error') + '). Showing a demo package instead.', 'warn');
       this.runShrinkEngine();
     } finally {
       this.btnGenerateTailored.disabled = false;
@@ -702,7 +702,7 @@ JobAgent.resumeStudio = {
           this._note(this.profileStatusNote, 'Showing your saved edits (live profile unavailable).', false);
         } else {
           // Backend endpoint not built yet: keep the static panel, quiet note.
-          this._note(this.profileStatusNote, 'Live profile not available yet — showing cached demo.', false);
+          this._note(this.profileStatusNote, 'Live profile not available yet. Showing a cached demo.', false);
         }
         return;
       }
@@ -717,7 +717,7 @@ JobAgent.resumeStudio = {
         this._note(this.profileStatusNote, 'Showing your saved edits (profile API unreachable).', true);
       } else {
         this._note(this.profileStatusNote,
-          'Profile API error: ' + (e && e.message ? e.message : 'unknown error') + ' — showing cached demo.', true);
+          'Profile API error: ' + (e && e.message ? e.message : 'unknown error') + '. Showing a cached demo.', true);
       }
     }
   },
@@ -810,7 +810,10 @@ JobAgent.resumeStudio = {
       input.value = (value === '—' ? '' : value) || '';
       input.placeholder = placeholder || '';
       input.className = 'filter-select full-width';
-      input.style.cssText = 'font-size:12.5px;padding:6px 8px;';
+      // No inline font-size: .filter-select already sets 12.5px, and an inline
+      // size would beat css/mobile.css, which raises inputs to 16px on touch
+      // (below that, iOS zooms the page on focus and never zooms back).
+      input.style.cssText = 'padding:6px 8px;';
       el.appendChild(input);
     };
     toInput('profName', vals.name, 'Full name');
@@ -829,7 +832,10 @@ JobAgent.resumeStudio = {
       // height:32px (jobs.css) and shrinks the textarea. Sizing lives in
       // resume.css `#profSkills textarea` + the inline min-height below.
       ta.className = 'profile-skills-input';
-      ta.style.cssText = 'font-size:13px;padding:10px 12px;resize:vertical;min-height:140px;width:100%;box-sizing:border-box;line-height:1.6;';
+      // Type comes from resume.css `#profSkills textarea` (13px, 16px on
+      // touch): an inline size would beat the mobile floor and re-introduce
+      // iOS focus zoom.
+      ta.style.cssText = 'padding:10px 12px;resize:vertical;min-height:140px;width:100%;box-sizing:border-box;line-height:1.6;';
       skillsEl.appendChild(ta);
       setTimeout(() => { try { ta.style.height = Math.max(140, ta.scrollHeight + 8) + 'px'; } catch (_) { /* ignore */ } }, 0);
       ta.addEventListener('input', () => { try { ta.style.height = 'auto'; ta.style.height = Math.max(140, ta.scrollHeight + 8) + 'px'; } catch (_) { /* ignore */ } });
@@ -847,7 +853,7 @@ JobAgent.resumeStudio = {
       btn.parentElement.appendChild(cancel);
     }
     if (cancel) cancel.style.display = '';
-    this._note(this.profileStatusNote, 'Editing profile — Save to apply locally + sync to API.', false);
+    this._note(this.profileStatusNote, 'Editing profile. Save to apply locally and sync to the API.', false);
   },
 
   cancelEditMode() {
@@ -873,7 +879,7 @@ JobAgent.resumeStudio = {
       return;
     }
     if (vals.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vals.email)) {
-      JobAgent.toast.show('Email looks invalid — check it and save again.', 'warn');
+      JobAgent.toast.show('Email looks invalid. Check it and save again.', 'warn');
       return;
     }
     const patch = {
@@ -892,20 +898,20 @@ JobAgent.resumeStudio = {
     if (btn) { btn.textContent = 'Edit'; btn.disabled = true; }
     try {
       this.renderProfile(merged);
-      this._note(this.profileStatusNote, 'Saved locally — syncing to API…', false);
+      this._note(this.profileStatusNote, 'Saved locally. Syncing to the API…', false);
       const saved = await JobAgent.api.updateCvProfile(patch);
       if (saved && !saved._unavailable) {
         this.renderProfile(this._applyOverride(saved, this._getProfileOverride()));
         this._note(this.profileStatusNote, 'Profile saved (local + API cache).', false);
-        JobAgent.toast.show('Profile saved — used for auto-fill and tailoring.');
+        JobAgent.toast.show('Profile saved. It will be used for auto-fill and tailoring.');
       } else {
-        this._note(this.profileStatusNote, 'Saved locally (API cache unavailable — will sync later).', true);
-        JobAgent.toast.show('Saved locally. API unavailable — edits kept in this browser.', 'warn');
+        this._note(this.profileStatusNote, 'Saved locally. The API cache is unavailable, so it will sync later.', true);
+        JobAgent.toast.show('Saved locally. The API is unavailable, so edits stay in this browser.', 'warn');
       }
     } catch (e) {
       this._note(this.profileStatusNote,
         'Saved locally; API sync failed (' + (e && e.message ? e.message : 'unknown error') + ').', true);
-      JobAgent.toast.show('Saved locally; API sync failed — edits kept in this browser.', 'warn');
+      JobAgent.toast.show('Saved locally. API sync failed, so edits stay in this browser.', 'warn');
     } finally {
       if (btn) btn.disabled = false;
       const cancel = document.getElementById('btnCancelProfile');
@@ -945,19 +951,19 @@ JobAgent.resumeStudio = {
       const data = await JobAgent.api.getCvVariants();
       if (!data || data._unavailable) {
         // Backend endpoint not built yet: keep the static list, quiet note.
-        this._note(this.variantsStatusNote, 'Live variants not available yet — showing cached demo.', false);
+        this._note(this.variantsStatusNote, 'Live variants not available yet. Showing a cached demo.', false);
         return;
       }
       const list = Array.isArray(data) ? data : (data.variants || data.cvs || []);
       if (!list.length) {
-        this._note(this.variantsStatusNote, 'No variants returned — showing cached demo.', false);
+        this._note(this.variantsStatusNote, 'No variants returned. Showing a cached demo.', false);
         return;
       }
       this.renderVariants(list);
       this._note(this.variantsStatusNote, 'Live variants loaded.', false);
     } catch (e) {
       this._note(this.variantsStatusNote,
-        'Variants API error: ' + (e && e.message ? e.message : 'unknown error') + ' — showing cached demo.', true);
+        'Variants API error: ' + (e && e.message ? e.message : 'unknown error') + '. Showing a cached demo.', true);
     }
   },
 
@@ -991,8 +997,8 @@ JobAgent.resumeStudio = {
         + `<span class="variant-name">${this.escapeHtml(v.name)}</span>`
         + `<span class="variant-meta">${this.escapeHtml(v.meta || '—')}</span>`
         + `</div>`
-        + (isDefault ? '<span class="badge-tag">DEFAULT</span>' : '')
-        + (isSel ? '<span class="badge-emerald">SELECTED</span>' : '')
+        + (isDefault ? '<span class="badge-tag">Default</span>' : '')
+        + (isSel ? '<span class="badge-emerald">Selected</span>' : '')
         + `</div>`;
     }).join('');
   },
@@ -1009,7 +1015,7 @@ JobAgent.resumeStudio = {
     this.renderVariants(current.map(v => v.raw || { name: v.name, meta: v.meta }));
     // renderVariants resets selection to saved; now select the new one.
     this.selectVariant(clean);
-    this._note(this.variantsStatusNote, 'Variant added locally — drop the file in cvs/ to persist it server-side.', false);
+    this._note(this.variantsStatusNote, 'Variant added locally. Drop the file in cvs/ to persist it server-side.', false);
   },
 
   runShrinkEngine() {
@@ -1061,7 +1067,7 @@ JobAgent.resumeStudio = {
         resumeHtml, coverHtml,
       };
       this._showPackageCard({ filename, jobTitle, company, resumeHtml, coverHtml, defaultTab: 'resume' });
-      JobAgent.toast.show('Demo package ready (API unreachable — live data will replace this).');
+      JobAgent.toast.show('Demo package ready. The API is unreachable, so live data will replace this.');
     }, 2000);
   },
 

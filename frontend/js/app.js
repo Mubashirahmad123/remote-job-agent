@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize Application Kanban Tracker
   if (JobAgent.tracker) JobAgent.tracker.init();
 
-  console.log('⚡ Remote Job Agent Command Center initialized (awaiting live data).');
+  console.log('[app] Remote Job Agent Command Center initialized (awaiting live data).');
 
   // Load live backend (Phase 1 reads). On error each section renders its own
   // honest empty/error state — there is no mock corpus to fall back to.
@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       await JobAgent.store.loadAll();
       const mode = JobAgent.store.state.usingLive ? 'LIVE API' : 'no data (API unreachable)';
-      console.log('⚡ Data load complete — mode: ' + mode);
+      console.log('[app] Data load complete — mode: ' + mode);
     } catch (e) {
       console.warn('[app] loadAll failed:', e && e.message);
     }
@@ -92,7 +92,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     const setFill = (width, color) => {
       if (!scrapeFill) return;
-      scrapeFill.style.width = width;
+      // The fill is a 100%-wide track scaled from its left edge, so a
+      // percentage becomes a scale factor: the compositor animates it and
+      // layout never re-runs on a tick.
+      const ratio = parseFloat(String(width)) / 100;
+      scrapeFill.style.transform = `scaleX(${Number.isFinite(ratio) ? ratio : 0})`;
       scrapeFill.style.background = color || '';
     };
     if (!run || (run.status === 'done' && !(run.boards_failed > 0))) {
@@ -119,7 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (label) label.textContent = 'Scrape Now';
       }
       setDot('pulse-amber');
-      if (scrapeTitle) scrapeTitle.textContent = `Scrape done — ${run.boards_failed} boards failed`;
+      if (scrapeTitle) scrapeTitle.textContent = `Scrape finished with ${run.boards_failed} board failures`;
       if (scrapeSub) scrapeSub.textContent = `${run.scraped} scraped, ${run.curated} curated • partial`;
       setFill('100%', 'var(--accent-amber)');
       return;
@@ -133,7 +137,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       setDot('pulse-red');
       if (scrapeTitle) scrapeTitle.textContent = 'Scrape failed';
       if (scrapeSub) scrapeSub.textContent = String(run.error || 'unknown error').slice(0, 80);
-      setFill('100%', 'var(--accent-danger, #ef4444)');
+      setFill('100%', 'var(--accent-danger)');
       return;
     }
     // queued | running — scraping (blue) vs curating (amber) are visually distinct.
@@ -201,7 +205,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           // a dead server means a dead run (registry is in-memory).
           consecutiveFailures += 1;
           if (consecutiveFailures >= 3) {
-            resetToIdle('Scrape poll failed (' + (e && e.message ? e.message : 'unknown error') + ') — showing idle. Start a new scrape if needed.');
+            resetToIdle('Scrape poll failed (' + (e && e.message ? e.message : 'unknown error') + '). Showing idle. Start a new scrape if needed.');
             return;
           }
         }
@@ -212,7 +216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const run = await JobAgent.api.getScrape(runId);
         renderRunState(run);
         if (run.status === 'done' || run.status === 'error') await JobAgent.store.loadAll();
-        else if (JobAgent.toast) JobAgent.toast.show('Scrape still running — check back later.');
+        else if (JobAgent.toast) JobAgent.toast.show('Scrape still running. Check back later.');
       } catch (_) {
         if (last) renderRunState(last);
       }
@@ -229,7 +233,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await poll(run.run_id);
       } catch (e) {
         const msg = (e.status === 409)
-          ? 'A scrape is already running — see the sidebar status card.'
+          ? 'A scrape is already running. See the sidebar status card.'
           : 'Scrape start failed: ' + e.message;
         if (JobAgent.toast) JobAgent.toast.show(msg);
         // Refresh card in case another client started the run (409).

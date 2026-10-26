@@ -2,22 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sign in — Remote Job Agent</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Sign in · Remote Job Agent</title>
+  <meta name="theme-color" content="#0c0d0e">
+  <script src="js/theme.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/variables.css">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/mobile.css">
   <style>
     /* Login page — standalone, no dashboard layout, no JS storage of secrets. */
     .login-shell {
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      padding: calc(24px + env(safe-area-inset-top, 0px)) 24px calc(24px + env(safe-area-inset-bottom, 0px));
       background: var(--bg-canvas);
     }
     .login-card {
@@ -77,8 +81,11 @@
     .login-field input {
       width: 100%;
       box-sizing: border-box;
-      padding: 10px 12px;
-      font-size: 14px;
+      min-height: 48px;
+      padding: 12px 14px;
+      /* 16px is the floor: iOS Safari zooms the whole page when a focused
+         input's text is smaller, and never zooms back out on blur. */
+      font-size: 16px;
       font-family: var(--font-sans);
       color: var(--text-primary);
       background: var(--bg-surface-elevated);
@@ -119,11 +126,11 @@
       <form id="loginForm" novalidate>
         <label class="login-field">
           <span for="loginUsername">Username</span>
-          <input type="text" id="loginUsername" name="username" autocomplete="username" required autofocus>
+          <input type="text" id="loginUsername" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next" required autofocus>
         </label>
         <label class="login-field">
           <span for="loginPassword">Password</span>
-          <input type="password" id="loginPassword" name="password" autocomplete="current-password" required>
+          <input type="password" id="loginPassword" name="password" autocomplete="current-password" enterkeyhint="go" required>
         </label>
         <div class="login-error" id="loginError" role="alert" aria-live="polite"></div>
         <button type="submit" class="action-btn primary full-width">

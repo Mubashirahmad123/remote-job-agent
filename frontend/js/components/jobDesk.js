@@ -197,6 +197,14 @@ JobAgent.jobDesk = {
     }[character]));
   },
 
+  /* Job role arrives as "fullstack" / "BACKEND". One case for every chip:
+     sentence case, which is what the rest of the interface uses. */
+  sentenceCase(value) {
+    const text = String(value ?? '').trim();
+    if (!text) return '';
+    return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+  },
+
   _stateBanner() {
     const { loading, errors, usingLive } = JobAgent.store.state;
     if (loading.jobs) {
@@ -204,7 +212,7 @@ JobAgent.jobDesk = {
     }
     if (errors.jobs) {
       const src = usingLive ? '' : 'No cached data to fall back on.';
-      return `<div style="grid-column: 1 / -1; padding: 16px 20px; color: #f59e0b; background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.3); border-radius: var(--radius-lg); font-size: 12.5px;">API error: ${errors.jobs} ${src}</div>`;
+      return `<div style="grid-column: 1 / -1; padding: 16px 20px; color: var(--accent-rose); background: var(--accent-rose-bg); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); font-size: var(--text-sm);">API error: ${errors.jobs} ${src}</div>`;
     }
     return '';
   },
@@ -214,10 +222,9 @@ JobAgent.jobDesk = {
     const banner = this._stateBanner();
 
     if (this.filteredJobCount) {
-      const live = JobAgent.store.state.jobs.length;
-      const src = JobAgent.store.state.dataSource || 'unavailable';
-      const tag = live ? ` (${src}: ${live})` : '';
-      this.filteredJobCount.textContent = jobs.length + tag;
+      // The data source already has a banner of its own; repeating it here made
+      // the line read "7 (snapshot: 7) matching opportunities".
+      this.filteredJobCount.textContent = jobs.length;
     }
 
     // 1. Render Card Grid
@@ -235,6 +242,10 @@ JobAgent.jobDesk = {
         const stackOf = (job) => Array.isArray(job.tech_stack) ? job.tech_stack : [];
         this.jobsGridContainer.innerHTML = banner + jobs.map(job => `
           <div class="job-card ${selectedId === String(job.id) ? 'is-selected' : ''}" data-id="${String(job.id).replace(/"/g, '&quot;')}">
+            <div class="match-score-badge ${this.getScoreTierClass(job.match_score)}" title="ATS Match Score">
+              <span class="score-val">${job.match_score}</span>
+              <span class="score-unit">%</span>
+            </div>
             <div class="job-card-top">
               <div class="job-title-group">
                 <h3 class="job-role-title">${this.escapeHtml(job.job_title)}</h3>
@@ -244,16 +255,12 @@ JobAgent.jobDesk = {
                   <span class="text-muted" style="font-size: 11.5px;">${this.escapeHtml(job.posted_text)}</span>
                 </div>
               </div>
-              <div class="match-score-badge ${this.getScoreTierClass(job.match_score)}" title="ATS Match Score">
-                <span class="score-val">${job.match_score}</span>
-                <span class="score-unit">%</span>
-              </div>
             </div>
 
             <div class="job-meta-chips">
-              <span class="meta-chip">📍 ${this.escapeHtml(job.timezone)}</span>
-              ${job.salary ? `<span class="meta-chip salary">💰 ${this.escapeHtml(job.salary)}</span>` : ''}
-              <span class="meta-chip">🏷️ ${this.escapeHtml((job.role || '').toUpperCase())}</span>
+              <span class="meta-chip">${this.escapeHtml(job.timezone)}</span>
+              ${job.salary ? `<span class="meta-chip salary">${this.escapeHtml(job.salary)}</span>` : ''}
+              <span class="meta-chip">${this.escapeHtml(this.sentenceCase(job.role || ''))}</span>
             </div>
 
             <p class="job-summary-snippet">${this.escapeHtml(this.plainText(job.summary).slice(0, 220))}</p>
@@ -265,10 +272,10 @@ JobAgent.jobDesk = {
             <div class="job-card-footer">
               <span class="job-source-tag">${this.escapeHtml(job.source)}</span>
               <div class="card-action-group">
-                <button class="action-btn secondary small btn-tailor-job" data-id="${String(job.id).replace(/"/g, '&quot;')}" title="Tailor 1-page ATS resume">
-                  ✨ Tailor
+                <button class="action-btn secondary small btn-tailor-job" data-id="${String(job.id).replace(/"/g, '&quot;')}" title="Tailor a 1-page ATS resume for this job">
+                  Tailor
                 </button>
-                <button class="action-btn primary small btn-open-drawer" data-id="${String(job.id).replace(/"/g, '&quot;')}">
+                <button class="action-btn secondary small btn-open-drawer" data-id="${String(job.id).replace(/"/g, '&quot;')}">
                   Inspect
                 </button>
               </div>
@@ -287,7 +294,7 @@ JobAgent.jobDesk = {
             <span class="score-cell-pill ${this.getScorePillClass(job.match_score)}">${job.match_score}%</span>
           </td>
           <td>
-            <strong style="color: #fff; display: block;">${this.escapeHtml(job.job_title)}</strong>
+            <strong style="color: var(--text-primary); display: block;">${this.escapeHtml(job.job_title)}</strong>
             <span style="color: var(--text-muted); font-size: 11.5px;">${this.escapeHtml(job.company)}</span>
           </td>
           <td style="color: var(--text-secondary); font-size: 12px;">${this.escapeHtml(job.timezone || '')}</td>
@@ -334,7 +341,7 @@ JobAgent.jobDesk = {
             if (JobAgent.toast) {
               JobAgent.toast.show(synced
                 ? `Tailor target set: ${job.job_title} @ ${job.company}`
-                : `Tailor target saved: ${job.job_title} @ ${job.company} — select it in Studio dropdown.`);
+                : `Tailor target saved: ${job.job_title} @ ${job.company}. Select it in the Studio dropdown.`);
             }
           } else if (JobAgent.navigation) {
             JobAgent.navigation.switchTab('resume');
