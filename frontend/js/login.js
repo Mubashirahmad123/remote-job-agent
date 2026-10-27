@@ -96,7 +96,7 @@
       }
       window.location.replace('/');
     } catch (_) {
-      errorEl.textContent = 'Cannot reach the server — is it running?';
+      errorEl.textContent = 'Cannot reach the server. Is it running?';
       enable();
     }
   });

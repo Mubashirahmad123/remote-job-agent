@@ -57,14 +57,14 @@ JobAgent.api = (() => {
         },
       });
     } catch (e) {
-      const err = new Error('API unreachable at ' + baseUrl() + ' — is uvicorn running?');
+      const err = new Error('API unreachable at ' + baseUrl() + '. Is uvicorn running?');
       err.code = 'UNREACHABLE';
       err.cause = e;
       throw err;
     }
     if (res.status === 401) {
       sendToLoginPage();
-      const err = new Error('Not signed in — redirecting to the login page.');
+      const err = new Error('Not signed in. Redirecting to the login page.');
       err.code = 'UNAUTHORIZED';
       err.status = 401;
       throw err;
@@ -209,20 +209,20 @@ JobAgent.api = (() => {
     try {
       res = await fetch(url, { credentials: 'same-origin' });
     } catch (e) {
-      const err = new Error('Screenshot unreachable at ' + baseUrl() + ' — is uvicorn running?');
+      const err = new Error('Screenshot unreachable at ' + baseUrl() + '. Is uvicorn running?');
       err.code = 'UNREACHABLE';
       err.cause = e;
       throw err;
     }
     if (res.status === 401) {
       sendToLoginPage();
-      const err = new Error('Not signed in — redirecting to the login page.');
+      const err = new Error('Not signed in. Redirecting to the login page.');
       err.code = 'UNAUTHORIZED';
       err.status = 401;
       throw err;
     }
     if (res.status === 404) {
-      const err = new Error('No screenshot yet — package-only (no form fill ran for this job).');
+      const err = new Error('No screenshot yet. This job is package-only, so no form was filled.');
       err.code = 'NO_SCREENSHOT';
       err.status = 404;
       throw err;

@@ -1,20 +1,32 @@
 /* =============================================================================
-   LAYOUT.CSS — Minimalist App Shell, Sidebar, Header & Theme Switcher
+   LAYOUT.CSS — App shell: icon rail, header, view canvas
+
+   The shell is a ladder, not one flat colour: the sidebar is always deeper
+   than the page, the header sits on the page tone, and the panels inside it
+   are lighter than both. Above 768px the sidebar is a labelled 252px column
+   that collapses to a 56px icon rail on request; below 768px css/mobile.css
+   poses it as the off-canvas drawer.
    ============================================================================= */
 
 .app-layout {
   display: flex;
+  /* 100vw includes any scrollbar and is wider than the visible viewport,
+     which produced a horizontal scrollbar on desktop and a page that could
+     be dragged sideways on a phone. */
+  width: 100%;
   min-height: 100vh;
-  width: 100vw;
+  min-height: 100dvh; /* tracks the URL bar instead of the largest viewport */
   position: relative;
 }
 
-/* Sidebar Navigation */
+/* --- Sidebar / rail -------------------------------------------------------- */
 .app-sidebar {
   width: var(--sidebar-width);
-  height: 100vh;
-  background: #0f1014;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  height: 100dvh;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -24,95 +36,93 @@
   transition: background-color var(--transition-normal), border-color var(--transition-normal);
 }
 
-/* Light theme sidebar */
-[data-theme="light"] .app-sidebar {
-  background: #ffffff;
-  border-right-color: #e2e8f0;
-}
-
-[data-theme="light"] .nav-item {
-  color: #475569;
-}
-
-[data-theme="light"] .nav-item .nav-label {
-  color: #475569;
-}
-
-[data-theme="light"] .nav-item:hover {
-  color: #0f172a;
-  background: #f1f5f9;
-}
-
-[data-theme="light"] .nav-item.active {
-  color: #1d4ed8;
-  background: rgba(37, 99, 235, 0.08);
-  border-color: rgba(37, 99, 235, 0.2);
-}
-
-[data-theme="light"] .nav-item.active .nav-label {
-  color: #1d4ed8;
-}
-
-[data-theme="light"] .nav-item .nav-icon {
-  color: #94a3b8;
-}
-
-[data-theme="light"] .nav-item:hover .nav-icon {
-  color: #334155;
-}
-
-[data-theme="light"] .nav-item.active .nav-icon {
-  color: #2563eb;
-}
-
 .sidebar-brand {
   height: var(--header-height);
-  padding: 0 20px;
+  padding: 0 18px;
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  position: relative;
+  transition: background-color var(--transition-fast);
 }
 
+/* The panel itself is the control. No bordered "Collapse" button: the brand
+   row reads as part of the chrome and gains a quiet hover surface, while the
+   chevron says which way the panel will move. */
+@media (min-width: 769px) {
+  .sidebar-brand {
+    cursor: pointer;
+  }
+
+  .sidebar-brand:hover {
+    background: var(--bg-surface-hover);
+  }
+
+  .sidebar-brand:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: -2px;
+  }
+}
+
+.brand-collapse-hint {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.55;
+  transition: opacity var(--transition-fast), transform var(--transition-normal);
+}
+
+.sidebar-brand:hover .brand-collapse-hint,
+.sidebar-brand:focus-visible .brand-collapse-hint {
+  opacity: 1;
+}
+
+/* The one solid accent in the chrome outside the active row: the product mark.
+   It anchors the sidebar corner in both themes without a decorative gradient. */
 .brand-icon {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-md);
-  background: var(--primary-blue);
-  color: #fff;
+  background: var(--control-primary-bg);
+  border: 1px solid transparent;
+  color: var(--text-on-fill);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 12px var(--primary-blue-glow);
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
 
 .brand-title {
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  font-size: 14.5px;
-  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-size: 13px;
+  color: var(--text-primary);
   flex: 1;
+  white-space: nowrap;
 }
 
 .brand-badge {
-  font-size: 10px;
-  font-weight: 700;
-  font-family: var(--font-mono);
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  margin-left: 4px;
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  font-family: var(--font-sans);
+  background: transparent;
+  color: var(--text-muted);
+  padding: 2px 0;
+  border-radius: 0;
+  border: 0;
   white-space: nowrap;
 }
 
 .sidebar-nav {
-  padding: 16px 12px;
+  padding: 12px 10px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
 }
 
@@ -120,16 +130,17 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 9px 12px;
   border-radius: var(--radius-md);
-  /* Force explicit color — never rely on inheritance for visibility */
-  color: #94a3b8;
+  /* Explicit ink, never inherited: a nav item on a surface token must stay
+     legible when the theme flips. */
+  color: var(--text-muted);
   background: transparent;
-  border: 1px solid transparent;
-  font-size: 13.5px;
+  border: 0;
+  font-size: var(--text-md);
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
   text-align: left;
   position: relative;
   width: 100%;
@@ -138,84 +149,114 @@
 
 .nav-item .nav-label {
   color: inherit;
-  font-size: 13.5px;
+  font-size: var(--text-md);
   font-weight: 500;
 }
 
 .nav-item:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+  background: var(--bg-surface-hover);
 }
 
 .nav-item:hover .nav-icon {
-  color: #e2e8f0;
+  color: var(--text-primary);
+}
+
+/* The active row is a tinted accent surface with a 2px marker on the inner
+   edge. The tint is what makes "where am I" readable at a glance; the marker
+   gives it a hard edge so it survives a low-contrast theme. */
+.nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
 }
 
 .nav-item.active {
-  color: #ffffff;
-  background: rgba(59, 130, 246, 0.12);
-  border-color: rgba(59, 130, 246, 0.25);
+  color: var(--primary-text);
+  background: var(--primary-soft);
   font-weight: 600;
 }
 
+.nav-item.active::before {
+  opacity: 1;
+}
+
 .nav-item.active .nav-label {
-  color: #ffffff;
+  color: var(--primary-text);
   font-weight: 600;
 }
 
 .nav-item.active .nav-icon {
-  color: #3b82f6;
+  color: var(--primary-text);
 }
 
 .nav-icon {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  color: #64748b;
+  width: 17px;
+  height: 17px;
+  color: var(--text-muted);
   transition: color var(--transition-fast);
   flex-shrink: 0;
+  stroke-width: 2;
 }
 
 .nav-label {
   flex: 1;
+  white-space: nowrap;
 }
 
 .nav-counter {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 2px 7px;
-  border-radius: var(--radius-pill);
-  background: var(--bg-surface-elevated);
-  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
   border: 1px solid var(--border-subtle);
 }
 
+.nav-item.active .nav-counter {
+  color: var(--primary-text);
+  border-color: var(--border-active);
+}
+
 .nav-chip-emerald {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
   background: var(--accent-emerald-bg);
   color: var(--accent-emerald);
-  border: 1px solid var(--accent-emerald);
+  border: 0;
+  white-space: nowrap;
 }
 
 .nav-pulse-dot {
-  width: 8px;
-  height: 8px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--accent-emerald);
-  box-shadow: 0 0 6px var(--accent-emerald);
+  flex-shrink: 0;
 }
 
-/* Sidebar Footer Status */
+/* --- Sidebar footer status (tablet + phone drawer) ------------------------- */
 .sidebar-status-box {
-  margin: 12px;
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 10px;
+  padding: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   flex-shrink: 0;
 }
 
@@ -223,98 +264,99 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 12px;
-  color: #e2e8f0;
+  color: var(--text-secondary);
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .pulse-emerald {
   background: var(--accent-emerald);
-  box-shadow: 0 0 6px var(--accent-emerald);
-  animation: pulseGlow 2s infinite ease-in-out;
+  animation: statusPulse 2.4s infinite ease-in-out;
 }
 
 .pulse-amber {
-  background: var(--accent-amber, #f59e0b);
-  box-shadow: 0 0 6px var(--accent-amber, #f59e0b);
-  animation: pulseGlow 1s infinite ease-in-out;
+  background: var(--accent-amber);
+  animation: statusPulse 1.6s infinite ease-in-out;
 }
 
 .pulse-red {
-  background: var(--accent-danger, #ef4444);
-  box-shadow: 0 0 6px var(--accent-danger, #ef4444);
-  animation: pulseGlow 1s infinite ease-in-out;
+  background: var(--accent-danger);
+  animation: statusPulse 1.6s infinite ease-in-out;
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 .status-sub {
-  font-size: 11.5px;
-  color: #94a3b8;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
   margin-top: 4px;
 }
 
 .status-stat-bar {
-  height: 5px;
-  background: var(--bg-surface);
-  border-radius: var(--radius-pill);
+  height: 3px;
+  background: var(--bg-surface-elevated);
+  border-radius: 0;
   margin-top: 10px;
   overflow: hidden;
-  border: 1px solid var(--border-subtle);
+  border: 0;
 }
 
 .status-stat-fill {
   height: 100%;
-  background: var(--primary-blue);
-  border-radius: var(--radius-pill);
+  background: var(--primary);
+  border-radius: 0;
 }
 
 .status-stat-label {
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  margin-top: 6px;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  margin-top: 7px;
   display: flex;
   justify-content: space-between;
+  gap: 8px;
 }
 
-/* Main Canvas */
+/* --- Main canvas ----------------------------------------------------------- */
 .app-main {
   margin-left: var(--sidebar-width);
   flex: 1;
   min-width: 0;
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   position: relative;
 }
 
 .app-header {
-  height: var(--header-height);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: #0c0d0e;
+  height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-canvas);
   position: sticky;
   top: 0;
   z-index: 30;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
+  padding-left: 24px;
+  padding-right: 24px;
   gap: 20px;
   transition: background-color var(--transition-normal), border-color var(--transition-normal);
 }
 
-[data-theme="light"] .app-header {
-  background: #ffffff;
-  border-bottom-color: #e2e8f0;
-}
-
 /* --- Header region sizing --------------------------------------------------
-   The header is a two-region flex row (breadcrumb + session controls) with
-   `space-between`, so it can no longer overflow horizontally: the buttons are
+   The header is a two-region flex row (title + session controls) with
+   `space-between`, so it cannot overflow horizontally: the buttons are
    `white-space: nowrap` and .header-right never shrinks, while .header-left
    shrinks with an ellipsis on the title. Anything new added to .header-right
    must respect that, or the sign-out button leaves the viewport again.
@@ -335,10 +377,13 @@
 }
 
 .breadcrumb-current {
-  color: #f1f5f9;
+  color: var(--text-primary);
+  /* The page title: the one h1 on the screen. */
+  font-size: var(--text-2xl);
   font-weight: 600;
-  /* View titles vary in length ("Command Deck" vs "Auto-Apply Cockpit"), and a
-     long one used to widen .header-left and push the header controls out. */
+  letter-spacing: -0.022em;
+  line-height: 1.2;
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -347,42 +392,44 @@
 .header-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   /* Never squeezed: this is the region that holds the session controls, and
      #btnSignOut is its last item, so it was the first thing off-screen when the
-     header overflowed. The search absorbs the shrink instead. */
+     header overflowed. */
   flex: 0 0 auto;
 }
 
 /* Theme Toggle Button */
 .theme-toggle-btn {
-  width: 36px;
-  height: 36px;
+  width: var(--control-height);
+  height: var(--control-height);
   border-radius: var(--radius-md);
-  background: var(--bg-surface-elevated);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), background-color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .theme-toggle-btn:hover {
-  background: var(--bg-surface-hover);
-  color: var(--text-primary);
-  border-color: var(--border-active);
+  background: var(--bg-surface-elevated);
+  color: var(--primary-text);
+  border-color: var(--border-strong);
 }
 
 .theme-toggle-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.75;
 }
 
 .view-panel {
   display: none;
-  padding: 28px;
+  padding: 28px 28px 40px;
   animation: fadeIn 150ms ease-out forwards;
 }
 
@@ -390,35 +437,206 @@
   display: block;
 }
 
+/* =============================================================================
+   ICON RAIL — >=1024px
+
+   Labels are visually hidden (still present for the drawer and for assistive
+   tech); each icon carries a hover/focus tooltip, and the active view is the
+   only thing in the column that touches the accent: a 1px bar on the rail's
+   inner edge.
+   ============================================================================= */
+/* =============================================================================
+   COLLAPSED SIDEBAR (<html data-sidebar="collapsed">) — the icon rail
+
+   The expanded sidebar is the base styling: a labelled 252px column. This
+   block is the alternate mode, so the same layout works at 1024 as on a
+   tablet and the only thing that changes is one attribute on <html>.
+   ============================================================================= */
+@media (min-width: 769px) {
+  html[data-sidebar="collapsed"] .app-sidebar {
+    width: var(--rail-width);
+  }
+
+  html[data-sidebar="collapsed"] .app-main {
+    margin-left: var(--rail-width);
+  }
+
+  html[data-sidebar="collapsed"] .sidebar-brand {
+    padding: 0;
+    justify-content: center;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  html[data-sidebar="collapsed"] .brand-meta {
+    display: none;
+  }
+
+  html[data-sidebar="collapsed"] .sidebar-nav {
+    padding: 10px 8px;
+    gap: 2px;
+    align-items: center;
+  }
+
+  html[data-sidebar="collapsed"] .nav-item {
+    justify-content: center;
+    gap: 0;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: var(--radius-md);
+  }
+
+  /* Labels and counters stay in the DOM (the phone drawer needs them) but are
+     removed from the visual rail. */
+  html[data-sidebar="collapsed"] .nav-item .nav-label,
+  html[data-sidebar="collapsed"] .nav-item .nav-counter,
+  html[data-sidebar="collapsed"] .nav-item .nav-chip-emerald {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  html[data-sidebar="collapsed"] .nav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* The rail's active marker sits on the sidebar's inner edge, exactly as tall
+     as the icon: a 2px accent bar that reads from across a desk. */
+  html[data-sidebar="collapsed"] .nav-item.active::before {
+    left: auto;
+    right: -9px;
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 18px;
+    border-radius: var(--radius-pill) 0 0 var(--radius-pill);
+    opacity: 1;
+  }
+
+  /* The status dot still reports "running" on the rail, at the icon's corner. */
+  html[data-sidebar="collapsed"] .nav-pulse-dot {
+    position: absolute;
+    top: 7px;
+    right: 8px;
+    width: 5px;
+    height: 5px;
+  }
+
+  /* Tooltip: the rail is icon-only, so every control names itself on hover
+     and on keyboard focus. */
+  html[data-sidebar="collapsed"] .nav-item::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: calc(100% + 12px);
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
+    font-size: var(--text-2xs);
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 120ms ease, visibility 120ms ease;
+    z-index: 80;
+  }
+
+  html[data-sidebar="collapsed"] .nav-item:hover::after,
+  html[data-sidebar="collapsed"] .nav-item:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* The live-run card collapses to a status tile at the rail's foot: the dot
+     still reports the state, the 2px bar still reports progress, and the
+     element's title carries the run summary on hover. */
+  html[data-sidebar="collapsed"] .sidebar-status-box {
+    width: 38px;
+    height: 38px;
+    margin: 6px auto 12px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  html[data-sidebar="collapsed"] .status-indicator-row {
+    gap: 0;
+    justify-content: center;
+  }
+
+  html[data-sidebar="collapsed"] .status-title,
+  html[data-sidebar="collapsed"] .status-sub,
+  html[data-sidebar="collapsed"] .status-stat-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  html[data-sidebar="collapsed"] .status-stat-bar {
+    width: 22px;
+    height: 2px;
+    margin: 0;
+  }
+
+  /* The panel's own hint flips to point out of the rail, tucked under the
+     mark so the collapse is reversible by the same click that made it. */
+  html[data-sidebar="collapsed"] .brand-collapse-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 5px;
+    width: 10px;
+    height: 10px;
+    margin: 0;
+    transform: translateX(-50%) rotate(180deg);
+    opacity: 0.7;
+  }
+}
+
 /* --- Header responsiveness -------------------------------------------------
    These breakpoints sit higher than they look like they need to, because the
-   256px fixed sidebar is subtracted from the viewport before the header gets
-   any space: at a 1440px window the header only has ~1184px to work with.
-
-   Each tier drops the least important thing first, and #btnSignOut is dropped
-   last — never. The structural guarantee is the region contract above:
-   .header-right cannot shrink and .header-left shrinks with an ellipsis. So
-   the only remaining way to overflow is for .header-right's own content to
-   exceed the row, and these tiers cap it at ~204px by the bottom.
+   fixed sidebar is subtracted from the viewport before the header gets any
+   space. Each tier drops the least important thing first, and #btnSignOut is
+   dropped last — never.
    -------------------------------------------------------------------------- */
 
 /* Sync Sheets / Scrape Now go icon-only. Both keep title= and aria-label=, so
-   the action is still named for hover and for screen readers; only ~160px of
-   visible label disappears. */
-@media (max-width: 1480px) {
+   the action is still named for hover and for screen readers. */
+@media (max-width: 1240px) {
   #btnSyncSheets span,
   #btnScrapeNow span {
     display: none;
   }
   #btnSyncSheets,
   #btnScrapeNow {
-    width: 36px;
+    width: var(--control-height);
     padding: 0;
   }
 }
 
 /* The session chip keeps the avatar initials and drops the username. */
-@media (max-width: 1320px) {
+@media (max-width: 1180px) {
   .session-chip .session-name {
     display: none;
   }
@@ -427,31 +645,62 @@
   }
 }
 
-/* Sign out goes icon-only — which is exactly why the markup now carries an icon. */
+/* Sign out goes icon-only — which is exactly why the markup carries an icon. */
 @media (max-width: 900px) {
   #btnSignOut span {
     display: none;
   }
   #btnSignOut {
-    width: 30px;
+    width: var(--control-height);
     padding: 0;
+  }
+  .app-header {
+    padding-left: 18px;
+    padding-right: 18px;
   }
 }
 
 @media (max-width: 768px) {
-  .app-sidebar {
-    display: none;
-  }
+  /* The sidebar is not hidden at this tier: css/mobile.css re-poses it as an
+     off-canvas drawer (translateX(-100%) until .is-open), so the phone still
+     has navigation. Only the canvas offset changes here. */
   .app-main {
     margin-left: 0;
   }
-  /* Tighten the header chrome now that the sidebar is gone: 28px a side is a
+  /* Tighten the header chrome now that the sidebar is gone: 24px a side is a
      sixth of a 375px phone screen. */
   .app-header {
-    padding: 0 14px;
+    height: calc(52px + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 14px 0;
     gap: 10px;
   }
   .header-right {
+    gap: 6px;
+  }
+  .view-panel {
+    padding: 16px;
+  }
+}
+
+/* Narrow phones (iPhone SE and below): the header keeps its four controls and
+   the title truncates rather than the row overflowing. */
+@media (max-width: 640px) {
+  .breadcrumb-current {
+    font-size: 16px;
+  }
+  .theme-toggle-btn {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+@media (max-width: 380px) {
+  .header-right {
+    gap: 5px;
+  }
+  .app-header {
+    padding-left: 10px;
+    padding-right: 10px;
     gap: 8px;
   }
 }

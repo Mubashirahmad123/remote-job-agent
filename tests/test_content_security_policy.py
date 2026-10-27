@@ -213,7 +213,7 @@ def test_login_html_really_loads_the_extracted_script():
     """The extraction is only real if the page still references the file."""
     with open(os.path.join(FRONTEND, "login.html"), encoding="utf-8") as fh:
         markup = fh.read()
-    assert re.search(r'<script[^>]+src="js/login\.js"', markup), (
+    assert re.search(r'<script[^>]+src="js/login\.js(?:\?v=\d+)?"', markup), (
         "login.html no longer loads js/login.js, so the sign-in form has no "
         "behaviour at all"
     )

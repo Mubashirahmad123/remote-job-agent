@@ -104,8 +104,13 @@ def run_review(fingerprint, claimed_at, work):
     watch = Thread(target=heartbeat_loop, name='review-heartbeat', daemon=True)
     watch.start()
     try:
+        # Q7 (PM quick win, 2026-10-18): thread.start() raises Exception
+        # subclasses (RuntimeError/OSError). Catching BaseException here
+        # swallowed interpreter exits (KeyboardInterrupt/SystemExit), so a
+        # Ctrl+C during startup surfaced later as a KeyError -> 500 instead
+        # of a clean shutdown.
         Thread(target=worker, name='review-fill', daemon=True).start()
-    except BaseException:
+    except Exception:
         stop.set()
         raise
     if completed.wait(fill_wait_seconds()):

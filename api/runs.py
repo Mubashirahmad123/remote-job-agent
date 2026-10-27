@@ -10,6 +10,7 @@ Run dict: {run_id, status, phase, scraped, curated, error,
             started_at, finished_at}. status: queued|running|done|error.
 """
 
+import logging
 import threading
 import time
 import uuid
@@ -256,12 +257,24 @@ def _worker(run_id: str) -> None:
         except Exception:
             pass
     except Exception as e:
+        # Q6 (PM quick win, 2026-10-18): the raw exception text used to go
+        # into the run record verbatim — a free description of internals
+        # (paths, call graph) for any dashboard user, and no greppable
+        # anchor for the operator. Same incident-id pattern as
+        # api/errors.py: the full traceback goes to the server log, the
+        # record carries the action + id.
+        incident = uuid.uuid4().hex[:8]
+        logging.getLogger("api.runs").error(
+            "Scrape run %s failed (incident %s)", run_id, incident, exc_info=True)
         with _lock:
             run = _runs.get(run_id)
             if run is not None:
                 run["status"] = "error"
                 run["phase"] = "error"
-                run["error"] = f"{type(e).__name__}: {e}"[:500]
+                run["error"] = (
+                    f"Scrape failed. The server logged the details under "
+                    f"incident {incident} ({type(e).__name__})."
+                )
                 run.pop("_event_board_state", None)
                 _add_event(run, run["error"], level="error", event_type="error")
                 run["finished_at"] = _now_iso()

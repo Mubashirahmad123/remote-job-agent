@@ -153,7 +153,11 @@ JobAgent.store = {
     if (days <= 0) return 'Today';
     if (days === 1) return 'Yesterday';
     if (days < 7) return days + ' days ago';
-    return d.toISOString().slice(0, 10);
+    // Older posts get a real date, not a raw ISO stamp: "2026-10-02" is a
+    // database field leaking into a job card. Built from parts so the month is
+    // always the three-letter form ("2 Oct 2026", never ICU's "Sept").
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
   },
 
   _splitStack(raw) {

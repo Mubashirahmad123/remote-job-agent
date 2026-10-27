@@ -1,0 +1,695 @@
+/* =============================================================================
+   MOBILE.CSS — Phone & touch layer (loaded last, so it may override)
+
+   Everything here answers a phone-only failure the desktop files cannot see:
+   the sidebar is a 256px rail that has to become an off-canvas drawer below
+   768px, a 5-column kanban and a 9-column table do not fit 375px, a drawer
+   pinned at 520px is wider than the screen, and inputs under 16px make iOS
+   zoom.
+
+   Rules are gated by capability (`hover`, `pointer`) or width, never by user
+   agent. Nothing here changes the desktop layout above 768px except the
+   touch-target floor, which only applies to coarse pointers.
+   ============================================================================= */
+
+/* =============================================================================
+   1. NAVIGATION DRAWER — what the sidebar becomes below 768px
+   Above this tier the rail is always on screen and none of this applies.
+   ============================================================================= */
+
+.mobile-nav-btn,
+.sidebar-scrim {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* The drawer's brand row is the product mark, not a collapse control. */
+  .brand-collapse-hint {
+    display: none;
+  }
+
+  /* --- The trigger ------------------------------------------------------- */
+  .mobile-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    margin-right: 2px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--control-border);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color var(--transition-fast), color var(--transition-fast),
+      transform 120ms cubic-bezier(0.16, 1, 0.3, 1);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .mobile-nav-btn:active {
+    transform: scale(0.94);
+    color: var(--text-primary);
+  }
+
+  .mobile-nav-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* --- The drawer -------------------------------------------------------- */
+  .app-sidebar {
+    /* Not `display: none` any more: below 768px this IS the navigation, so it
+       slides in from the left instead. The width is capped in vw so even a
+       320px screen keeps a strip of the page visible behind it — the drawer
+       has to read as a layer over the page, not as a page change. */
+    display: flex;
+    width: min(280px, 84vw);
+    background: var(--bg-sidebar);
+    z-index: 60; /* over .drawer-overlay (50), under .modal-overlay (100) */
+    transform: translateX(-100%);
+    /* Visibility, not only transform: an off-canvas rail is still in the tab
+       order, so it would trap keyboard focus on links nobody can see. The 0s
+       transition with a delay is what keeps it visible for the whole slide. */
+    visibility: hidden;
+    transition: transform var(--transition-drawer),
+      visibility 0s linear 320ms,
+      background-color var(--transition-normal),
+      border-color var(--transition-normal);
+    /* The drawer is dragged on X; vertical drags stay with the browser so the
+       nav list can still be scrolled. */
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+  }
+
+  .app-sidebar.is-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* A finger on the surface owns the transform while it is down: the
+     class-driven transition must not fight gestures.js. */
+  .app-sidebar.is-dragging {
+    transition: none;
+  }
+
+  /* --- The scrim -------------------------------------------------------- */
+  .sidebar-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: var(--scrim);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    /* The scrim is not scrollable, and on iOS `overflow: hidden` on <body>
+       does not stop the page behind it from moving with the finger — this
+       does. */
+    touch-action: none;
+    transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1),
+      visibility 0s linear 220ms;
+  }
+
+  .sidebar-scrim.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
+
+  /* The drawer is a layer over the page: nothing behind it may scroll. */
+  body.nav-open {
+    overflow: hidden;
+  }
+
+  /* --- Inside the drawer ------------------------------------------------ */
+  .sidebar-nav {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* A drawer taller than the viewport (landscape phones) must not put the
+     status card under the home indicator. */
+  .sidebar-status-box {
+    margin-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* The detail sheet is dragged by its header. The browser latches touch-action
+   when a gesture starts, so the region the finger lands on is the one that has
+   to give up vertical panning — otherwise the sheet can never be grabbed and
+   the gesture in jobDrawer.js is dead code. */
+@media (max-width: 600px) {
+  .drawer-header {
+    touch-action: none;
+  }
+}
+
+/* =============================================================================
+   2. TYPE FLOOR — 11px labels are unreadable at arm's length
+   ============================================================================= */
+
+@media (max-width: 600px) {
+  body {
+    font-size: 15px;
+  }
+
+  .card-footnote,
+  .widget-sub,
+  .metric-subtitle,
+  .source-meta-status,
+  .control-desc,
+  .status-sub,
+  .job-source-tag,
+  .k-meta,
+  .manual-field-hint,
+  .variant-meta,
+  .doc-meta-info,
+  .pkg-meta,
+  .review-results-note,
+  .review-results-empty,
+  .review-result-status,
+  .review-result-path,
+  .scrape-empty,
+  .scrape-history-item small,
+  .manual-application-status,
+  .tracker-title-meta p,
+  .scrape-monitor-header p {
+    font-size: var(--text-sm);
+  }
+
+  .meta-chip,
+  .tech-tag,
+  .skill-tag,
+  .k-company {
+    font-size: 12px;
+  }
+
+  .job-summary-snippet {
+    font-size: var(--text-md);
+  }
+
+  /* The match ring's "%" is 10.5px on a desktop; give it a little more room
+     on a phone, where the ring is the same size but the eye is further away. */
+  .match-score-badge .score-val {
+    font-size: 15px;
+  }
+
+  .match-score-badge .score-unit {
+    font-size: 11px;
+  }
+}
+
+/* =============================================================================
+   3. INPUTS — 16px floor (iOS zoom) and taller, pressable controls
+   ============================================================================= */
+
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea,
+  .filter-search-box input,
+  .filter-select,
+  .profile-field input.filter-select,
+  #profSkills textarea,
+  .manual-application-field input,
+  .manual-application-field textarea,
+  .login-field input,
+  .tailor-selector-box .filter-select {
+    /* Below 16px, focusing a field zooms the page in iOS Safari and it does
+       not zoom back out on blur. */
+    font-size: 16px;
+  }
+
+  .filter-search-box input {
+    height: 44px;
+  }
+
+  .filter-select {
+    height: 42px;
+  }
+
+  .manual-application-field input {
+    min-height: 46px;
+  }
+
+  .action-btn {
+    min-height: 40px;
+  }
+
+  .action-btn.small {
+    min-height: 36px;
+  }
+
+  .role-pill {
+    padding: 9px 16px;
+  }
+
+  .view-toggle-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .drawer-close-btn,
+  .modal-close-btn {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* =============================================================================
+   4. NO STICKY HOVER ON TOUCH
+   Touch has no hover: the browser applies :hover on the first tap and leaves it
+   there. Anything that LIFTS or HIGHLIGHTS on hover therefore stays lifted
+   after being tapped. Reset those, and give ::active the feedback instead
+   (base.css handles the scale for buttons).
+   ============================================================================= */
+
+@media (hover: none) {
+  .bento-card:hover,
+  .job-card:hover,
+  .kanban-card:hover,
+  .source-item-card:hover,
+  .cv-variant-card:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: var(--border-subtle);
+  }
+
+  /* The card keeps its ambient shadow on touch; only the hover lift is
+     removed, otherwise a phone would render a flatter card than a desktop. */
+  .kanban-card,
+  .kanban-card:hover {
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* The same rule for job cards: the tap must not flatten a card that has its
+     own ambient elevation. */
+  .job-card,
+  .job-card:hover {
+    box-shadow: var(--shadow-sm);
+  }
+
+  .kanban-card-archived:hover {
+    border-color: var(--accent-rose);
+  }
+
+  .action-btn.primary:hover {
+    background: var(--control-primary-bg);
+    border-color: var(--control-primary-bg);
+    transform: none;
+  }
+
+  .action-btn.secondary:hover,
+  .theme-toggle-btn:hover,
+  .drawer-close-btn:hover {
+    background: var(--bg-surface-elevated);
+    border-color: var(--border-subtle);
+    color: var(--text-primary);
+  }
+
+  .role-pill:hover,
+  .preview-tab:hover {
+    color: var(--text-secondary);
+    border-color: var(--border-subtle);
+  }
+
+  .dropzone-box:hover {
+    background: var(--bg-surface-elevated);
+    border-color: var(--border-subtle);
+  }
+
+  .scrape-history-item:hover {
+    background: transparent;
+    border-color: var(--border-subtle);
+  }
+
+  /* Press feedback, on touch-down. */
+  .job-card:active,
+  .kanban-card:active,
+  .source-item-card:active,
+  .cv-variant-card:active,
+  .bento-card:active {
+    border-color: var(--border-active);
+  }
+}
+
+/* =============================================================================
+   5. INNER SCROLL CONTAINERS
+   `contain` keeps a container's own rubber-band but stops the page behind it
+   from moving when the container hits its end.
+   ============================================================================= */
+
+.drawer-body,
+.doc-mock-preview,
+.terminal-window,
+.scrape-terminal,
+.scrape-board-list,
+.scrape-history-list,
+.kanban-board,
+.role-pill-group {
+  overscroll-behavior: contain;
+}
+
+/* =============================================================================
+   6. PHONE LAYOUT
+   ============================================================================= */
+
+@media (max-width: 768px) {
+  /* --- Shell ------------------------------------------------------------- */
+  .view-panel {
+    padding: 14px;
+  }
+
+  .bento-card,
+  .dash-widget,
+  .scrape-monitor-panel,
+  .bento-grid,
+  .dashboard-split-row {
+    min-width: 0;
+  }
+
+  .bento-card,
+  .dash-widget,
+  .scrape-monitor-panel {
+    padding: 16px;
+  }
+
+  .metric-number {
+    font-size: 28px;
+  }
+
+  /* --- Jobs: filters stack, pills swipe ---------------------------------- */
+  .filter-toolbar {
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+
+  .filter-row-primary {
+    gap: 10px;
+    padding-bottom: 12px;
+  }
+
+  .filter-search-box {
+    flex: 1 1 100%;
+  }
+
+  .role-pill-group {
+    flex: 1 1 0;
+    min-width: 0;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    max-width: 100%;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .role-pill-group::-webkit-scrollbar {
+    display: none;
+  }
+
+  .role-pill {
+    flex: 0 0 auto;
+  }
+
+  .view-switch-group {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .filter-row-secondary {
+    gap: 12px;
+  }
+
+  .filter-control-item {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .filter-control-item input[type="range"] {
+    width: 100%;
+    height: 28px;
+  }
+
+  .filter-control-item .filter-select {
+    flex: 1 1 60%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .filter-counter-label {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .jobs-grid-container {
+    gap: 10px;
+  }
+
+  .job-card {
+    padding: 16px 14px;
+  }
+
+  /* A single-line, ellipsised title is wrong on a narrow card: two lines. */
+  .job-role-title {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* --- Jobs: the table scrolls instead of exploding ---------------------- */
+  .jobs-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .jobs-table {
+    min-width: 720px;
+  }
+
+  /* --- Kanban: swipe between stages ------------------------------------- */
+  .kanban-board {
+    grid-template-columns: none; /* cancel repeat(5, 1fr) / 1fr from tracker.css */
+    grid-auto-flow: column;
+    grid-auto-columns: min(84vw, 360px);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 8px;
+  }
+
+  .kanban-col {
+    min-height: 260px;
+    scroll-snap-align: start;
+    border-left: 1px solid var(--rule);
+  }
+
+  .kanban-col:first-child {
+    border-left: 0;
+  }
+
+  /* The swipe board is one horizontal strip: the stacked-lane rules from
+     tracker.css must not draw a line across the top of every column. */
+  .kanban-col + .kanban-col {
+    border-top: 0;
+  }
+
+  /* --- Drawer: full screen, safe-area aware ----------------------------- */
+  .job-detail-drawer {
+    width: 100%;
+    max-width: 100%;
+    border-left: none;
+    box-shadow: none;
+  }
+
+  .drawer-header {
+    height: auto;
+    min-height: 56px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px;
+    gap: 8px;
+  }
+
+  .drawer-header-actions {
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .drawer-header-actions .action-btn.small {
+    height: 34px;
+    padding: 0 10px;
+  }
+
+  .drawer-body {
+    padding: 16px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    gap: 18px;
+  }
+
+  .drawer-job-header h2 {
+    font-size: 18px;
+  }
+
+  .drawer-score-banner {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .screenshot-viewer {
+    min-height: 200px;
+  }
+
+  /* --- Modals: bottom sheets ------------------------------------------- */
+  .modal-overlay {
+    align-items: flex-end;
+  }
+
+  .modal-box {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92dvh;
+    border-radius: 18px 18px 0 0;
+    border-bottom: none;
+  }
+
+  .modal-body {
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .manual-application-overlay {
+    padding: 0;
+  }
+
+  .manual-application-modal {
+    max-height: 92dvh;
+  }
+
+  .manual-application-body {
+    padding: 16px;
+  }
+
+  .manual-application-footer {
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* --- Auto-apply: the two-column split must stack ---------------------- */
+  .autoapply-split-row {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .cockpit-action-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .cockpit-action-row .action-btn {
+    width: 100%;
+  }
+
+  .control-desc {
+    min-height: 0;
+  }
+
+  .terminal-window {
+    height: 220px;
+    font-size: 11.5px;
+    overflow-wrap: anywhere;
+  }
+
+  /* --- CV studio -------------------------------------------------------- */
+  .doc-mock-preview {
+    max-height: 60dvh;
+    padding: 14px;
+  }
+
+  /* --- Toasts sit above the home indicator ----------------------------- */
+  .app-toast {
+    left: 12px;
+    right: 12px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    max-width: none;
+    padding: 12px 16px;
+  }
+
+  .app-toast span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Compact filter form: below 600px a control stacks its label over its field,
+   so the field has to own its height. A leftover `flex: 1 1 60%` from the
+   row layout was shrinking the select to 23px inside the column box. */
+@media (max-width: 600px) {
+  .filter-control-item .filter-select {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 36px;
+    min-height: 36px;
+  }
+
+  .filter-control-item input[type="range"] {
+    height: 32px;
+    margin: 0;
+  }
+}
+
+/* Very narrow phones: tighten the chrome rather than let a row wrap. */
+@media (max-width: 380px) {
+  .view-panel {
+    padding: 12px;
+  }
+
+  .bento-card,
+  .dash-widget,
+  .scrape-monitor-panel {
+    padding: 14px;
+  }
+
+  .mobile-nav-btn {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Landscape phones: the header and the drawer's own brand row together must
+   not eat the whole viewport, so both shrink. */
+@media (max-height: 480px) and (max-width: 900px) {
+  .sidebar-brand {
+    height: 52px;
+  }
+}
+
+/* Respect the OS reduced-motion setting for the press feedback added here and
+   for the drawer slide itself. */
+@media (prefers-reduced-motion: reduce) {
+  .action-btn:active,
+  .mobile-nav-btn:active,
+  .role-pill:active,
+  .view-toggle-btn:active {
+    transform: none;
+  }
+
+  .app-sidebar,
+  .sidebar-scrim {
+    transition-duration: 1ms;
+  }
+}
+
+/* The sidebar toggle is a desktop/tablet mode switch. On a phone the sidebar
+   is the drawer, which is always labelled, so there is no mode to switch. */
+@media (max-width: 768px) {
+  .sidebar-toggle {
+    display: none;
+  }
+}

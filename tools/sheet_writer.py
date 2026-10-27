@@ -1,5 +1,7 @@
 import os
 import sys
+import time
+import random
 from pathlib import Path
 
 # Ensure project root is on sys.path so that 'tools' package is importable
@@ -45,6 +47,33 @@ GOOD_MATCHES_SHEET = "GOOD MATCHES"
 APPLIED_SHEET = "APPLIED"
 STATS_SHEET = "STATS"
 LEGACY_SHEET = "LIVE Remote Jobs Tracker"
+# PM-2 (AUDIT 2026-10-18): optional review queue for near-miss jobs. The
+# score and match reason are already computed; this just writes them
+# somewhere a human can triage. Opt-in via MAYBE_MATCHES=true — a new tab
+# changes the sheet structure, so it must not appear uninvited.
+MAYBE_MATCHES_SHEET = "MAYBE MATCHES"
+
+# PM-1 (AUDIT 2026-10-18): the TOP bar was hard-coded at 85 while the
+# scorer's realistic ceiling sat under it — TOP MATCHES got 0 rows and
+# looked broken. Both bars are env-configurable and default to the
+# documented tiers; GOOD follows MIN_MATCH_SCORE so the curator gate and
+# the sheet routing can never silently disagree. Empty values fall back to
+# defaults — dotenv exports `VAR=` as an empty string, and .env.example
+# documents GOOD_MATCH_THRESHOLD= as the "follow MIN_MATCH_SCORE" marker.
+def _env_int(name, default):
+    raw = (os.getenv(name) or "").strip()
+    try:
+        return int(raw) if raw else default
+    except ValueError:
+        return default
+
+
+TOP_MATCH_THRESHOLD = _env_int("TOP_MATCH_THRESHOLD", 85)
+GOOD_MATCH_THRESHOLD = _env_int("GOOD_MATCH_THRESHOLD",
+                                _env_int("MIN_MATCH_SCORE", 70))
+MAYBE_MATCH_THRESHOLD = _env_int("MAYBE_MATCH_THRESHOLD", 45)
+MAYBE_MATCHES_ENABLED = ((os.getenv("MAYBE_MATCHES") or "").strip().lower()
+                         in ("1", "true", "yes", "on"))
 
 APPLIED_COLUMNS = COLUMNS + ["applied_at", "notes"]
 STATS_COLUMNS = ["run_at", "total_processed", "new_jobs_added", "duplicates_skipped", "top_matches", "good_matches"]
@@ -158,19 +187,66 @@ def test_environment():
     print("✅ Environment variables are properly set!")
     return True
 
+_SHEET_CLIENT_CACHE: dict = {}
+
+
 def get_sheet():
-    """Get the Google Sheet connection"""
+    """Get the Google Sheet connection (cached per spreadsheet key).
+
+    §6 (AUDIT 2026-10-18): every call re-created the authorized client —
+    repeated token refreshes, added latency, and a "Connected to
+    spreadsheet" line per call. gspread's authorized session refreshes its
+    own access tokens, so one client per key for the process lifetime is
+    safe. A connect failure is never cached, so the next call retries.
+    """
+    key = (os.getenv("GOOGLE_SHEETS_ID") or "").strip()
+    cached = _SHEET_CLIENT_CACHE.get(key)
+    if cached is not None:
+        return cached
     try:
         creds = Credentials.from_service_account_file(
             os.getenv("GOOGLE_SERVICE_ACCOUNT"), scopes=SCOPE
         )
         client = gspread.authorize(creds)
-        sheet = client.open_by_key(os.getenv("GOOGLE_SHEETS_ID"))
+        sheet = client.open_by_key(key)
         print(f"✅ Connected to spreadsheet: {sheet.title}")
+        _SHEET_CLIENT_CACHE[key] = sheet
         return sheet
     except Exception as e:
         print(f"❌ Failed to connect to Google Sheet: {e}")
         raise
+
+# Bug 5 (AUDIT 2026-10-18): one run issues far more than 60 write requests
+# (batched appends, tier copies, stats, cleanup rewrites, formatting) —
+# exactly the 60 write-requests/min/user quota whose 429 this run hit, and
+# there was no backoff anywhere.
+SHEETS_MAX_RETRIES = 3
+
+
+def _sheets_backoff(fn, *args, **kwargs):
+    """Call a gspread method with exponential backoff on 429/5xx (Bug 5).
+
+    Retries three times with 1/2/4s + jitter; anything non-throttled is
+    re-raised immediately, and a final throttled failure re-raises too.
+    """
+    for attempt in range(SHEETS_MAX_RETRIES):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            status = getattr(e, "status", None) or getattr(e, "code", None)
+            throttled = (
+                status == 429
+                or (isinstance(status, int) and 500 <= status < 600)
+                or "429" in str(e)
+                or "Quota exceeded" in str(e)
+            )
+            if not throttled or attempt == SHEETS_MAX_RETRIES - 1:
+                raise
+            delay = (2 ** attempt) + random.uniform(0, 0.5)
+            print(f"   ⚠️ Sheets API throttled ({e}); "
+                  f"retry {attempt + 1}/{SHEETS_MAX_RETRIES - 1} in {delay:.1f}s")
+            time.sleep(delay)
+
 
 def get_or_create_worksheet(spreadsheet, title, rows=1000, cols=20):
     """Get existing worksheet or create new one"""
@@ -212,6 +288,13 @@ def ensure_dashboard_tabs(spreadsheet):
         ensure_header(worksheets[title], COLUMNS)
     ensure_header(worksheets[APPLIED_SHEET], APPLIED_COLUMNS)
     ensure_header(worksheets[STATS_SHEET], STATS_COLUMNS)
+
+    # PM-2: the review queue tab exists only when opted in, so existing
+    # deployments see no structural change.
+    if MAYBE_MATCHES_ENABLED:
+        worksheets[MAYBE_MATCHES_SHEET] = get_or_create_worksheet(
+            spreadsheet, MAYBE_MATCHES_SHEET)
+        ensure_header(worksheets[MAYBE_MATCHES_SHEET], COLUMNS)
 
     return worksheets
 
@@ -416,42 +499,92 @@ def append_rows(rows):
             present_fingerprints.add(fingerprint)
             print(f"✅ Job {i}: '{job_title}' - ADDED")
 
-        # Add new jobs to sheet
+        # ── Phase A: ALL JOBS append (Bug 5) ──
+        # Backoff on every write call, and a failure here no longer jumps to
+        # the outer handler: that silently skipped STATS + cleanup (partial
+        # write state). Tier appends are aborted instead — writing a job to
+        # TOP MATCHES that ALL JOBS lacks would be worse than skipping.
+        append_failed = False
+        top_jobs = []
+        good_jobs = []
+        maybe_jobs = []
         if new_values:
             print(f"\n📝 Attempting to add {len(new_values)} new jobs to sheet...")
-            
             print(f"⏰ Timestamp: {timestamp}")
-            
+
             # Append rows in batches to avoid API limits
             batch_size = 100
-            for i in range(0, len(new_values), batch_size):
-                batch = new_values[i:i + batch_size]
-                worksheet.append_rows(batch)
-                print(f"📤 Added batch {i//batch_size + 1}: {len(batch)} rows")
-                if i + batch_size < len(new_values):
-                    import time
-                    time.sleep(1)
+            try:
+                for i in range(0, len(new_values), batch_size):
+                    batch = new_values[i:i + batch_size]
+                    _sheets_backoff(worksheet.append_rows, batch)
+                    print(f"📤 Added batch {i//batch_size + 1}: {len(batch)} rows")
+                    if i + batch_size < len(new_values):
+                        time.sleep(1)
+            except Exception as e:
+                append_failed = True
+                print(f"❌ ALL JOBS append failed after backoff: {e}")
 
+        if new_values and not append_failed:
+            # PM-1: env-configurable bars (defaults 85 / MIN_MATCH_SCORE).
             top_jobs = sorted(
-                [job for job in new_jobs if score_as_int(job) >= 85],
+                [job for job in new_jobs if score_as_int(job) >= TOP_MATCH_THRESHOLD],
                 key=score_as_int,
                 reverse=True,
             )
             good_jobs = sorted(
-                [job for job in new_jobs if 70 <= score_as_int(job) < 85],
+                [job for job in new_jobs
+                 if GOOD_MATCH_THRESHOLD <= score_as_int(job) < TOP_MATCH_THRESHOLD],
                 key=score_as_int,
                 reverse=True,
             )
+            if MAYBE_MATCHES_ENABLED:
+                maybe_jobs = sorted(
+                    [job for job in new_jobs
+                     if MAYBE_MATCH_THRESHOLD <= score_as_int(job) < GOOD_MATCH_THRESHOLD],
+                    key=score_as_int,
+                    reverse=True,
+                )
 
+            # Phase B: tier appends — isolated per tab so one 429 escape
+            # cannot skip the others (Bug 5).
             if top_jobs:
-                worksheets[TOP_MATCHES_SHEET].append_rows([job_to_row(job) for job in top_jobs])
-                print(f"Added {len(top_jobs)} jobs to {TOP_MATCHES_SHEET}")
+                try:
+                    _sheets_backoff(worksheets[TOP_MATCHES_SHEET].append_rows,
+                                    [job_to_row(job) for job in top_jobs])
+                    print(f"Added {len(top_jobs)} jobs to {TOP_MATCHES_SHEET}")
+                except Exception as e:
+                    print(f"⚠️ {TOP_MATCHES_SHEET} append failed (non-fatal): {e}")
 
             if good_jobs:
-                worksheets[GOOD_MATCHES_SHEET].append_rows([job_to_row(job) for job in good_jobs])
-                print(f"Added {len(good_jobs)} jobs to {GOOD_MATCHES_SHEET}")
+                try:
+                    _sheets_backoff(worksheets[GOOD_MATCHES_SHEET].append_rows,
+                                    [job_to_row(job) for job in good_jobs])
+                    print(f"Added {len(good_jobs)} jobs to {GOOD_MATCHES_SHEET}")
+                except Exception as e:
+                    print(f"⚠️ {GOOD_MATCHES_SHEET} append failed (non-fatal): {e}")
 
-            worksheets[STATS_SHEET].append_row([
+            if maybe_jobs:
+                try:
+                    _sheets_backoff(worksheets[MAYBE_MATCHES_SHEET].append_rows,
+                                    [job_to_row(job) for job in maybe_jobs])
+                    print(f"Added {len(maybe_jobs)} jobs to {MAYBE_MATCHES_SHEET} (review queue)")
+                except Exception as e:
+                    print(f"⚠️ {MAYBE_MATCHES_SHEET} append failed (non-fatal): {e}")
+
+            print(f"✅ Successfully added {len(new_values)} new jobs to Google Sheet!")
+
+        else:
+            if append_failed:
+                print("ℹ️ Tier appends skipped (ALL JOBS append failed)")
+            else:
+                print("ℹ️ No new unique jobs to add")
+
+        # ── Phase C: STATS row (Bug 5) ──
+        # Always written — previously only when new jobs existed, and an
+        # append exception skipped it entirely, so runs left no trace.
+        try:
+            _sheets_backoff(worksheets[STATS_SHEET].append_row, [
                 timestamp,
                 len(rows),
                 len(new_values),
@@ -459,16 +592,22 @@ def append_rows(rows):
                 len(top_jobs),
                 len(good_jobs),
             ])
-            
-            print(f"✅ Successfully added {len(new_values)} new jobs to Google Sheet!")
-            
-        else:
-            print("ℹ️ No new unique jobs to add")
+        except Exception as e:
+            print(f"⚠️ STATS append failed (non-fatal): {e}")
 
+        # ── Phase D: cleanup (Bug 5) — isolated per worksheet ──
         # Always clean old jobs, even when no new jobs were added
         for ws_name in (ALL_JOBS_SHEET, TOP_MATCHES_SHEET, GOOD_MATCHES_SHEET):
-            ws = worksheets[ws_name]
-            remove_old_jobs_from_sheet(ws, days=30)
+            try:
+                remove_old_jobs_from_sheet(worksheets[ws_name], days=30)
+            except Exception as e:
+                print(f"⚠️ Cleanup of {ws_name} failed (non-fatal): {e}")
+
+        if MAYBE_MATCHES_ENABLED and MAYBE_MATCHES_SHEET in worksheets:
+            try:
+                remove_old_jobs_from_sheet(worksheets[MAYBE_MATCHES_SHEET], days=30)
+            except Exception as e:
+                print(f"⚠️ Cleanup of {MAYBE_MATCHES_SHEET} failed (non-fatal): {e}")
 
         # Also clean legacy sheet if it still exists
         try:
@@ -476,12 +615,18 @@ def append_rows(rows):
             remove_old_jobs_from_sheet(legacy_ws, days=30)
         except gspread.exceptions.WorksheetNotFound:
             pass
-
-        # Apply formatting
-        try:
-            format_dashboard_worksheets(worksheets, sheet)
         except Exception as e:
-            print(f"⚠️ Formatting failed (non-fatal): {e}")
+            print(f"⚠️ Legacy sheet cleanup failed (non-fatal): {e}")
+
+        # ── Phase E: formatting (Bug 5) ──
+        # Formatting is dozens of write calls for cosmetics. Skipped when
+        # nothing structural changed (no new rows written) — that is where
+        # the observed 429 came from, and a skipped re-format is invisible.
+        if new_values and not append_failed:
+            try:
+                format_dashboard_worksheets(worksheets, sheet)
+            except Exception as e:
+                print(f"⚠️ Formatting failed (non-fatal): {e}")
 
         # Summary
         print(f"\n📊 SUMMARY:")

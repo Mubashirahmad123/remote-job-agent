@@ -45,6 +45,10 @@ describe('asset integrity', () => {
       // here without adding it to the inventory this test scans.
       'js/auth.js',
       'js/components/toast.js', 'js/components/navigation.js',
+      // gestures.js assigns JobAgent.gestures, which navigation.js (drawer
+      // swipe) and jobDrawer.js (sheet swipe) both call. It was missing here
+      // and from index.html, so both swipe paths silently no-oped.
+      'js/components/gestures.js',
       'js/components/scrapeMonitor.js', 'js/components/dashboard.js',
       'js/components/jobDesk.js', 'js/components/jobDrawer.js',
       'js/components/resumeStudio.js', 'js/components/autoApply.js',
@@ -184,6 +188,103 @@ describe('happy path — live API', () => {
     for (const bad of ['undefined', 'NaN', '[object Object]']) {
       assert.ok(!body.includes(bad), `rendered text contains "${bad}"`);
     }
+  });
+
+  // --- Phone navigation ----------------------------------------------------
+  // The sidebar is an off-canvas drawer below 768px, so every one of these
+  // paths is the only way a phone can change view. They are DOM-level and
+  // width-independent (jsdom does no layout), which is exactly why the class
+  // contract is worth pinning: a renamed class silently leaves the drawer
+  // unopenable on a phone while looking untouched on a desktop.
+
+  test('the phone drawer opens, closes on a pick, and unlocks the page', () => {
+    const doc = ctx.window.document;
+    const btn = doc.getElementById('btnMobileNav');
+    const sidebar = doc.getElementById('appSidebar');
+    const scrim = doc.getElementById('sidebarScrim');
+    assert.ok(btn && sidebar && scrim, 'drawer trigger, sidebar and scrim must all exist');
+    assert.equal(btn.getAttribute('aria-controls'), 'appSidebar');
+    assert.equal(sidebar.classList.contains('is-open'), false, 'the drawer starts closed');
+
+    btn.click();
+    assert.ok(sidebar.classList.contains('is-open'), 'the trigger did not open the drawer');
+    assert.ok(scrim.classList.contains('is-open'), 'the scrim did not follow the drawer');
+    assert.ok(doc.body.classList.contains('nav-open'), 'the page behind the drawer must not scroll');
+    assert.equal(btn.getAttribute('aria-expanded'), 'true');
+    assert.equal(btn.getAttribute('aria-label'), 'Close navigation menu');
+
+    doc.querySelector('.nav-item[data-tab="jobs"]').click();
+    assert.equal(sidebar.classList.contains('is-open'), false, 'picking a view must close the drawer');
+    assert.equal(doc.body.classList.contains('nav-open'), false, 'the scroll lock must be released');
+    assert.ok(doc.getElementById('view-jobs').classList.contains('active'), 'the view did not switch');
+    assert.equal(text(ctx.window, 'currentViewTitle'), 'Curated Jobs Matrix');
+
+    btn.click();
+    scrim.click();
+    assert.equal(sidebar.classList.contains('is-open'), false, 'tapping the scrim must close the drawer');
+
+    btn.click();
+    ctx.window.dispatchEvent(new ctx.window.KeyboardEvent('keydown', { key: 'Escape' }));
+    assert.equal(sidebar.classList.contains('is-open'), false, 'Escape must close the drawer');
+    assert.equal(btn.getAttribute('aria-expanded'), 'false');
+  });
+
+  test('the theme toggle flips exactly once per click', () => {
+    // js/theme.js owns the toggle; navigation.js used to wire a second listener
+    // that read the same attribute and flipped it straight back, so the button
+    // looked dead. Two clicks must therefore return to where it started.
+    const doc = ctx.window.document;
+    const btn = doc.getElementById('btnThemeToggle');
+    const start = doc.documentElement.getAttribute('data-theme');
+    assert.ok(start === 'dark' || start === 'light', `data-theme not set: ${start}`);
+    btn.click();
+    const once = doc.documentElement.getAttribute('data-theme');
+    assert.notEqual(once, start, 'one click did not change the theme');
+    btn.click();
+    assert.equal(doc.documentElement.getAttribute('data-theme'), start, 'the second click did not return');
+    assert.equal(
+      doc.body.classList.contains('theme-dark'),
+      doc.documentElement.getAttribute('data-theme') === 'dark',
+      'the body class and data-theme disagree',
+    );
+  });
+
+  test('the desktop sidebar folds and opens from the panel itself', () => {
+    const doc = ctx.window.document;
+    const root = doc.documentElement;
+    const brand = doc.getElementById('sidebarBrand');
+    assert.ok(brand, 'the sidebar brand must be the collapse control');
+    assert.equal(brand.getAttribute('role'), 'button');
+    assert.equal(brand.getAttribute('aria-controls'), 'appSidebar');
+    assert.equal(doc.getElementById('btnSidebarToggle'), null, 'the old foot button must be gone');
+    assert.equal(doc.getElementById('btnSidebarToggleTop'), null, 'the header button must be gone');
+
+    brand.click();
+    assert.equal(root.getAttribute('data-sidebar'), 'collapsed', 'one click on the panel did not fold it');
+    assert.equal(brand.getAttribute('aria-expanded'), 'false');
+    assert.match(brand.getAttribute('aria-label'), /Expand/);
+    assert.equal(ctx.window.localStorage.getItem('rja-sidebar'), 'collapsed', 'the choice was not stored');
+
+    brand.click();
+    assert.equal(root.getAttribute('data-sidebar'), 'expanded', 'the second click did not open the panel');
+    assert.equal(brand.getAttribute('aria-expanded'), 'true');
+    assert.match(brand.getAttribute('aria-label'), /Collapse/);
+    assert.equal(ctx.window.localStorage.getItem('rja-sidebar'), 'expanded');
+  });
+
+  test('toasts carry no inline placement, so the phone can re-anchor them', () => {
+    // Placement lives in css/components.css (and css/mobile.css moves it above
+    // the home indicator). An inline style would win over both and put half the
+    // toast off-screen on a 375px phone.
+    const window = ctx.window;
+    window.JobAgent.toast.show('check');
+    const toast = window.document.querySelector('.app-toast');
+    assert.ok(toast, 'no toast rendered');
+    assert.equal(toast.getAttribute('style'), null, 'toast has inline styles that beat the stylesheet');
+    assert.ok(toast.querySelector('.toast-icon'), 'toast icon span missing');
+
+    window.JobAgent.toast.show('check', 'warn');
+    assert.ok(window.document.querySelector('.toast-icon.is-warn'), 'warn toasts need .toast-icon.is-warn');
   });
 });
 
@@ -515,5 +616,30 @@ describe('header layout contract', () => {
       assert.ok(widths[i] < widths[i - 1], `breakpoints out of order: ${widths.join(', ')}`);
     }
     assert.ok(widths.includes(768), 'the sidebar-hiding 768px breakpoint must survive');
+  });
+
+  test('the collapsed sidebar is a scoped mode, never a second layout', () => {
+    // The rail rules are keyed off <html data-sidebar="collapsed"> inside the
+    // >=769px tier, so a phone drawer can never inherit the icon rail and the
+    // expanded column stays the base styling.
+    const css = stripComments(read('css/layout.css'));
+    const vars = stripComments(read('css/variables.css'));
+    assert.match(
+      css,
+      /\[data-sidebar="collapsed"\]\s+\.app-sidebar\s*\{/,
+      'collapsed rail rules must be scoped to [data-sidebar="collapsed"]',
+    );
+    assert.match(vars, /--sidebar-width:\s*252px/, 'the expanded sidebar width is missing');
+    assert.match(vars, /--rail-width:\s*56px/, 'the collapsed rail width is missing');
+  });
+
+  test('every local script and stylesheet is cache-stamped', () => {
+    // A versioned <link> next to an unversioned <script> is how a new button
+    // ships into a page still running the old handler: the markup updates and
+    // the click does nothing. Both halves of the bundle must carry ?v=.
+    for (const name of ['index.html', 'login.html']) {
+      const bare = [...read(name).matchAll(/(?:src|href)="((?:js|css)\/[^"?]+)"/g)].map((m) => m[1]);
+      assert.deepEqual(bare, [], `${name} has unversioned assets: ${bare.join(', ')}`);
+    }
   });
 });

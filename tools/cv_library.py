@@ -203,19 +203,20 @@ class CVLibrary:
     # Picking
     # ------------------------------------------------------------------
 
-    def pick_best(self, job: Dict) -> Tuple[Optional[str], Optional[Dict], int]:
+    def pick_best_scored(self, job: Dict) -> Tuple[Optional[str], Optional[Dict], Optional[Dict]]:
         """
-        Select the best-fit CV for a given job.
+        Select the best-fit CV for a job and return the full score result.
 
         Returns
         -------
-        (cv_path, cv_profile, score)
+        (cv_path, cv_profile, result)
             cv_path:    absolute path string, or None if library is empty.
             cv_profile: parsed profile dict, or None.
-            score:      keyword match score (0-100).
+            result:     the CVMatcher result dict for the winning CV (None
+                        when the library is empty or scoring raised).
         """
         if not self.cvs:
-            return None, None, 0
+            return None, None, None
 
         self._refresh_changed()
 
@@ -223,13 +224,14 @@ class CVLibrary:
         cache_key = job.get("job_fingerprint") or job.get("apply_url") or ""
         if cache_key and cache_key in self._pick_cache:
             cached = self._pick_cache[cache_key]
-            return cached["cv_path"], cached["cv_profile"], cached["score"]
+            return cached["cv_path"], cached["cv_profile"], cached.get("result")
 
         from tools.cv_matcher import CVMatcher
 
         best_path: Optional[str] = None
         best_profile: Optional[Dict] = None
         best_score = -1
+        best_result: Optional[Dict] = None
         best_name = ""
 
         for entry in self.cvs:
@@ -246,23 +248,48 @@ class CVLibrary:
                 score = result.get("score", 0)
             except Exception:
                 score = 0
+                result = None
 
             # Tie-break: alphabetical name (already sorted on discovery)
             if score > best_score:
                 best_score = score
                 best_path = entry["path"]
                 best_profile = profile
+                best_result = result
                 best_name = entry["name"]
 
         job_title = job.get("job_title", "?")[:50]
-        if best_path:
+        # C5 (AUDIT 2026-10-18): with a single registered CV this line
+        # echoes a score of 0 for every job and reads like an error in the
+        # run log. The pick only carries information when there is a
+        # choice to make.
+        if best_path and len(self.cvs) > 1:
             print(f"   Best CV for '{job_title}': {best_name} (score {best_score})")
 
-        result_entry = {"cv_path": best_path, "cv_profile": best_profile, "score": best_score}
+        result_entry = {
+            "cv_path": best_path,
+            "cv_profile": best_profile,
+            "score": best_score,
+            "result": best_result,
+        }
         if cache_key:
             self._pick_cache[cache_key] = result_entry
 
-        return best_path, best_profile, best_score
+        return best_path, best_profile, best_result
+
+    def pick_best(self, job: Dict) -> Tuple[Optional[str], Optional[Dict], int]:
+        """
+        Select the best-fit CV for a given job.
+
+        Returns
+        -------
+        (cv_path, cv_profile, score)
+            cv_path:    absolute path string, or None if library is empty.
+            cv_profile: parsed profile dict, or None.
+            score:      keyword match score (0-100).
+        """
+        path, profile, result = self.pick_best_scored(job)
+        return path, profile, (result.get("score", 0) if result else 0)
 
     # ------------------------------------------------------------------
     # Helpers

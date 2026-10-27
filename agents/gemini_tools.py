@@ -157,44 +157,106 @@ def generate_with_fallback(prompt: str, task: str = "cover_letter") -> str:
 
     try:
         print(f"  [{task}] Trying Gemini...")
-        return _call_gemini(prompt)
+        result = _call_gemini(prompt)
+        _record_llm_attempt("Gemini", ok=True)
+        return result
     except Exception as e:
+        _record_llm_attempt("Gemini", ok=False)
         errors.append(f"Gemini: {e}")
         print(f"  [{task}] Gemini failed: {e}")
 
     if GROQ_AVAILABLE:
         try:
             print(f"  [{task}] Trying Groq ({GROQ_MODEL})...")
-            return _call_groq(prompt)
+            result = _call_groq(prompt)
+            _record_llm_attempt("Groq", ok=True)
+            return result
         except Exception as e:
+            _record_llm_attempt("Groq", ok=False)
             errors.append(f"Groq: {e}")
             print(f"  [{task}] Groq failed: {e}")
 
     if MISTRAL_AVAILABLE:
         try:
             print(f"  [{task}] Trying Mistral ({MISTRAL_MODEL})...")
-            return _call_mistral(prompt)
+            result = _call_mistral(prompt)
+            _record_llm_attempt("Mistral", ok=True)
+            return result
         except Exception as e:
+            _record_llm_attempt("Mistral", ok=False)
             errors.append(f"Mistral: {e}")
             print(f"  [{task}] Mistral failed: {e}")
 
     if GLM_AVAILABLE:
         try:
             print(f"  [{task}] Trying GLM ({GLM_MODEL})...")
-            return _call_glm(prompt)
+            result = _call_glm(prompt)
+            _record_llm_attempt("GLM", ok=True)
+            return result
         except Exception as e:
+            _record_llm_attempt("GLM", ok=False)
             errors.append(f"GLM: {e}")
             print(f"  [{task}] GLM failed: {e}")
 
     if OLLAMA_AVAILABLE:
         try:
             print(f"  [{task}] Trying Ollama ({OLLAMA_MODEL})...")
-            return _call_ollama(prompt)
+            result = _call_ollama(prompt)
+            _record_llm_attempt("Ollama", ok=True)
+            return result
         except Exception as e:
+            _record_llm_attempt("Ollama", ok=False)
             errors.append(f"Ollama: {e}")
             print(f"  [{task}] Ollama failed: {e}")
 
     raise Exception(f"All LLM providers failed for {task}: {'; '.join(errors)}")
+
+
+# === LLM CALL ACCOUNTING (§6, AUDIT 2026-10-18) =============================
+# Count every provider ATTEMPT, not just successes — the audit's cost
+# scenario was a Gemini 503 followed by a Groq fallback (2 attempts, 1 job),
+# and only counting successes would hide exactly that. The scrape path's
+# only LLM consumer today is Crawl4AI-JustRemote's markdown extraction;
+# agents.scrapper resets this at run start and reads+records it after the
+# Crawl4AI pass into the YieldTracker. A yield floor decision stays MANUAL:
+# one provider outage must not auto-disable a board (the recorded numbers
+# carry the evidence instead).
+import copy as _copy
+import threading as _threading
+
+_LLM_STATS_LOCK = _threading.Lock()
+_LLM_CALL_STATS = {"attempts": 0, "successes": 0, "providers": {}}
+
+
+def _record_llm_attempt(provider: str, ok: bool) -> None:
+    with _LLM_STATS_LOCK:
+        _LLM_CALL_STATS["attempts"] += 1
+        if ok:
+            _LLM_CALL_STATS["successes"] += 1
+        slot = _LLM_CALL_STATS["providers"].setdefault(provider, {"attempts": 0, "ok": 0})
+        slot["attempts"] += 1
+        if ok:
+            slot["ok"] += 1
+
+
+def get_llm_call_stats(reset: bool = False) -> dict:
+    """Snapshot of LLM provider attempts made by this process so far.
+
+    reset=True atomically clears the counters after copying, so a caller
+    reading at the end of a scrape pass gets exactly that pass's numbers.
+    """
+    with _LLM_STATS_LOCK:
+        snapshot = _copy.deepcopy(_LLM_CALL_STATS)
+        if reset:
+            _LLM_CALL_STATS["attempts"] = 0
+            _LLM_CALL_STATS["successes"] = 0
+            _LLM_CALL_STATS["providers"] = {}
+        return snapshot
+
+
+def reset_llm_call_stats() -> None:
+    """Clear the LLM attempt counters (start of a scrape run)."""
+    get_llm_call_stats(reset=True)
 
 
 # =============================================================================

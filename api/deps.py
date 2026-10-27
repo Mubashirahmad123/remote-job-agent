@@ -133,8 +133,10 @@ def credentials_ok(request: Request, creds: HTTPAuthorizationCredentials | None 
         return True
     expected = (os.getenv("API_TOKEN") or "").strip()
     if expected:
-        provided = (creds.credentials or "").strip() if creds else ""
-        return provided == expected
+        # Q4 (PM quick win, 2026-10-18): constant-time compare via the same
+        # helper the apply router uses — a plain == on a secret is
+        # microtiming-observable and had drifted from _bearer_matches.
+        return _bearer_matches(creds, "API_TOKEN")
     return open_access()
 
 
@@ -356,9 +358,9 @@ def apply_access_ok(
 
     if session_user(request) is not None:
         return True
-    expected = (os.getenv("APPLY_API_TOKEN") or "").strip()
-    provided = (creds.credentials or "").strip() if creds else ""
-    return bool(expected) and provided != "" and provided == expected
+    # Q4 (PM quick win, 2026-10-18): unify on the constant-time helper —
+    # identical semantics (both non-empty + compare), no duplicated logic.
+    return _bearer_matches(creds, "APPLY_API_TOKEN")
 
 
 def require_apply_token(

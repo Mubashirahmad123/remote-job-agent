@@ -1,5 +1,10 @@
 /* =============================================================================
-   BASE.CSS — Minimalist Global Resets, Contrast Typography & Clean Background
+   BASE.CSS — Global reset, typography floor, focus and scrollbars
+
+   The type system is deliberately small: four UI sizes plus one display size
+   for the page title and one figure size for KPI numbers. Every number in the
+   product is tabular so columns of figures stack; no component sets its own
+   body font.
    ============================================================================= */
 
 *, *::before, *::after {
@@ -8,27 +13,101 @@
   padding: 0;
 }
 
+/* --- Platform layer ---------------------------------------------------------
+   Touch behaviour belongs to the document, not to one component. Each line
+   below is the fix for a phone-only defect; they are no-ops on a desktop. */
+html {
+  background-color: var(--bg-canvas);       /* overscroll area matches the app */
+  -webkit-text-size-adjust: 100%;           /* no font inflation in landscape */
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent; /* no grey/blue flash on every tap */
+  overscroll-behavior-y: none;              /* pull-to-refresh must not hijack scroll */
+}
+
 body {
   background-color: var(--bg-canvas);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--text-base);
   line-height: 1.5;
+  letter-spacing: -0.003em;
+  min-height: 100dvh;
   overflow-x: hidden;
   transition: background-color var(--transition-normal), color var(--transition-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Every figure aligns with every other figure: the terminal reading depends
+     on columns of numbers that stack. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
-/* Subtle, crisp ambient highlight */
-body.theme-dark {
-  background-image: radial-gradient(circle at 50% -20%, rgba(59, 130, 246, 0.05) 0%, transparent 60%);
-  background-attachment: fixed;
+/* Display sizes are optically tightened; body text is not. Instrument Sans
+   carries more character in the lowercase, so headings only need a light
+   negative tracking rather than the cramped -0.03em that generic grotesks do. */
+h1, h2, h3, h4 {
+  letter-spacing: -0.018em;
+  line-height: var(--leading-tight);
+  text-wrap: balance;
 }
 
-body.theme-light {
-  background-image: radial-gradient(circle at 50% -20%, rgba(37, 99, 235, 0.03) 0%, transparent 60%);
-  background-attachment: fixed;
+p {
+  text-wrap: pretty;
+}
+
+a {
+  color: var(--primary-text);
+  text-underline-offset: 2px;
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--text-on-fill);
+}
+
+/* Form controls do not inherit type from their ancestors: without this, every
+   button and field renders in the OS UI font next to Public Sans body copy,
+   which is what made controls look "off" against the rest of the UI. */
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+/* Touch: the tap must not wait to see whether a double-tap zoom is coming,
+   and nothing that is a control should be selectable or raise a callout. */
+button, a, [role="button"], label, input, select, textarea {
+  touch-action: manipulation;
+}
+
+button, [role="button"], .nav-item, .mobile-nav-btn, .role-pill, .view-toggle-btn {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+::placeholder {
+  color: var(--text-muted);
+  opacity: 0.9;
+}
+
+/* Keyboard focus stays visible; pointer presses are handled by :active. */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* Touch targets: press feedback on touch-down (release-only feedback reads as
+   lag even at 0ms). 100–160ms, ease-out. */
+@media (pointer: coarse) {
+  .action-btn:active,
+  .mobile-nav-btn:active,
+  .role-pill:active,
+  .view-toggle-btn:active {
+    transform: scale(0.97);
+    transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
 }
 
 /* Custom Clean Scrollbars */
@@ -54,12 +133,33 @@ body.theme-light {
   display: none !important;
 }
 
+/* Disabled copy is quieter but still readable (>=3:1) and is always paired
+   with a changed shape or cursor, never with colour alone. */
+[disabled],
+.is-disabled {
+  color: var(--text-disabled);
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes pulseGlow {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.1); opacity: 0.8; }
+@media (prefers-reduced-motion: reduce) {
+  .view-panel {
+    animation: none;
+  }
+
+  .pulse-emerald,
+  .pulse-amber,
+  .pulse-red {
+    animation: none;
+  }
+
+  /* The job cards' entrance is decorative; the list is complete without it. */
+  .jobs-grid-container.is-entering .job-card,
+  .job-card:hover {
+    animation: none;
+    transform: none;
+  }
 }

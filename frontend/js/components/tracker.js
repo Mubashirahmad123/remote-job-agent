@@ -459,7 +459,7 @@ JobAgent.tracker = {
       this.kanbanColApplied.innerHTML = `<div style="color:var(--text-muted);font-size:12px;padding:12px;">Loading <code>/api/tracker</code>…</div>`;
     }
     if (errors.tracker && this.kanbanColApplied) {
-      this.kanbanColApplied.innerHTML += `<div style="font-size:11.5px;color:#f59e0b;padding:8px 12px;">API error: ${esc(errors.tracker)}</div>`;
+      this.kanbanColApplied.innerHTML += `<div style="font-size:11.5px;color:var(--accent-amber);padding:8px 12px;">API error: ${esc(errors.tracker)}</div>`;
     }
 
     const cards = this._cards();
@@ -492,7 +492,7 @@ JobAgent.tracker = {
           <span class="k-score">${esc(card.score || 0)}%</span>
         </div>
         <div style="font-size: 11px; color: var(--accent-cyan); margin-top: 6px;">
-          ${esc(statusLabel)}${card.follow_up ? ' · 📅 ' + esc(card.follow_up) : ''}
+          ${esc(statusLabel)}${card.follow_up ? ' · ' + esc(card.follow_up) : ''}
         </div>
       `;
 
@@ -505,9 +505,16 @@ JobAgent.tracker = {
 
     for (const [key, container] of Object.entries(colMap)) {
       if (container && !container.children.length && !loading.tracker) {
-        const empty = document.createElement('div');
-        empty.style.cssText = 'color:var(--text-muted);font-size:12px;padding:12px;border:1px dashed var(--border-subtle);border-radius:10px;';
-        empty.textContent = key === 'review' ? 'No fill-review packages waiting.' : 'No applications here.';
+        const copy = {
+          applied: 'No applications yet.',
+          review: 'No packages waiting for review.',
+          interview: 'No interviews scheduled.',
+          offer: 'No offers yet.',
+          archived: 'Nothing archived.',
+        };
+        const empty = document.createElement('p');
+        empty.className = 'kanban-empty';
+        empty.textContent = copy[key] || 'Nothing here yet.';
         container.appendChild(empty);
       }
     }

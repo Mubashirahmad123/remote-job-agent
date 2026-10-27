@@ -1,86 +1,314 @@
 /* =============================================================================
-   VARIABLES.CSS — Minimalist Modern Design Tokens (High-Contrast & Dual Theme)
+   VARIABLES.CSS — Design tokens
+
+   "Instrument panel, cool." A data product on lavender-grey paper: the page is
+   tinted, cards sit a step LIGHTER than the page, the sidebar a step deeper.
+   In dark the same ladder inverts its job but not its order: page < card <
+   raised, with a deeper sidebar. Nothing here is white by default — the only
+   near-white surface is the resume paper, which is a printed page, not a card.
+
+   Rules that keep the themes honest:
+
+   1. A FILL is not an INK. `--primary` is the accent surface / line colour.
+      `--primary-text` is the same hue tuned for text on this theme's cards.
+      Solid call-to-actions use `--control-primary-*`.
+   2. A SIGNAL has a foreground and a tint. `--signal-*-fg` passes 4.5:1 on
+      `--signal-*-bg` and on the card surface in its own theme.
+   3. Light and dark share every token name; only the values change.
+      Components must not hardcode a colour — add a token here instead.
+   4. `--bg-sidebar` is always deeper than `--bg-canvas`; `--bg-surface` is
+      always lighter than `--bg-canvas`; `--bg-inset` is the recessed well.
    ============================================================================= */
 
 :root {
-  /* Minimalist Modern Dark (Default) — Neutral Slate & High Contrast */
-  --bg-canvas: #0c0d0e;
-  --bg-surface: #141518;
-  --bg-surface-glass: rgba(20, 21, 24, 0.92);
-  --bg-surface-elevated: #1c1d22;
-  --bg-surface-hover: #25272e;
-  --bg-card: #141518;
+  /* Tells the browser which scheme native widgets (select popups, scrollbars,
+     date pickers, the caret) belong to. */
+  color-scheme: dark;
 
-  /* Borders & Dividers */
-  --border-subtle: rgba(255, 255, 255, 0.12);
-  --border-active: #3b82f6;
-  --border-focus: #3b82f6;
-  --border-glass: rgba(255, 255, 255, 0.16);
+  /* --- Ground, sidebar & panels -------------------------------------------
+     Dark ladder, deepest to lightest:
+       sidebar < inset < canvas < surface/card < elevated < hover
+     A card therefore reads as a raised instrument on a deep desk. */
+  --bg-canvas: #0f1320;
+  --bg-sidebar: #0a0e18;
+  --bg-surface: #161b2b;
+  --bg-card: #161b2b;
+  --bg-surface-elevated: #1d2335;
+  --bg-elevated: #1d2335;
+  --bg-surface-hover: #232a3e;
+  --bg-surface-glass: rgba(15, 19, 32, 0.92);
+  --bg-inset: #0c1120;
 
-  /* High-Contrast Text Hierarchy (WCAG AAA) */
-  --text-primary: #ffffff;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --text-inverse: #0c0d0e;
+  /* --- Lines -------------------------------------------------------------
+     `--rule` divides rows inside a panel; `--border-subtle` outlines it;
+     `--border-strong` is the edge of a control that must be seen. */
+  --rule: #212840;
+  --separator: var(--rule);
+  --border-subtle: #252c44;
+  --border-strong: #39415e;
+  --border-active: #6f5df2;
+  --border-focus: #8b7cf8;
+  --border-glass: #2b3350;
+  --control-border: #333b57;
+  --ring: rgba(139, 124, 248, 0.35);
 
-  /* Refined Signal Accents */
-  --primary-blue: #3b82f6;
-  --primary-blue-glow: rgba(59, 130, 246, 0.25);
-  --accent-cyan: #0ea5e9;
-  --accent-cyan-bg: rgba(14, 165, 233, 0.14);
-  --accent-emerald: #10b981;
-  --accent-emerald-bg: rgba(16, 185, 129, 0.14);
-  --accent-amber: #f59e0b;
-  --accent-amber-bg: rgba(245, 158, 11, 0.14);
-  --accent-rose: #ef4444;
-  --accent-rose-bg: rgba(239, 68, 68, 0.14);
+  /* --- Ink ---------------------------------------------------------------
+     Three legible steps, measured on the card (#161b2b):
+     primary 15.6:1 · secondary 9.2:1 · muted 5.7:1. Disabled is quieter but
+     still clears 4.5:1 on the inset well, and is always paired with a shape
+     change (strike, cursor, no shadow), never colour alone. */
+  --text-primary: #e9ebf5;
+  --text-secondary: #b6bdd0;
+  --text-muted: #8b95ad;
+  --text-disabled: #78829c;
+  --text-inverse: #0f1320;
+  --text-on-fill: #ffffff;
 
-  /* Typography */
-  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  /* --- Accent — indigo / violet ------------------------------------------
+     One charged family for the whole product: active navigation, primary
+     actions, focus, links, selection, the live progress line. */
+  --primary: #6f5df2;
+  --primary-hover: #6a58f0;
+  --primary-foreground: #ffffff;
+  --primary-text: #a396fa;      /* ink use: 6.8:1 on the card */
+  --primary-glow: rgba(111, 93, 242, 0.14);
+  --primary-soft: rgba(111, 93, 242, 0.16);
 
-  /* Layout Constants */
-  --sidebar-width: 256px;
-  --header-height: 64px;
+  /* Solid call-to-action: strong indigo, white ink, 5.9:1. */
+  --control-primary-bg: #5d4ae6;
+  --control-primary-ink: #ffffff;
+  --control-primary-bg-hover: #6a58f0;
+
+  /* Back-compat aliases. New code should say `--primary` (surface) or
+     `--primary-text` (ink). */
+  --primary-blue: var(--primary);
+  --primary-blue-glow: var(--primary-glow);
+
+  /* --- Signals -----------------------------------------------------------
+     `-fg` for text/icons, `-bg` for the tint behind it. */
+  --signal-emerald-fg: #4fd1a5;
+  --signal-emerald-bg: #10241f;
+  --signal-amber-fg: #e8b45c;
+  --signal-amber-bg: #2a2114;
+  --signal-rose-fg: #ff8095;
+  --signal-rose-bg: #2c1720;
+  --signal-cyan-fg: #6cc4e8;
+  --signal-cyan-bg: #10222e;
+  --signal-violet-fg: #a396fa;
+  --signal-violet-bg: #1d1a3a;
+
+  --accent-emerald: var(--signal-emerald-fg);
+  --accent-emerald-bg: var(--signal-emerald-bg);
+  --accent-amber: var(--signal-amber-fg);
+  --accent-amber-bg: var(--signal-amber-bg);
+  --accent-rose: var(--signal-rose-fg);
+  --accent-rose-bg: var(--signal-rose-bg);
+  --accent-cyan: var(--signal-cyan-fg);
+  --accent-cyan-bg: var(--signal-cyan-bg);
+  --accent-violet: var(--signal-violet-fg);
+  --accent-violet-bg: var(--signal-violet-bg);
+  --accent-danger: var(--signal-rose-fg);
+  --accent-success: var(--signal-emerald-fg);
+  --accent-warning: var(--signal-amber-fg);
+  --accent-info: var(--signal-cyan-fg);
+
+  /* --- Chart series -------------------------------------------------------
+     Ordered by prominence; series 1 is the accent so the primary series is
+     also the brand colour in both themes. */
+  --chart-1: #a396fa;
+  --chart-2: #4fd1c5;
+  --chart-3: #e8b45c;
+  --chart-4: #ff8095;
+  --chart-5: #8b95ad;
+  --chart-grid: #212840;
+  --chart-axis: #8b95ad;
+
+  /* --- Overlays ----------------------------------------------------------- */
+  --overlay: rgba(3, 6, 14, 0.68);
+  --scrim: rgba(3, 6, 14, 0.55);
+
+  /* --- Console -----------------------------------------------------------
+     A log surface stays dark in both themes — it is a screen, not a panel.
+     The light theme overrides these with a slightly lifted blue-graphite so
+     the slab does not read as a hole in the paper. */
+  --bg-console: #080c16;
+  --bg-console-well: #0a0f1c;
+  --text-console: #d5dbeb;
+  --text-console-muted: #8b95ad;
+  --console-primary: #a396fa;
+  --console-cyan: #6cc4e8;
+  --console-emerald: #4fd1a5;
+  --console-amber: #e8b45c;
+  --console-rose: #ff8095;
+
+  /* An inverted chip (toast). Deep ink in both themes, lifted by a shadow. */
+  --bg-inverse: #232a3e;
+  --text-on-inverse: #f2f4fb;
+
+  /* --- Paper -------------------------------------------------------------
+     The resume preview is a sheet of paper: the one place a near-white
+     surface is correct in both themes. */
+  --paper-bg: #fffdf8;
+  --paper-border: #e0dccf;
+  --paper-rule: #e7e4da;
+  --paper-ink: #191a1f;
+  --paper-ink-muted: #5a5b63;
+  --paper-accent: #3f2ec4;
+
+  /* --- Elevation ---------------------------------------------------------
+     Only things that truly float carry a shadow: the KPI strip and panels get
+     a short ambient drop, overlays get the larger pair. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.52);
+  --shadow-accent: 0 6px 18px rgba(111, 93, 242, 0.22);
+
+  /* --- Type --------------------------------------------------------------
+     Instrument Sans for the interface, JetBrains Mono only for literal data
+     (logs, run ids, code). Figures are tabular everywhere — set in base.css. */
+  --font-sans: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --text-2xs: 11px;          /* the legibility floor: nothing renders smaller */
+  --text-xs: 11.5px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-base: 13px;
+  --text-lg: 15px;
+  --text-xl: 20px;
+  --text-2xl: 24px;          /* the page title */
+  --text-3xl: 28px;          /* the KPI figure */
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* --- Space ------------------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* --- Layout ------------------------------------------------------------ */
+  --rail-width: 56px;          /* collapsed icon rail */
+  --sidebar-width: 252px;      /* expanded labelled sidebar */
+  --header-height: 56px;
   --drawer-width: 520px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --control-height: 34px;
+  --row-height: 44px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
   --radius-pill: 9999px;
 
-  /* Snappy Transitions */
+  /* --- Motion ------------------------------------------------------------ */
   --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-normal: 250ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-drawer: 320ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Minimalist Clean Light Theme (Enterprise Slate) */
+/* =============================================================================
+   LIGHT THEME
+
+   Lavender-grey paper, not white. The ladder is:
+     sidebar (#d8dcec) < canvas (#e4e6f2) < card (#eff1fa) < raised (#f8f9fd)
+   Cards are tinted, distinct from the page, and lifted by a 1px cool border
+   plus one short ambient shadow. Ink is deep navy; every signal is a 700-level
+   value so 11.5px badge text clears 4.5:1 on its own tint.
+   ============================================================================= */
+
 [data-theme="light"] {
-  --bg-canvas: #f8fafc;
-  --bg-surface: #ffffff;
-  --bg-surface-glass: rgba(255, 255, 255, 0.94);
-  --bg-surface-elevated: #f1f5f9;
-  --bg-surface-hover: #e2e8f0;
-  --bg-card: #ffffff;
+  color-scheme: light;
 
-  --border-subtle: #e2e8f0;
-  --border-active: #2563eb;
-  --border-focus: #2563eb;
-  --border-glass: rgba(0, 0, 0, 0.08);
+  --bg-canvas: #e4e6f2;
+  --bg-sidebar: #d8dcec;
+  --bg-surface: #eff1fa;
+  --bg-card: #eff1fa;
+  --bg-surface-elevated: #f8f9fd;
+  --bg-elevated: #f8f9fd;
+  --bg-surface-hover: #e6e8f4;
+  --bg-surface-glass: rgba(228, 230, 242, 0.92);
+  --bg-inset: #dde0ee;
 
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-  --text-inverse: #ffffff;
+  --rule: #d5d9e9;
+  --separator: var(--rule);
+  --border-subtle: #cbd0e3;
+  --border-strong: #b0b7d2;
+  --border-active: #4c37d9;
+  --border-focus: #4c37d9;
+  --border-glass: #d2d6e7;
+  --control-border: #bfc5dc;
+  --ring: rgba(76, 55, 217, 0.28);
 
-  --primary-blue: #2563eb;
-  --primary-blue-glow: rgba(37, 99, 235, 0.18);
-  --accent-cyan: #0284c7;
-  --accent-cyan-bg: rgba(2, 132, 199, 0.1);
-  --accent-emerald: #059669;
-  --accent-emerald-bg: rgba(5, 150, 105, 0.1);
-  --accent-amber: #d97706;
-  --accent-amber-bg: rgba(217, 119, 6, 0.1);
-  --accent-rose: #dc2626;
-  --accent-rose-bg: rgba(220, 38, 38, 0.1);
+  /* #596079 is 5.5:1 on the card (#eff1fa) and 6.0:1 on the page, so 11.5px
+     metadata is legible instead of "light grey on near-white". */
+  --text-primary: #14192b;
+  --text-secondary: #3a4157;
+  --text-muted: #596079;
+  --text-disabled: #5a6275;
+  --text-inverse: #f4f5fb;
+  --text-on-fill: #ffffff;
+
+  --primary: #4c37d9;
+  --primary-hover: #3f2ec4;
+  --primary-foreground: #ffffff;
+  --primary-text: #3f2ec4;      /* 8.0:1 on the card */
+  --primary-glow: rgba(76, 55, 217, 0.10);
+  --primary-soft: rgba(76, 55, 217, 0.10);
+
+  /* The primary action is the accent itself, not ink: 7.3:1 with white. */
+  --control-primary-bg: #4c37d9;
+  --control-primary-ink: #ffffff;
+  --control-primary-bg-hover: #3f2ec4;
+
+  --signal-emerald-fg: #0f6b52;
+  --signal-emerald-bg: #dcefe7;
+  --signal-amber-fg: #7d5410;
+  --signal-amber-bg: #f5ecd9;
+  --signal-rose-fg: #a52a3d;
+  --signal-rose-bg: #f7e3e6;
+  --signal-cyan-fg: #175e86;
+  --signal-cyan-bg: #dfeaf3;
+  --signal-violet-fg: #4c37d9;
+  --signal-violet-bg: #e6e3f9;
+
+  --chart-1: #4c37d9;
+  --chart-2: #0f7d86;
+  --chart-3: #b7791f;
+  --chart-4: #a52a3d;
+  --chart-5: #5b6b8c;
+  --chart-grid: #dfe2ee;
+  --chart-axis: #596079;
+
+  --overlay: rgba(20, 25, 43, 0.42);
+  --scrim: rgba(20, 25, 43, 0.34);
+
+  --bg-inverse: #14192b;
+  --text-on-inverse: #f2f4fb;
+
+  /* The terminal keeps its dark identity in light mode too, but a pure black
+     slab reads as a hole on lavender paper. This is the same screen, tuned to
+     the ambient blue so it sits in the page instead of punching through it. */
+  --bg-console: #1a1f2f;
+  --bg-console-well: #151a28;
+  --text-console: #dfe4f2;
+  --text-console-muted: #98a2b8;
+  --console-primary: #a396fa;
+  --console-cyan: #6cc4e8;
+  --console-emerald: #4fd1a5;
+  --console-amber: #e8b45c;
+  --console-rose: #ff8095;
+
+  --paper-bg: #fffdf8;
+  --paper-border: #e0dccf;
+  --paper-rule: #e7e4da;
+  --paper-ink: #191a1f;
+  --paper-ink-muted: #5a5b63;
+  --paper-accent: #3f2ec4;
+
+  --shadow-sm: 0 1px 2px rgba(31, 36, 70, 0.06);
+  --shadow-md: 0 10px 24px rgba(31, 36, 70, 0.10);
+  --shadow-lg: 0 24px 60px rgba(31, 36, 70, 0.18);
+  --shadow-accent: 0 6px 18px rgba(76, 55, 217, 0.22);
 }
