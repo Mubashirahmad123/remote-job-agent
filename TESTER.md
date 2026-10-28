@@ -89,9 +89,19 @@ new tests, and the failure set proved pre-existing:
   passes on 2.8.8.
 - Full Windows pytest with the upgraded pins: **1126 passed, 4 skipped,
   8 failed + 1 error** — the failure set again node-identical to the
-  env-class baseline (5× docker heredoc, 2+1 crewai, 1 url_guard). The
-  `test_action_rate_limit` timing node has now passed in both of the last
-  two full runs.
+  env-class baseline (5× docker heredoc, 2+1 crewai, 1 url_guard).
+- Two further full runs on the same commit (`68821559c`), run at the
+  reviewer's request — **1125 passed each time**, with the baseline set plus
+  exactly one alternating timing-flake failure: run 1
+  (`2:52`) tripped
+  `test_review_handoff.py::test_regeneration_hides_previous_evidence_and_rejects_stale_run_id`,
+  run 2 (`3:40`) tripped the known
+  `test_action_rate_limit.py::test_a_denied_call_reports_how_long_to_wait`.
+  Each node passes in isolation (review-handoff: file `20/20` + the node
+  twice; rate-limit: file `32/32` + the node twice, earlier the same day),
+  and neither failure survives a solo rerun — full-suite load on Windows
+  can starve their wait/heartbeat windows, and the two never failed in the
+  same run. Linux CI remains the arbiter for both.
 
 ### B4/B5/Q5 disposition (2026-10-28, frontend demo-honesty run)
 
