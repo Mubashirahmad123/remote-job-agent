@@ -70,7 +70,9 @@ describe('happy path — live API', () => {
   let ctx;
   before(async () => {
     ctx = await loadDashboard(api.base);
-    await waitFor(() => ctx.window.JobAgent?.store?.state?.stats, { label: 'stats loaded' });
+    // Boot path, not an assertion: 30s so parallel-suite load can't turn a slow
+  // stats boot into a hook failure that sinks this file unit.
+  await waitFor(() => ctx.window.JobAgent?.store?.state?.stats, { label: 'stats loaded', timeout: 30000 });
   }, { timeout: 60000 });
 
   test('page boots with no uncaught same-origin script errors', () => {

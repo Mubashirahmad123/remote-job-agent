@@ -162,6 +162,26 @@ new tests, and the failure set proved pre-existing:
   0 failed** (221s) — identical to the pre-wave count at `ce9018d84`, i.e.
   the pin bump introduced no drift; same 9 skips, all accounted for above.
 
+### e2e flake: review.test.mjs boot-hook overrun (2026-10-28, at `aae372658`)
+
+- CI run `40693708819` failed ONLY in `Dashboard e2e` (pytest/docker×2/
+  pip-audit all green — which also certifies the pdfplumber bump on Linux).
+  Node-free reproduction locally matched it: in full-suite run #1,
+  `review.test.mjs` failed at FILE level (its 4 inner nodes all passed) with
+  the harness signal `Test hook "beforeEach" ... generated asynchronous
+  activity after the test ended` + a teardown `TypeError` — the stats-boot
+  `waitFor` (default 10s) overran under six concurrently booting suite
+  processes (jsdom + uvicorn each). Solo run: 4/4 pass. Run #2 of the same
+  full suite: 88/0 pass. Zero code delta in review paths between the
+  passing `ce9018d84` run and the failing `aae372658` run — load timing,
+  not the pdfplumber bump.
+- Class fix: the three BOOT-path waits (review.test.mjs stats boot,
+  environment.test.mjs boot, smoke.test.mjs stats loaded) now carry explicit
+  `timeout: 30000` (aligned with startApi's own 30s boot budget). The
+  `waitFor` DEFAULT stays 10s on purpose — it also budget-limits negative
+  tests, which must not lengthen silently. Verified with a full local e2e
+  run: **88 passed / 0 failed** post-hardening.
+
 ### B4/B5/Q5 disposition (2026-10-28, frontend demo-honesty run)
 
 Backend delta this slice is `api/cache.py` docstring text only; every other
