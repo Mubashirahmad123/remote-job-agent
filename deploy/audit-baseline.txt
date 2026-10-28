@@ -17,7 +17,8 @@
 # Regenerate wholesale with:
 #     python deploy/dependency_audit.py --update-baseline
 #
-# Recorded: 2026-10-27
+# Recorded: 2026-10-28
+#
 # 2026-10-16: MCP findings removed after upgrading to 1.30.0. No new MCP
 # exception was accepted. CrewAI 1.6.1 requires json-repair==0.25.2; migrate
 # the EXISTING json-repair advisory from 0.25.3 to 0.25.2 (same unfixed issue).
@@ -26,6 +27,17 @@
 # uv advisories against the current pins were accepted. Pillow cannot move past
 # 10.4.0 while crawl4ai 0.3.74 requires pillow~=10.4; clearing those means the
 # crawl4ai 0.8.x migration, not a pin bump. See CI_FAILURE_REMEDIATION.md.
+# 2026-10-28: pillow's ten 2026 CVE records were re-keyed by the advisory
+# databases the same day (aliases verified against OSV: PYSEC-2026-4329→
+# CVE-2026-112397, 4330→112398, 4331→112402, 4334→112896, 4335→112901,
+# 4337→96636, 4338→96637, 4340→96641, 4341→96642, 4343→96644) and fixed only in
+# pillow 13.0.0; they are re-accepted for the crawl4ai~=10.4 reason above, and
+# B10's pillow wave now targets 13.0.0 (not 12.1.1). The 11th entry is genuinely
+# new cover: PYSEC-2026-4332 (CVE-2026-112403, fixed 13.0.0) never had a CVE
+# record in this baseline before — same accepted-risk rationale applies. The
+# same DB shift also published fixes this commit took: fpdf2 2.7.9→2.8.8
+# (CVE-2026-114609/114610) and a bounded direct litellm==1.100.4 pin
+# (CVE-2026-114612; crawl4ai's litellm~=1.48 covers it).
 
 certifi==2026.7.22 PYSEC-2026-4320
 chromadb==1.1.1 PYSEC-2026-311
@@ -62,12 +74,9 @@ pillow==10.4.0 CVE-2026-112390
 pillow==10.4.0 CVE-2026-112391
 pillow==10.4.0 CVE-2026-112393
 pillow==10.4.0 CVE-2026-112395
-pillow==10.4.0 CVE-2026-112397
-pillow==10.4.0 CVE-2026-112398
 pillow==10.4.0 CVE-2026-112399
 pillow==10.4.0 CVE-2026-112400
 pillow==10.4.0 CVE-2026-112401
-pillow==10.4.0 CVE-2026-112402
 pillow==10.4.0 CVE-2026-112404
 pillow==10.4.0 CVE-2026-112406
 pillow==10.4.0 CVE-2026-112891
@@ -75,18 +84,11 @@ pillow==10.4.0 CVE-2026-112892
 pillow==10.4.0 CVE-2026-112893
 pillow==10.4.0 CVE-2026-112894
 pillow==10.4.0 CVE-2026-112895
-pillow==10.4.0 CVE-2026-112896
 pillow==10.4.0 CVE-2026-112897
 pillow==10.4.0 CVE-2026-112899
 pillow==10.4.0 CVE-2026-112900
-pillow==10.4.0 CVE-2026-112901
-pillow==10.4.0 CVE-2026-96636
-pillow==10.4.0 CVE-2026-96637
 pillow==10.4.0 CVE-2026-96638
 pillow==10.4.0 CVE-2026-96640
-pillow==10.4.0 CVE-2026-96641
-pillow==10.4.0 CVE-2026-96642
-pillow==10.4.0 CVE-2026-96644
 pillow==10.4.0 CVE-2026-96778
 pillow==10.4.0 PYSEC-2026-165
 pillow==10.4.0 PYSEC-2026-2249
@@ -107,4 +109,15 @@ pillow==10.4.0 PYSEC-2026-3495
 pillow==10.4.0 PYSEC-2026-3496
 pillow==10.4.0 PYSEC-2026-4326
 pillow==10.4.0 PYSEC-2026-4327
+pillow==10.4.0 PYSEC-2026-4329
+pillow==10.4.0 PYSEC-2026-4330
+pillow==10.4.0 PYSEC-2026-4331
+pillow==10.4.0 PYSEC-2026-4332
+pillow==10.4.0 PYSEC-2026-4334
+pillow==10.4.0 PYSEC-2026-4335
+pillow==10.4.0 PYSEC-2026-4337
+pillow==10.4.0 PYSEC-2026-4338
+pillow==10.4.0 PYSEC-2026-4340
+pillow==10.4.0 PYSEC-2026-4341
+pillow==10.4.0 PYSEC-2026-4343
 uv==0.11.33 PYSEC-2026-4321

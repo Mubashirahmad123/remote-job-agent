@@ -1,5 +1,35 @@
 # CHANGELOG.md
 
+## 2026-10-28 (b) — pip-audit wave: fpdf2 + litellm upgraded, pillow re-keyed and re-accepted
+
+The advisory databases re-keyed pillow's 2026 CVE records into PYSEC/GHSA
+aliases on 2026-10-28, which both wiped ten old baseline lines and produced
+eleven "new" findings at the same pin. Verified against OSV (aliases
+individually checked): **10 of the 11 are the same vulnerabilities under new
+IDs** (fixed only in pillow **13.0.0**), and one (`PYSEC-2026-4332`, alias
+CVE-2026-112403) is genuinely additional coverage that never had a CVE record
+in the baseline.
+
+- **Upgraded (both fixes real and resolvable):**
+  - `fpdf2 2.7.9 → 2.8.8` clears CVE-2026-114609/114610 (shared image loader
+    dereference, "prior to 2.8.8"). Direct pin; render smoke + suite green.
+  - New bounded direct pin `litellm==1.100.4` clears CVE-2026-114612 (fixed
+    1.100.4+). `litellm` arrives via crawl4ai (`~=1.48` — any 1.x), so the
+    pin is satisfiable without touching crawl4ai.
+- **Accepted, owned in `deploy/audit-baseline.txt`:** the 11 pillow PYSEC
+  entries. Pillow cannot move at all while `crawl4ai==0.3.74` requires
+  `pillow~=10.4`, and crawl4ai's own fix line is five minors away — so this
+  stays B10-class staged work, whose pillow wave target is now **13.0.0**
+  (the 12.x target in the original plan no longer covers the 2026 set). The
+  baseline header keeps the full decision trail (2026-10-16 MCP, 2026-10-27
+  pillow-blocked-by-crawl4ai, 2026-10-28 re-key events).
+- Pruned the 10 obsolete `pillow==10.4.0 CVE-2026-…` lines (no longer
+  reproduce as CVE records; their PYSEC successors hold the risk slot, so a
+  regression can still never come back silently).
+- Lock recompiled (`uv pip compile --universal`), venv synced, audit runs
+  **OK — 82 findings, all in the baseline, nothing new.** Full pytest counts
+  recorded in `TESTER.md`.
+
 ## 2026-10-28 — audit B4 + B5 + Q5: the remaining fake/demo surfaces close
 
 - **B4 — the three demo surfaces now disclose themselves:**

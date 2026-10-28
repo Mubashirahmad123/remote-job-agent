@@ -303,8 +303,8 @@ baseline ratchets.
 | B7 | Submit-claim heartbeat/fencing parity with the fill path — or a documented single-supervised-run assumption | Senior Dev | M | Concurrent-claim rejection tested, or sign-off note in `LIVE_SUBMIT.md` before any dry run | A5 |
 | B8 | `days_ago()` stub (`agents/scrapper.py:176-178`): restore date filtering per PO #4 | Junior Dev | S | Date filter functional + tested, or bypass documented as deliberate | PO #4 |
 | B9 | Backend test/fix bundle: runs-registry watchdog (or documented restart caveat), bad-tab-400 + non-PNG-screenshot tests; `ApplyOut` response_model only after verifying UI review-polling fields survive (PO #5) | Senior Dev | M | Targeted tests green; decision recorded | — |
-| B10 | Vuln ratchet wave 1: lxml, pdfminer, then pillow→12.1.1 — one at a time: bounded pin → `uv pip compile --universal` → full suites → docker CI → audit → prune FIXED-only baseline lines | QA | M | Baseline shrinks only via FIXED lines; suites + docker CI green each step | A4 |
-| B11 | Vuln ratchet wave 2: crawl4ai→0.8.0 (drives the JS scraper; highest regression risk) | QA | L | JS-rendered scraper smoke passes post-bump; audit rerun | B10 |
+| B10 | Vuln ratchet wave 1: lxml, pdfminer, then **pillow→13.0.0** (2026-10-28 retarget — the 2026 advisory set fixes only in 13.0.0, verified per-advisory against OSV; the 12.x target no longer clears it) — one at a time: bounded pin → `uv pip compile --universal` → full suites → docker CI → audit → prune FIXED-only baseline lines. 2026-10-28 partial: fpdf2→2.8.8 and bounded litellm==1.100.4 landed outside this wave; pillow itself stays blocked by crawl4ai==0.3.74's `pillow~=10.4` (audit-baseline 2026-10-28 note) | QA | M | Baseline shrinks only via FIXED lines; suites + docker CI green each step | A4 |
+| B11 | Vuln ratchet wave 2: crawl4ai→0.8.0 (drives the JS scraper; highest regression risk — renders B10's pillow→13.0.0 resolvable in the same migration window) | QA | L | JS-rendered scraper smoke passes post-bump; audit rerun | B10 |
 
 Exit: B1–B9 done (B10/B11 may trail), demo-leak suite green, reviewer APPROVE.
 

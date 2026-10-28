@@ -75,6 +75,24 @@ new tests, and the failure set proved pre-existing:
   it; recorded as a timing flake, not a behavior regression. Linux CI
   remains the arbiter.
 
+### 2026-10-28 pip-audit wave (fpdf2/litellm upgrades + pillow re-key)
+
+- `deploy/dependency_audit.py`: **OK — 82 findings, all in the baseline,
+  nothing new** (run before and after the baseline restore edit). The wave:
+  `fpdf2 2.7.9→2.8.8` + bounded direct `litellm==1.100.4` clear three real
+  findings; the 11 pillow PYSEC entries (ten verified per-ID against OSV as
+  re-keys of pruned CVEs, plus CVE-2026-112403 as new cover) are accepted
+  with the decision trail in the baseline header. Lock recompiled
+  (`uv pip compile --universal`); venv synced to both new pins and verified
+  via import (`fpdf2 2.8.8`, `litellm 1.100.4`).
+- `UnicodePDF` render smoke (the only fpdf2 consumer, `tools/font_utils.py`)
+  passes on 2.8.8.
+- Full Windows pytest with the upgraded pins: **1126 passed, 4 skipped,
+  8 failed + 1 error** — the failure set again node-identical to the
+  env-class baseline (5× docker heredoc, 2+1 crewai, 1 url_guard). The
+  `test_action_rate_limit` timing node has now passed in both of the last
+  two full runs.
+
 ### B4/B5/Q5 disposition (2026-10-28, frontend demo-honesty run)
 
 Backend delta this slice is `api/cache.py` docstring text only; every other
