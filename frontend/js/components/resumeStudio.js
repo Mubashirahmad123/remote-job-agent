@@ -484,7 +484,9 @@ JobAgent.resumeStudio = {
         picker.click();
       });
     }
-    // Dropzone click & drag events (local demo — no upload endpoint yet, Phase 2 backlog)
+    // Dropzone click & drag events: a picked file is preview-only. There is
+    // no upload endpoint (CV upload is deferred with the future `user`
+    // product — PM.md §2.1a), so handleUploadedFile below claims nothing.
     if (this.cvDropzone && this.cvFileInput) {
       this.cvDropzone.addEventListener('click', () => {
         this.cvFileInput.click();
@@ -585,14 +587,21 @@ JobAgent.resumeStudio = {
   },
 
   handleUploadedFile(name, size) {
-    const sizeKb = (size / 1024).toFixed(1);
+    // No upload endpoint exists on main: CV upload is deliberately deferred
+    // with the future `user` product (PM.md §2.1a / USER_PRODUCT.md). A file
+    // picked here is read by this view for its name and size only — nothing
+    // is uploaded, parsed, extracted or cached — so the UI may claim none of
+    // that (audit B2: the old badge said "Uploaded & Parsed" and the toast
+    // invented a skills extraction that never ran; nothing was ever persisted).
+    const raw = String(name || '').split(/[\\/]/).pop();
     if (this.dropzoneActiveFile) {
       this.dropzoneActiveFile.innerHTML = `
-        <span class="file-tag">Current: <strong>${name}</strong> (${sizeKb} KB)</span>
-        <span class="badge-emerald">Uploaded & Parsed</span>
+        <span class="file-tag">Current: <strong>${this.escapeHtml(raw)}</strong> (${((size || 0) / 1024).toFixed(1)} KB)</span>
+        <span class="badge-tag">Selected locally — no upload</span>
       `;
     }
-    JobAgent.toast.show(`Uploaded ${name}. Extracted skills and contact profile cache.`);
+    // toast.show renders via textContent, so the raw filename is safe here.
+    JobAgent.toast.show(`${raw} selected locally — nothing was uploaded or parsed. The agent still works from your configured CV.`);
   },
 
   setSteps(state) {

@@ -75,8 +75,35 @@ function assertRemoved(path) {
 async function cleanup(api, root) {
   try {
     await stopApi(api);
-    if (api) { assertRemoved(api.authDb); assertRemoved(api.stateDb); }
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    if (api) {
+      // Windows handle-release race (verified on clean HEAD, 2026-10-28: the
+      // EPERM/existence failure jumped between test nodes 101 and 140 on
+      // identical code): a killed uvicorn / AV scanner can hold the throwaway
+      // SQLite files for a moment after stopApi() returns. Wait them out
+      // briefly; assertRemoved still fails the test if they never go away.
+      for (const db of [api.authDb, api.stateDb]) {
+        try {
+          await waitFor(
+            () => ['', '-wal', '-shm'].every((suffix) => !existsSync(db + suffix)),
+            { timeout: 5000, interval: 100, label: `throwaway ${basename(db)} deleted` });
+        } catch { /* assertRemoved records the truth */ }
+      }
+      assertRemoved(api.authDb); assertRemoved(api.stateDb);
+    }
+  } finally {
+    // rmSync(root) can still hit EPERM even after the DBs are gone. Retry on
+    // a short ladder; if a genuine lock survives ~2.5s, warn instead of
+    // failing an otherwise-green behavior test over an unremovable temp dir.
+    let lastErr = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try { rmSync(root, { recursive: true, force: true }); lastErr = null; break; }
+      catch (error) {
+        lastErr = error;
+        await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+      }
+    }
+    if (lastErr) console.warn(`cleanup: temp dir ${root} could not be removed: ${lastErr.code || lastErr.message}`);
+  }
 }
 
 for (const commentStyle of [false, true]) {

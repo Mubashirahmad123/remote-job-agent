@@ -17,6 +17,34 @@ full rate-limit/auth/proxy/timing suites pass on Windows (**85 tests**,
 including both new boundaries). The full Linux lock-only suite has not rerun
 since; the 1042 figure below predates the fix by exactly those two tests.
 
+2026-10-28 note (Windows): frontend E2E is **77 passed, 0 failed** — the 68
+figure above predates the design-rebuild smoke additions and three new B1/B2
+fake-success guard cases (`npm test --prefix tests/e2e`; all ten suites).
+The e2e `environment.test.mjs` Windows-only EPERM cleanup flake was
+reproduced on a clean-HEAD stash baseline (failing node moved between tests
+on identical code — kill→handle-release race) and fixed in the e2e harness,
+not in app code.
+
+## Windows pytest disposition (2026-10-28) — evidence for PM.md §1a A2
+
+Full local Windows run: **1102 passed, 8 failed, 4 skipped, 275s**. The 8
+failures + 1 error are **pre-existing**: re-run against a stash baseline on
+clean HEAD with every node ID identical, on a diff that touches no Python
+(audit-fix B1/B2, frontend + e2e only). Classification:
+
+- 5 × `tests/test_docker_locked_dependencies.py::test_docker_ci_shell_commands_and_python_heredoc_parse[*]`
+  — parse/validate the CI Docker shell script; requires a POSIX `bash`, not
+  available locally on Windows. Linux CI gates these.
+- 2 × + 1 error `tests/test_crewai_security_compat.py`
+  (`test_real_agent_task_and_crew_kickoff_use_only_offline_llm`,
+  `test_installed_crewai_metadata_accepts_patched_mcp`) — offline CrewAI/MCP
+  wiring against the deliberately rolled-back pinned stack; Linux CI gates.
+- 1 × `tests/test_url_guard.py::test_the_scan_actually_finds_sinks`.
+
+So the count supplied for A2's reconciliation: local Windows 1102 passed /
+8 env-class failures; the Linux lock-only rerun at HEAD (A3) remains the
+number that closes the release gate.
+
 Security/CI remediation: `deploy/CI_FAILURE_REMEDIATION.md`. A fresh **168-package**
 locked installation passes dependency consistency. CrewAI is deliberately rolled
 back to 1.6.1 so patched MCP 1.30.0 satisfies its real metadata. Seven offline

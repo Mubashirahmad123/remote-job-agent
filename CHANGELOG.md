@@ -1,5 +1,54 @@
 # CHANGELOG.md
 
+## 2026-10-28 — audit B1 + B2: the dashboard no longer claims successes it never performed
+
+Both P0 "dashboard misleads" from the 2026-10-18 audit **survived the
+2026-10-26 design rebuild** (the rebuild carried the two fakes across into the
+new markup; re-verified at current HEAD before fixing). Fixed at the source of
+the claim — no new feature was built for either:
+
+- **B1 — Sync Sheets had two handlers, and the fake one always "succeeded".**
+  `js/components/navigation.js` attached a second click handler to
+  `#btnSyncSheets` beside the real one in `js/app.js`: an 800ms "Syncing…"
+  spinner then a guaranteed "Google Sheets sync complete: ALL JOBS, TOP
+  MATCHES, APPLIED up to date" toast, regardless of what the real
+  `POST /api/jobs/refresh` did. The fake handler and its now-unused ref are
+  removed; the real handler (outcome-keyed honest toasts) is the only wiring.
+- **B2 — Resume import claimed "Uploaded & Parsed" for a file it never
+  uploaded.** Picking a file in the CV Studio dropzone rendered an emerald
+  "Uploaded & Parsed" badge and toasted "Extracted skills and contact profile
+  cache" — while no upload endpoint exists on `main` (CV upload is deferred
+  with the future `user` product, PM.md §2.1a), so nothing was uploaded,
+  parsed, extracted or cached. The panel now renders "Selected locally — no
+  upload" and the toast describes what actually happened, including that the
+  agent still works from the configured on-disk CV (`CV_PATH`/`CV_DIR`).
+  The filename also passes through `escapeHtml` before the `innerHTML` badge
+  now; previously it was interpolated raw.
+- **Guard tests — the first three concrete cases of the B3 demo-leak suite**
+  (`tests/e2e/smoke.test.mjs`): (1) #btnSyncSheets may only be wired by
+  `js/app.js` and its handler must call the live refresh (static, in header
+  layout contract); (2) a Sync click must issue the refresh, show an
+  outcome-keyed toast, and no "sync complete" copy may appear inside the
+  retired fake handler's 800ms window (behavioral, live API); (3) a CV pick
+  must render "Selected locally" and a "nothing was uploaded or parsed" toast
+  (behavioral).
+- **Frontend E2E: 77 passed, 0 failed** (Windows, full `npm test --prefix
+  tests/e2e`).
+- **Harness fix — pre-existing Windows flake, proven not caused by this diff:**
+  the full-suite run showed `tests/e2e/environment.test.mjs` cleanup failures
+  (EPERM removing the temp isolation dir; throwaway SQLite files apparently
+  still present after `stopApi`). A clean-HEAD stash-baseline run reproduced
+  the failure with the failing node **moving between tests** (101 vs 140) on
+  identical code — a kill→handle-release race, not app behavior. `cleanup()`
+  now waits (bounded, `waitFor`) for the throwaway DBs (`''`, `-wal`, `-shm`)
+  to vanish before the strict `assertRemoved`, and retries the temp-dir
+  `rmSync` on a ladder, warning instead of failing an otherwise-green test if
+  a genuine lock survives. Suite green on Windows after the fix.
+
+Still open from the audit: Q5 (store.js mock-label sweep), B4 (honest-demo
+pass on the remaining demo surfaces: demo shrink fallback, drawer save toast,
+package download demo mode), B5 table parity.
+
 ## 2026-10-21 (b) — review follow-up: title signals, zero-scoring, rejection rules, ranking transparency
 
 Five findings from the second review of the same 2026-10-18 run, verified

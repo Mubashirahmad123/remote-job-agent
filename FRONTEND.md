@@ -65,6 +65,15 @@ isolation checks and 4 review-polling checks (ten suites plus standalone cases).
 CI use the same suite list. Layout contracts are static/jsdom checks, not a
 real browser layout/visual pass.
 
+2026-10-28 run (Windows): **77 tests, 0 failed.** Adds three fake-success
+guard cases to smoke (audit B1/B2: Sync Sheets may only be wired by `js/app.js`
+and must show a real outcome; CV import must claim "selected locally", never
+"Uploaded & Parsed"), plus a hardened `environment.test.mjs` cleanup — the
+Windows EPERM / stale-throwaway-DB flake was reproduced on a clean-HEAD stash
+baseline (its failing test node moved between 101 and 140 on identical code)
+and fixed by waiting out the killed uvicorn's handle release before the strict
+assertions.
+
 `tracker.test.mjs` uses a separate opt-in server (`tracker_api.py`) with real
 tracker routes/cache/services and an in-memory fake worksheet. Synthetic rows
 cover status/review/count mapping, transitions/reload persistence, URL-only

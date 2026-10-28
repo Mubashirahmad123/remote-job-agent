@@ -286,6 +286,47 @@ describe('happy path — live API', () => {
     window.JobAgent.toast.show('check', 'warn');
     assert.ok(window.document.querySelector('.toast-icon.is-warn'), 'warn toasts need .toast-icon.is-warn');
   });
+
+  test('Sync Sheets fires the real refresh exactly once and never fakes success (B1)', async () => {
+    // navigation.js used to wire a second handler on this button that showed
+    // "Syncing..." and then, from its own 800ms setTimeout, a guaranteed
+    // "Google Sheets sync complete" toast — a success claim on work it never
+    // did, running beneath the real handler in app.js (audit 2026-10-18, B1).
+    const doc = ctx.window.document;
+    const btn = doc.getElementById('btnSyncSheets');
+    assert.ok(btn, 'btnSyncSheets missing');
+    const refreshHits = () => ctx.requests.filter((u) => u.includes('/api/jobs/refresh')).length;
+    const before = refreshHits();
+    btn.click();
+    await waitFor(() => refreshHits() > before, { label: 'POST /api/jobs/refresh issued' });
+    await waitFor(() => /refreshed|refresh failed/i.test(
+      doc.querySelector('.app-toast')?.textContent || ''), { label: 'the outcome toast' });
+    // Wait past the retired fake handler's 800ms window: on that regression
+    // its success copy would appear now and stay for the toast TTL.
+    await new Promise((r) => ctx.window.setTimeout(r, 950));
+    const toasts = [...doc.querySelectorAll('.app-toast')].map((t) => t.textContent).join(' | ');
+    assert.doesNotMatch(toasts, /sync complete/i);
+  });
+
+  test('CV import is labeled "selected locally" and claims no upload/parse (B2)', () => {
+    // handleUploadedFile() once rendered an emerald "Uploaded & Parsed" badge
+    // and toasted "Extracted skills and contact profile cache" — while no
+    // upload endpoint exists on main (deferred with the future `user`
+    // product, PM.md §2.1a), so nothing was ever uploaded, parsed, extracted
+    // or cached. The UI may only describe what actually happened.
+    const doc = ctx.window.document;
+    const studio = ctx.window.JobAgent.resumeStudio;
+    assert.ok(studio, 'resumeStudio not wired');
+    studio.handleUploadedFile('fixture_cv.pdf', 2048);
+    const zone = doc.getElementById('dropzoneActiveFile');
+    assert.ok(zone, 'dropzoneActiveFile missing');
+    assert.match(zone.textContent, /Current:\s*fixture_cv\.pdf/, zone.textContent);
+    assert.ok(zone.textContent.includes('Selected locally'), zone.textContent);
+    assert.doesNotMatch(zone.textContent, /& Parsed/, zone.textContent);
+    const toast = doc.querySelector('.app-toast');
+    assert.ok(toast, 'no toast rendered for the selection');
+    assert.match(toast.textContent, /nothing was uploaded or parsed/i, toast.textContent);
+  });
 });
 
 describe('failure path — API unreachable', () => {
@@ -594,6 +635,17 @@ describe('header layout contract', () => {
       assert.ok(tag, `no #${id} in index.html`);
       assert.match(tag[0], /aria-label="[^"]+"/, `#${id} loses its accessible name when a tier hides its label`);
     }
+  });
+
+  test('#btnSyncSheets has exactly one wiring owner — js/app.js (B1 guard)', () => {
+    // navigation.js once wired a second handler that faked a success toast
+    // from its own setTimeout (audit 2026-10-18, B1). Only app.js may
+    // subscribe to this button, and only to the real /api/jobs/refresh.
+    const nav = read('js/components/navigation.js');
+    assert.doesNotMatch(nav, /btnSyncSheets[^\n]*addEventListener/, 'navigation.js must never attach a listener to btnSyncSheets');
+    const app = read('js/app.js');
+    assert.match(app, /getElementById\('btnSyncSheets'\)/, 'app.js must remain the wiring owner');
+    assert.match(app, /refreshJobs/, 'the owner handler must call the live refresh');
   });
 
   test('#btnSignOut is the last item in .header-right', () => {

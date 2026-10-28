@@ -228,6 +228,21 @@ PM-2's backend (opt-in `MAYBE MATCHES` tab).
 Open from that audit: PM-2 dashboard UI, PM-3 (needs real CV variants),
 PM-5 manual review, and the B3 demo-leak e2e suite.
 
+**Status update 2026-10-28:** B1 and B2 are fixed (`CHANGELOG.md`
+2026-10-28) — the dashboard's two fake-success claims (double-wired Sync
+Sheets toast; "Uploaded & Parsed" for a file that is never uploaded) were
+removed at source without building any upload feature, and the first three
+concrete B3 demo-leak guard cases landed in `tests/e2e/smoke.test.mjs`.
+Frontend E2E is **77 passed, 0 failed** on Windows. During that run the
+`environment.test.mjs` Windows EPERM cleanup flake was reproduced on a
+clean-HEAD stash baseline (its failing node moved between tests on identical
+code — a kill→handle-release race, not app behavior) and fixed in the test
+fix in the test harness. Q5, B4, the remaining B3 scope and B5 stay open.
+Windows pytest disposition for A2 recorded in `TESTER.md` (2026-10-28):
+**1102 passed / 8 env-class failures**, all reproduced on a clean-HEAD
+baseline with identical node IDs (no Python touched by this diff); the Linux
+lock-only rerun at HEAD (A3) remains the closing gate.
+
 **Review follow-up 2026-10-21 (second review of the same run) — all five
 items closed:** title keywords are now derived from the CV's experience
 titles when `preferred_titles` is empty (the cached profile carries
@@ -270,9 +285,9 @@ baseline ratchets.
 
 | # | Task | Owner | Eff | Acceptance | Depends |
 |---|---|---|---|---|---|
-| B1 | Fix double-wired `btnSyncSheets` (`navigation.js:67-78`): remove fake spinner + unconditional toast | Software Engineer | S | Exactly one handler; toast reflects the real outcome | — |
-| B2 | Fix fake upload success (`resumeStudio.js:587-596`): no "Uploaded & Parsed" without an endpoint | Software Engineer | S | Honest disabled/error state; caught by B3 | — |
-| B3 | Demo-leak e2e suite (+ double-wiring + 401-mid-action recovery cases) | Software Engineer | M | Suite fails on any success-claim without a real API success; runs in CI | B1, B2 |
+| B1 | ✅ 2026-10-28 — Fix double-wired `btnSyncSheets` (`navigation.js:146-157` at fix time): the fake 800ms spinner + unconditional success toast removed; app.js's live handler is the only wiring | Software Engineer | S | Exactly one handler; toast reflects the real outcome — static + behavioral guard in smoke.test.mjs | — |
+| B2 | ✅ 2026-10-28 — Fix fake upload success (`resumeStudio.js:587-596` at fix time): no "Uploaded & Parsed"/extraction claims; renders "Selected locally — no upload" and an honest toast | Software Engineer | S | Honest state for a pick without an endpoint; caught by the new B2 guard case | — |
+| B3 | Demo-leak e2e suite (+ double-wiring + 401-mid-action recovery cases) — partial 2026-10-28: the 3 fake-success guard cases landed (single-wiring, no-fake-sync-toast, CV-pick honesty); 401-mid-action recovery and the remaining demo surfaces still open | Software Engineer | M | Suite fails on any success-claim without a real API success; runs in CI | B1, B2 |
 | B4 | Honest-demo pass: non-real filenames + explicit demo toast for corrupt demo artifacts; no silent `runShrinkEngine` fallback; Save toast, drawer boilerplate and identity panel labeled demo | Software Engineer | M | Every demo path visibly labeled; B3 extended | B3 |
 | B5 | Table parity + taxonomy: jobDesk TABLE loading/error/empty states; `_trackerColumn` includes `needs_review`; remove dead `appliedPackagesList` | Software Engineer | S | Table- and taxonomy-parity e2e green | B3 |
 | B6 | Tests for `PUT /api/cv/profile` (currently zero) | Senior Dev | S | Happy/invalid/partial-merge cases in `test_api_cv.py` | — |
