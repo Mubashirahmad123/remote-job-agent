@@ -129,6 +129,75 @@ edited store/dashboard/jobDrawer assets) and e2e material.
   above (failed 1 of 2 full runs, passes isolated and under load
   elsewhere). Linux CI remains the arbiter.
 
+### A1+A2+B6+B9 disposition (2026-10-28, portability + PUT cv-profile run)
+
+**A1 — portability hunks of `40e5fc1ab` applied by hand (4 utf-8 `read_text`
+fixes + url_guard path normalization).** Acceptance verified: with
+`PYTHONIOENCODING` unset, `tests/test_url_guard.py::test_the_scan_actually_finds_sinks`
+is RED→GREEN on Windows — the persistent env-class failure was a dict-key
+mismatch (`'agents\auto_applier.py'` vs the asserted `'agents/auto_applier.py'`; the
+report printer kept raw relpaths). Touched files suite: `test_url_guard +
+test_dependency_hygiene + test_embedding_cache + test_suite_hermeticity`
+= **172/172 passed**.
+
+**A2 — diagnosed before any skip (all previously-failing Windows nodes now
+green or justified skips):**
+
+- CrewAI pair was two distinct, verifyable causes, not an env-class unknown:
+  1. `offline_sdk`'s blanket `socket.connect` denial fired on a **Windows-only
+     false positive**: crewai's first event-bus emit lazily builds
+     `asyncio.new_event_loop()`; the Proactor self-pipe goes through stdlib
+     `socket.socketpair()`, which (no `AF_UNIX` pairs on Windows) binds,
+     listens and connects one ephemeral 127.0.0.1 pair to itself inside that
+     helper. The guard now exempts only calls whose immediate caller frame is
+     stdlib `socket.socketpair` (forwarded to the real connect; every other
+     connection, loopback included, stays denied + recorded). File after fix:
+     **7/7** (~57s).
+  2. `test_installed_crewai_metadata_accepts_patched_mcp` failed on **venv
+     drift**, not a pin problem: the lock is consistent (`crewai==1.6.1` +
+     `mcp==1.30.0`, both committed), but the local venv had crewai 1.14.7
+     whose `mcp~=1.26.0` dragged mcp to 1.26.0 during a partial sync. Full
+     re-sync to the lock (`uv pip install -r requirements.lock.txt`) restores
+     crewai 1.6.1 / mcp 1.30.0 / litellm 1.100.4 / fpdf2 2.8.8.
+- Docker heredoc ×5: root cause exact — `shutil.which("bash")` finds
+  `C:\Windows\system32\bash.EXE`, the WSL launcher stub (no distro installed),
+  which dies at `execvpe(/bin/bash)`. The guard is now a **functional probe**
+  (`bash -n` on `exit 0` must return 0): 8 passed / **5 justified skips**
+  with that reason on this host; Linux CI runs the check for real.
+- Two more full runs (background), tracking each backend increment:
+  - **1129 passed / 9 skipped** with A1+A2 only (pre-B6).
+  - **1140 passed / 9 skipped / 0 failed** with B6 included.
+  - **Final: 1145 passed / 9 skipped / 0 failed** (226s) with B6 + all of
+    B9 (wedged-run recovery, bad-tab-400s, screenshot content-sniff) — the
+    definitive local Windows count for this bundle. Every skip accounted
+    for below.
+
+**B6 — `tests/test_api_cv.py::TestPutCvProfile`, 11 new tests** (route
+contract + real-merge semantics of `cache.save_cv_profile`): file
+**21/21 passed** alone; the full-suite runs above include them.
+
+**B9 — bundle:** `test_api_phase2.py` wedged-run recovery
+(`test_wedged_run_blocks_then_restart_recovered`), bad-tab-400 for
+`/api/jobs` + `/api/apply/queue`, screenshot content-type honesty
+(text-named-.png → octet-stream; real PNG → image/png) in
+`test_error_disclosure.py`; touched-suite run **52/52 passed**.
+
+**Skip accounting for the 9 (zero unexplained):**
+5 × `test_docker_locked_dependencies.py::test_docker_ci_shell_commands_and_python_heredoc_parse[*]`
+— functional-Bash probe justification above;
+3 × `tests/test_image_leak_check.py:243` — Docker CI shell failure-injection
+requires POSIX Bash (env-conditional, pre-existing);
+1 × `tests/test_apply_submit_primitives.py:413` — Lever submit deferred, no
+live confirmation-text observation without a paid account (deliberate,
+documented).
+
+**Frontend E2E after B5-table/B3-401 additions: 88 passed / 0 failed** (85
+baseline + 3 new guards: outage table error row, empty-filter state in BOTH
+views, mid-action 401 bounce).
+
+The old env-class baseline (5 docker + 2+1 crewai + 1 url_guard as FAILURES)
+is retired by this section: those nodes are now green or justified skips.
+
 Security/CI remediation: `deploy/CI_FAILURE_REMEDIATION.md`. A fresh **168-package**
 locked installation passes dependency consistency. CrewAI is deliberately rolled
 back to 1.6.1 so patched MCP 1.30.0 satisfies its real metadata. Seven offline

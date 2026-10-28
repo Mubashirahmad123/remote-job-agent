@@ -231,6 +231,35 @@ Lever remains deferred — no trial account, documented skip.
 
 ---
 
+## 6b. Concurrency assumption — single supervised submit (AUDIT B7, 2026-10-28)
+
+The submit path keeps two independent one-per-job locks, both SQLite-backed
+and atomic:
+
+* `api.apply_claims.claim_first` — per-fingerprint claim; a second claim for
+  the SAME fingerprint while one is active raises `ClaimConflict` (409), and
+  concurrent DISTINCT fingerprints cannot overrun the daily cap. Both races
+  are barrier-synchronized tests against a real sqlite file
+  (`tests/test_apply_submit_primitives.py::test_concurrent_*`,
+  one-winner/one-row asserted), not just docs.
+* `api.apply_intents` — the intent token is validated and consumed
+  atomically *inside* the claim transaction, so a losing concurrent request
+  cannot burn it.
+
+Deliberate asymmetry vs. `api.fill_claims`: the fill path needs a heartbeat
+(`heartbeat_at` liveness) because a fill takes minutes of LLM/browser work.
+A submit is a short (~180 s capped) click sequence, so a TTL measured from
+`claimed_at` is the correct liveness test; adding a heartbeat there would
+only widen the double-submit window.
+
+Stated assumption, supervised-only by design: `SUBMIT_DRY_RUN` rehearsals and
+armed runs are driven by ONE operator, one tab, and the runbook's STOP points
+— the loader never races itself. If the submit path is ever opened to a
+multi-operator product, fund the heartbeat feature first; until then this
+document is the sign-off that the single-supervised-run assumption holds.
+
+---
+
 ## Run log
 
 ### 2026-10-03 — Democorp recon only (historical; metadata result superseded)

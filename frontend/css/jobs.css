@@ -368,6 +368,21 @@
   border-color: var(--accent-rose-bg);
 }
 
+/* Table view mirrors the card grid: loading, error and empty never render
+   as a blank <tbody> that looks like a layout bug (AUDIT B5, 2026-10-28). */
+.jobs-table-state {
+  padding: 34px 18px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.jobs-table-state.is-error {
+  color: var(--accent-rose);
+  background: var(--accent-rose-bg);
+  border-color: var(--accent-rose-bg);
+}
+
 /* --- Card head: score tile + role, company line directly under it ---------- */
 .job-card-head {
   display: flex;

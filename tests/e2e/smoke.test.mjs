@@ -183,6 +183,27 @@ describe('happy path — live API', () => {
     assert.ok(titles.includes('Senior back-end Engineer'), `got ${JSON.stringify(titles)}`);
   });
 
+  test('an empty filtered list states it in BOTH views, not just the cards (B5)', async () => {
+    // Drive the store through its real public API (the same path the search
+    // input uses). The card grid got its empty state in the first pass; the
+    // table view used to render a blank <tbody> that read as a layout bug.
+    const win = ctx.window;
+    win.JobAgent.store.setFilter('search', 'zzz-no-such-job-e2e');
+    try {
+      await waitFor(() => {
+        const el = win.document.getElementById('jobsGridContainer');
+        return el && el.textContent.includes('No remote jobs match') ? el : null;
+      }, { label: 'card grid empty state' });
+      const tbody = win.document.getElementById('jobsTableBody');
+      const stateRow = tbody && tbody.querySelector('tr td.jobs-table-state:not(.is-error)');
+      assert.ok(stateRow, `table must state emptiness, got: ${(tbody && tbody.innerHTML || '').slice(0, 160)}`);
+      assert.match(stateRow.textContent, /No remote jobs match/);
+    } finally {
+      // Must land before the next test re-renders with demos data.
+      win.JobAgent.store.setFilter('search', '');
+    }
+  });
+
   test('no "undefined" / "NaN" / "[object Object]" leaks into rendered text', () => {
     const body = ctx.window.document.body.textContent;
     for (const bad of ['undefined', 'NaN', '[object Object]']) {
@@ -544,6 +565,18 @@ describe('failure path — API unreachable', () => {
       'must not claim mock data that was never shipped');
   });
 
+  test('the job desk TABLE also states the API error, never a blank tbody (B5)', async () => {
+    // The card grid got this banner in the first pass; the table view used
+    // to render an empty <tbody> that read as a layout bug.
+    const body = await waitFor(() => {
+      const el = ctx.window.document.getElementById('jobsTableBody');
+      return el && el.textContent.includes('API error') ? el : null;
+    }, { label: 'jobs table error row' });
+    const stateRow = body.querySelector('tr td.jobs-table-state.is-error');
+    assert.ok(stateRow, `expected an .jobs-table-state.is-error row, got: ${body.innerHTML.slice(0, 160)}`);
+    assert.match(stateRow.textContent, /API error/);
+  });
+
   test('no fabricated numbers appear anywhere during an outage', () => {
     const body = ctx.window.document.body.textContent;
     assert.ok(!/\b(147|24|1,?247)\b/.test(body),
@@ -705,6 +738,33 @@ describe('login flow — auth enforced', () => {
       const r = await fetch(`${authed.base}/api/health`, { headers: { Cookie: cookie } });
       return r.status === 401 ? true : null;
     }, { label: 'session invalidated server-side' });
+  });
+
+  test('a mid-action 401 bounces the live page to login instead of failing silently (B3)', async () => {
+    // Recovery contract: the session dies while the dashboard is up (expiry,
+    // another-device logout) and the FIRST API call afterwards redirects the
+    // whole page to login.html. A silent 401 here means every action on screen
+    // keeps failing while looking alive.
+    const cookie = await authed.login();
+    const mctx = await loadDashboard(authed.base, { cookie });
+    await waitFor(() => {
+      const el = mctx.window.document.getElementById('sessionChip');
+      return el && !el.classList.contains('hidden') ? el : null;
+    }, { label: 'session chip' });
+
+    // Revoke OUTSIDE the page, exactly as expiry/other-device logout does.
+    const kill = await fetch(`${authed.base}/api/auth/logout`, {
+      method: 'POST', headers: { Cookie: cookie },
+    });
+    assert.ok(kill.ok, 'external revocation should succeed');
+
+    // A mid-action call from the page: the harness still carries the (now
+    // dead) cookie, so the server answers 401 and api.js must bounce.
+    mctx.window.JobAgent.api.getStats().catch(() => {}); // redirect throws by design
+    await waitFor(() => (mctx.navigations.length ? mctx.navigations : null),
+      { label: 'mid-action 401 redirect' });
+    assert.ok(mctx.requests.some((u) => u.includes('/api/stats')),
+      'the bounce must have been triggered by a real API call');
   });
 
   test('an unauthenticated dashboard load is bounced to the login page', async () => {

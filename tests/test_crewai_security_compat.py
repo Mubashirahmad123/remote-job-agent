@@ -8,6 +8,7 @@ import ast
 from importlib.metadata import requires, version
 from pathlib import Path
 import socket
+import sys
 
 from packaging.requirements import Requirement
 from packaging.version import Version
@@ -24,7 +25,25 @@ def offline_sdk(monkeypatch):
     monkeypatch.setenv('LITELLM_LOCAL_MODEL_COST_MAP', 'true')
     attempts = []
 
+    # Windows-only loopback exemption, identified by CALL SITE, not address.
+    # Crewai's first event-bus emit lazily builds `asyncio.new_event_loop()`;
+    # on Windows the Proactor self-pipe runs through the stdlib
+    # socket.socketpair() helper, which — Windows having no AF_UNIX
+    # socketpairs — binds, listens and connects one ephemeral 127.0.0.1 pair
+    # to itself inside that helper as a loop wake-up wire. Both endpoints
+    # originate in the immediate call site, so this pipeline is structurally
+    # incapable of contacting any real service; we forward it to the real
+    # connect so the loop machinery works. Every other connection — including
+    # loopback service attempts like litellm's telemetry — stays denied and
+    # recorded. On Linux the Unix-socket pair is connected by socketpair()
+    # itself and never calls connect(), so the exemption is inert there.
+    real_connect = socket.socket.connect
+
     def deny_network(*args, **kwargs):
+        caller = sys._getframe(1)
+        code = caller.f_code
+        if code.co_name == 'socketpair' and code.co_filename.endswith('socket.py'):
+            return real_connect(*args, **kwargs)
         attempts.append('network connection')
         raise AssertionError('SDK compatibility tests must not contact any service')
 

@@ -86,10 +86,39 @@ class TestStartScrape:
         final = _wait_for(client, first.json()["run_id"])
         assert final["status"] == "done"
 
+    def test_wedged_run_blocks_then_restart_recovered(self, client, monkeypatch):
+        """AUDIT B9 (2026-10-28): there is no watchdog on purpose — api/runs.py
+        documents why a recorded-only watchdog would be worse than the 409.
+        The documented operator recovery for a wedged run is an API restart,
+        which empties the in-memory registry and clears the 409. This test
+        pins that contract so the caveat cannot silently stop being true."""
+        release = threading.Event()
+
+        def hang(progress, tracker=None):
+            release.wait(timeout=15.0)
+            return {"scraped": 0, "curated": 0}
+
+        monkeypatch.setattr(runs, "_run_simple_pipeline", hang)
+        first = client.post("/api/scrape")
+        assert first.status_code == 202
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            if (runs.get_run(first.json()["run_id"]) or {}).get("status") == "running":
+                break
+            time.sleep(0.05)
+        assert (runs.get_run(first.json()["run_id"]) or {}).get("status") == "running"
+        second = client.post("/api/scrape")
+        assert second.status_code == 409
+        # Restart-equivalent recovery: the registry is in-memory, so a restart
+        # IS a registry clear — the wedged thread dies with the process.
+        runs.reset_registry()
+        third = client.post("/api/scrape")
+        assert third.status_code == 202
+        release.set()
+
     def test_worker_error_recorded(self, client, monkeypatch, caplog):
         def boom(progress, tracker=None):
             raise RuntimeError("boards exploded")
-
         monkeypatch.setattr(runs, "_run_simple_pipeline", boom)
         r = client.post("/api/scrape")
         assert r.status_code == 202
