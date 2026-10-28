@@ -75,6 +75,32 @@ new tests, and the failure set proved pre-existing:
   it; recorded as a timing flake, not a behavior regression. Linux CI
   remains the arbiter.
 
+### B4/B5/Q5 disposition (2026-10-28, frontend demo-honesty run)
+
+Backend delta this slice is `api/cache.py` docstring text only; every other
+change is frontend JS, `index.html` metadata (labels + `?v=10` stamps for the
+edited store/dashboard/jobDrawer assets) and e2e material.
+
+- **Frontend E2E: 85 passed / 0 failed, twice consecutively** with the
+  B4/B5/Q5 diff applied — the 80 baseline plus five new guards (B4 ×3:
+  persistent failure reason on the demo card with "unreachable"
+  misattribution banned; drawer tailor-target effect with the phantom
+  "bookmarked" copy banned; honest package-download refusal. B5:
+  column-parity mapping incl. `needs_review → review`. Q5: "fallback to
+  mock" banned from live-loader sources). One earlier 85-node run showed a
+  single failure: `TypeError … getElementById` at `app.js:51` inside
+  `environment.test.mjs`'s boot test — a jsdom window closed while app.js's
+  `await store.loadAll()` continuation was still pending. Not reproduced on
+  a clean-HEAD stash run (80/80); the harness now settles 300 ms before
+  `ctx.window.close()`, and the two follow-up full runs went 85/85.
+  Harness-only fix; app code untouched.
+- **Windows pytest full run: 1125 passed, 4 skipped, 8 failed + 1 error** —
+  the failure set is node-identical to the recorded env-class baseline (5×
+  docker heredoc, 2+1 crewai, 1 url_guard). The `test_action_rate_limit`
+  timing node passed this run, consistent with its flake classification
+  above (failed 1 of 2 full runs, passes isolated and under load
+  elsewhere). Linux CI remains the arbiter.
+
 Security/CI remediation: `deploy/CI_FAILURE_REMEDIATION.md`. A fresh **168-package**
 locked installation passes dependency consistency. CrewAI is deliberately rolled
 back to 1.6.1 so patched MCP 1.30.0 satisfies its real metadata. Seven offline

@@ -230,16 +230,23 @@ demo-leak e2e suite. **PM-3 is closed (2026-10-28):** real CV variants ship
 through `POST /api/cv/upload` into `CV_DIR` (Option A — the existing
 CVLibrary machinery is activated; see `CHANGELOG.md` 2026-10-28).
 
-**Status update 2026-10-28:** B1 and B2 are fixed (`CHANGELOG.md`
+**Status update 2026-10-28 (b):** B1 and B2 are fixed (`CHANGELOG.md`
 2026-10-28) — the dashboard's two fake-success claims (double-wired Sync
 Sheets toast; "Uploaded & Parsed" for a file that is never uploaded) were
 removed at source without building any upload feature, and the first three
-concrete B3 demo-leak guard cases landed in `tests/e2e/smoke.test.mjs`.
-Frontend E2E is **77 passed, 0 failed** on Windows. During that run the
-`environment.test.mjs` Windows EPERM cleanup flake was reproduced on a
-clean-HEAD stash baseline (its failing node moved between tests on identical
-code — a kill→handle-release race, not app behavior) and fixed in the test
-fix in the test harness. Q5, B4, the remaining B3 scope and B5 stay open.
+concrete B3 demo-leak guard cases landed in `tests/e2e/smoke.test.mjs`
+(the remaining B3 scope stays open). **Q5, B4 and B5 are also fixed the
+same day** (`CHANGELOG.md` 2026-10-28: demo-surface disclosure — generation
+failure reason pinned on the preview card, drawer save recast to the real
+tailor-target mechanic, fake `Apply_Package.zip` download replaced by an
+honest refusal; `needs_review` added to `dashboard._trackerColumn()`;
+mock-wording sweep). Frontend E2E after those land: recorded in
+`TESTER.md` (2026-10-28). The `environment.test.mjs` Windows EPERM
+cleanup flake was reproduced on a clean-HEAD stash baseline (its failing
+node moved between tests on identical code — a kill→handle-release race,
+not app behavior) and fixed in the test harness; two same-class findings
+were fixed later that day (a second EPERM cleanup site, and a jsdom
+boot-continuation race before `window.close()`).
 Windows pytest disposition for A2 recorded in `TESTER.md` (2026-10-28):
 **1102 passed / 8 env-class failures**, all reproduced on a clean-HEAD
 baseline with identical node IDs (no Python touched by this diff); the Linux
@@ -289,9 +296,9 @@ baseline ratchets.
 |---|---|---|---|---|---|
 | B1 | ✅ 2026-10-28 — Fix double-wired `btnSyncSheets` (`navigation.js:146-157` at fix time): the fake 800ms spinner + unconditional success toast removed; app.js's live handler is the only wiring | Software Engineer | S | Exactly one handler; toast reflects the real outcome — static + behavioral guard in smoke.test.mjs | — |
 | B2 | ✅ 2026-10-28 — Fix fake upload success (`resumeStudio.js:587-596` at fix time): no "Uploaded & Parsed"/extraction claims; renders "Selected locally — no upload" and an honest toast | Software Engineer | S | Honest state for a pick without an endpoint; caught by the new B2 guard case | — |
-| B3 | Demo-leak e2e suite (+ double-wiring + 401-mid-action recovery cases) — partial 2026-10-28: the 3 fake-success guard cases landed (single-wiring, no-fake-sync-toast, CV-pick honesty); 401-mid-action recovery and the remaining demo surfaces still open | Software Engineer | M | Suite fails on any success-claim without a real API success; runs in CI | B1, B2 |
-| B4 | Honest-demo pass: non-real filenames + explicit demo toast for corrupt demo artifacts; no silent `runShrinkEngine` fallback; Save toast, drawer boilerplate and identity panel labeled demo | Software Engineer | M | Every demo path visibly labeled; B3 extended | B3 |
-| B5 | Table parity + taxonomy: jobDesk TABLE loading/error/empty states; `_trackerColumn` includes `needs_review`; remove dead `appliedPackagesList` | Software Engineer | S | Table- and taxonomy-parity e2e green | B3 |
+| B3 | Demo-leak e2e suite (+ double-wiring + 401-mid-action recovery cases) — partial 2026-10-28: the 3 fake-success guard cases landed (single-wiring, no-fake-sync-toast, CV-pick honesty), plus the B4/B5/Q5 guards below; 401-mid-action recovery and the remaining demo surfaces still open | Software Engineer | M | Suite fails on any success-claim without a real API success; runs in CI | B1, B2 |
+| B4 | ✅ 2026-10-28 — the three lying demo surfaces closed (`CHANGELOG.md` 2026-10-28): a failed live generation pins its reason PERSISTENTLY on the preview card via `runShrinkEngine({reason})` and never blames "API unreachable" for HTTP failures; the drawer save's phantom "saved list" toast recast to the real tailor-target mechanic (button relabeled "Tailor target"); the fake `Apply_Package.zip` download replaced by an honest refusal, demo cover downloads disclosed | Software Engineer | M | Five new e2e guards (persistent reason, no-unreachable-misattribution, drawer effect + dead copy banned, honest refusal); demo card keeps its `demoBadge` sheets | — |
+| B5 | Partial 2026-10-28: `_trackerColumn` now includes `needs_review` (dashboard pipeline metrics stop bucketing those rows as "applied"; mapping-table guard in smoke.test.mjs). Still open: jobDesk TABLE loading/error/empty states; removing dead `appliedPackagesList` | Software Engineer | S | Table- and taxonomy-parity e2e green | B3 |
 | B6 | Tests for `PUT /api/cv/profile` (currently zero) | Senior Dev | S | Happy/invalid/partial-merge cases in `test_api_cv.py` | — |
 | B7 | Submit-claim heartbeat/fencing parity with the fill path — or a documented single-supervised-run assumption | Senior Dev | M | Concurrent-claim rejection tested, or sign-off note in `LIVE_SUBMIT.md` before any dry run | A5 |
 | B8 | `days_ago()` stub (`agents/scrapper.py:176-178`): restore date filtering per PO #4 | Junior Dev | S | Date filter functional + tested, or bypass documented as deliberate | PO #4 |

@@ -56,6 +56,7 @@ JobAgent.dashboard = {
       'review',
       'filled_ready',
       'filled_ready_submit_disabled',
+      'needs_review',
       'custom_questions',
       'package_only',
       'email_draft',

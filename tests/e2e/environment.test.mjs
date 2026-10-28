@@ -175,6 +175,13 @@ for (const commentStyle of [false, true]) {
         assertRemoved(environment.AUTH_DB_PATH);
         assertRemoved(environment.APPLY_STATE_DB_PATH);
       } finally {
+        // Flush any pending boot continuation (app.js DOMContentLoaded
+        // listeners awaiting loadAll()) before the jsdom window closes.
+        // Closing mid-continuation races it against the torn-down global
+        // and surfaced once as 'Cannot read properties of undefined
+        // (reading getElementById)' in app.js under full-suite load (only
+        // run of the day); a 300ms settle removes the race deterministically.
+        await new Promise((r) => setTimeout(r, 300));
         ctx?.window.close();
         await cleanup(api, root);
       }

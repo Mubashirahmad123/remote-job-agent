@@ -388,6 +388,97 @@ describe('happy path — live API', () => {
     assert.match(studio, /this\.uploadCvFile\(f\b/, 'both file pickers must route through uploadCvFile');
     assert.doesNotMatch(studio, /this\.handleUploadedFile\(file\.name/, 'change/drop handlers must not bypass the upload path');
   });
+
+  test('dashboard column mapping counts needs_review as review (B5 tracker parity)', () => {
+    // The dashboard metrics used to bucket needs_review under 'applied'
+    // while the tracker itself knew the column — a silent count drift.
+    const dashboard = ctx.window.JobAgent.dashboard;
+    assert.ok(dashboard && typeof dashboard._trackerColumn === 'function',
+      'dashboard._trackerColumn missing');
+    assert.equal(dashboard._trackerColumn('needs_review'), 'review');
+    for (const [status, column] of [
+      ['review', 'review'], ['filled_ready', 'review'], ['package_only', 'review'],
+      ['applied', 'applied'], ['interviewing', 'interview'], ['offer', 'offer'],
+      ['rejected', 'archived'],
+    ]) {
+      assert.equal(dashboard._trackerColumn(status), column,
+        `column mapping drifted for status ${status}`);
+    }
+  });
+
+  test('a failed live generation shows the demo card with a persistent reason', async () => {
+    // The old behavior: a 3.2s warn toast, then the demo engine rendered a
+    // package indistinguishable from generated material (and even blamed
+    // 'the API is unreachable' while the API had just answered 500).
+    const doc = ctx.window.document;
+    const studio = ctx.window.JobAgent.resumeStudio;
+    const btn = doc.getElementById('btnGenerateTailored');
+    assert.ok(btn, 'btnGenerateTailored missing');
+    const select = doc.getElementById('tailorJobSelect');
+    const liveOption = [...select.options].find(
+      (o) => o.value && !/^mock-/.test(o.value) && !/^\d+$/.test(o.value));
+    if (liveOption) select.value = liveOption.value;
+    const origResume = ctx.window.JobAgent.api.createResume;
+    ctx.window.JobAgent.api.createResume = () => Promise.reject(new Error('HTTP 500: boom'));
+    try {
+      btn.click();
+      const note = await waitFor(() => {
+        const card = doc.getElementById('generatedPreviewCard');
+        const el = card && card.querySelector('.package-notice');
+        return (el && el.textContent.includes('Live generation failed')) ? el : null;
+      }, { label: 'persistent demo reason on the preview card', timeout: 15000 });
+      assert.match(note.textContent, /not generated material/);
+      assert.doesNotMatch(note.textContent, /unreachable/i,
+        'an HTTP failure must not be mislabeled as an outage');
+      assert.equal(btn.disabled, false, 'the generate button must recover for a retry');
+    } finally {
+      ctx.window.JobAgent.api.createResume = origResume;
+    }
+  });
+
+  test('the drawer save button sets the real tailor target, not a phantom bookmark', () => {
+    // The old toast claimed 'Job bookmarked in your saved list' — a list
+    // that exists nowhere. The button now performs the real Tailor-target
+    // mechanic; the guard pins copy AND effect.
+    const restore = ctx.window.JobAgent.store.state.selectedJob;
+    try {
+      ctx.window.JobAgent.store.state.selectedJob = {
+        job_title: 'Backend Dev (B4 fixture)', job_fingerprint: 'fp-e2e-b4', id: 1,
+      };
+      const drawer = ctx.window.JobAgent.jobDrawer;
+      assert.ok(drawer && drawer.btnDrawerSave, 'btnDrawerSave wiring missing');
+      drawer.btnDrawerSave.click();
+      const toasts = [...ctx.window.document.querySelectorAll('.app-toast')]
+        .map((t) => t.textContent).join(' | ');
+      assert.doesNotMatch(toasts, /bookmarked/i, 'the phantom saved-list copy must stay dead');
+      assert.match(toasts, /Tailor target set/, toasts);
+    } finally {
+      ctx.window.JobAgent.store.state.selectedJob = restore;
+    }
+  });
+
+  test('demo package download refuses honestly instead of shipping a fake .zip', () => {
+    const doc = ctx.window.document;
+    const studio = ctx.window.JobAgent.resumeStudio;
+    const btn = doc.getElementById('btnDownloadPackage');
+    assert.ok(btn, 'btnDownloadPackage missing');
+    studio.lastResult = null;
+    btn.click();
+    const toasts = [...doc.querySelectorAll('.app-toast')].map((t) => t.textContent).join(' | ');
+    assert.match(toasts, /No live package to download/i, toasts);
+    assert.doesNotMatch(toasts, /Downloading tailored package/, toasts);
+  });
+
+  test('stale mock wording stays out of the live-loaders sources (Q5)', () => {
+    // The mock corpus never existed in this codebase; a 'fallback to mock'
+    // claim anywhere (comment or console copy) is the stale wording the
+    // audit flagged — including the '[store] stats fallback to mock' warn.
+    const read = (rel) => readFileSync(resolve(REPO, 'frontend', rel), 'utf8');
+    for (const rel of ['js/store.js', 'js/components/dashboard.js', 'js/app.js']) {
+      assert.doesNotMatch(read(rel), /fallback to mock/i,
+        `${rel} still claims a mock fallback that never existed`);
+    }
+  });
 });
 
 describe('failure path — API unreachable', () => {

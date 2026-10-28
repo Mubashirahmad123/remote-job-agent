@@ -279,7 +279,8 @@ def data_source() -> str:
 
     "sheets"   — service account + sheet ID wired (live source of truth).
     "snapshot" — Sheets unwired, but a local scrape snapshot exists.
-    "empty"    — neither; API returns [] and UI shows mock fallback.
+    "empty"    — neither; API returns [] and the UI shows an explicit
+        empty/outage state (no mock fallback exists in the frontend).
     """
     if sheets_configured():
         return "sheets"

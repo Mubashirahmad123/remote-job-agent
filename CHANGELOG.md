@@ -1,5 +1,48 @@
 # CHANGELOG.md
 
+## 2026-10-28 — audit B4 + B5 + Q5: the remaining fake/demo surfaces close
+
+- **B4 — the three demo surfaces now disclose themselves:**
+  1. *Generation catch → demo engine.* A live-generation failure previously
+     left only a 3.2s toast, then `runShrinkEngine()` rendered a package
+     indistinguishable from generated material, and its final toast blamed
+     "the API is unreachable" even when the API had just answered 500. Now
+     the failure reason is pinned PERSISTENTLY on the preview card
+     (`.package-notice`, `textContent`-only) via `runShrinkEngine({reason})`,
+     and the card toast reads "Demo package ready — not generated
+     material." — the why outlives the toast TTL.
+  2. *Drawer save.* The toast claimed "Job bookmarked in your saved list"
+     — no saved list exists anywhere in this product. The button now
+     performs the job card's real Tailor mechanic (`setSelectedJob`, with
+     the `rja_tailor_fp` queue fallback) and says so; the button is
+     relabeled "Tailor target".
+  3. *Demo package download.* The old fallback downloaded
+     `Apply_Package.zip` whose body was the text `PK [demo package]` — a
+     fake archive. It now refuses honestly with a warn toast. Demo/missing
+     cover-letter downloads keep working but carry self-labeling content
+     and a disclosure toast.
+- **B5 — `dashboard._trackerColumn()` was missing `needs_review`** — the
+  tracker itself mapped the status, but dashboard pipeline metrics silently
+  bucketed those rows under "applied". Now mapped `needs_review → review`,
+  with a guard test pinning the whole mapping table against tracker parity.
+- **Q5 — stale mock wording** swept: the `[store] stats fallback to mock`
+  console copy, the store header's "loaders (live with mock fallback)", the
+  `dataSource: 'mock'` placeholder comment, the Studio's "mockData.js
+  fallback" comment, and `api/cache.py data_source()`'s "UI shows mock
+  fallback" docstring. No behavior change (the pre-health `'mock'`
+  placeholder value that consumers branch on stays — its comment now says
+  that plainly).
+- **e2e guards (+5 in smoke.test.mjs):** column-parity mapping; the
+  persistent-reason failed-generation flow; drawer tailor-target effect
+  with the old "bookmarked" copy banned; the honest package-download
+  refusal; and "fallback to mock" strings banned from live-loader sources.
+  Harness: environment.test.mjs now settles 300ms before `window.close()`
+  so a pending app.js boot continuation cannot race the torn-down jsdom
+  global (observed once during the day's full-suite runs as
+  `document is undefined` in app.js:51; did not reproduce on a clean-HEAD
+  run, nor after the settle across two further full runs).
+- Final run counts are recorded in `TESTER.md`.
+
 ## 2026-10-28 — Option A: CV upload ships — the dropzone registers real tagged variants
 
 The B2 story had the honest state but no feature: without an endpoint, picking

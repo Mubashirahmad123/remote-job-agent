@@ -65,8 +65,35 @@ JobAgent.jobDrawer = {
     }
 
     if (this.btnDrawerSave) {
+      // The old toast invented a "saved list" that exists nowhere (audit B4).
+      // The real equivalent is the job-card Tailor mechanic: set the Studio
+      // tailor target now, or queue it for the Studio's next populate.
       this.btnDrawerSave.addEventListener('click', () => {
-        JobAgent.toast.show('Job bookmarked in your saved list.');
+        const job = JobAgent.store.state.selectedJob;
+        if (!job || !(String(job.job_title || '') || String(job.job_fingerprint || job.id || ''))) {
+          JobAgent.toast.show('No open job to set as a tailor target.', 'warn');
+          return;
+        }
+        let synced = false;
+        if (JobAgent.resumeStudio && typeof JobAgent.resumeStudio.setSelectedJob === 'function') {
+          synced = JobAgent.resumeStudio.setSelectedJob(job);
+        }
+        if (!synced) {
+          try {
+            let v = String(job.job_fingerprint || job.id || '');
+            if (/^[1-9]\d*$/.test(v)) v = 'mock-' + v;
+            if (v) {
+              localStorage.setItem('rja_tailor_fp', v);
+              if (JobAgent.resumeStudio) JobAgent.resumeStudio._pendingTailorFp = v;
+              synced = true;
+            }
+          } catch (_) { /* storage unavailable */ }
+        }
+        if (synced) {
+          JobAgent.toast.show('Tailor target set: ' + (job.job_title || 'job') + '. Select it in the Studio dropdown.');
+        } else {
+          JobAgent.toast.show('Could not set the tailor target — storage unavailable.', 'warn');
+        }
       });
     }
 

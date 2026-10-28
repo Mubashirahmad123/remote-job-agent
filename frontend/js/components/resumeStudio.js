@@ -223,9 +223,9 @@ JobAgent.resumeStudio = {
     if (!this.tailorJobSelect) return;
     const jobs = this._jobs();
     if (!jobs.length) {
-      // Nothing in the store yet: show a disabled loading/demo placeholder
-      // instead of stale hardcoded companies. Never leave Kobo/Bjak/Airspace
-      // demo rows visible here — they now live only in mockData.js fallback.
+      // Nothing in the store yet: show a disabled loading placeholder
+      // instead of stale hardcoded companies. The former mockData.js demo
+      // rows never re-appear here (mockData.js was removed entirely).
       this.tailorJobSelect.innerHTML = '<option value="">Loading live jobs from /api/jobs…</option>';
       this.tailorJobSelect.value = '';
       this.tailorJobSelect.disabled = true;
@@ -374,18 +374,41 @@ JobAgent.resumeStudio = {
       <div class="mock-text" style="white-space: pre-wrap;">${this.escapeHtml(body)}</div>`;
   },
 
-  _showPackageCard({ filename, jobTitle, company, resumeHtml, coverHtml, defaultTab }) {
+  _showPackageCard({ filename, jobTitle, company, resumeHtml, coverHtml, defaultTab, notice }) {
     // Stores both sheet views, paints the requested tab, unhides the card.
+    // `notice` optionally pins a persistent why-demo/why-failed banner (B4);
+    // real generated results pass none and any stale banner is cleared.
     this._resumeHtml = resumeHtml || '';
     this._coverHtml = coverHtml || '';
     this._previewTab = defaultTab === 'cover' ? 'cover' : 'resume';
     if (!this.generatedPreviewCard) return;
+    this._setPackageNotice(notice || '');
     const header = this.generatedPreviewCard.querySelector('.doc-preview-meta h4');
     if (header) header.innerHTML = `Tailored Package Generated: <code>${this.escapeHtml(filename || 'resume.pdf')}</code>`;
     const meta = this.generatedPreviewCard.querySelector('.doc-meta-info');
     if (meta) meta.textContent = `${jobTitle || ''}${company ? ' @ ' + company : ''} • 1 Page ATS Verified`.trim() || '1 Page ATS Verified';
     this._paintPreviewTab();
     this.generatedPreviewCard.classList.remove('hidden');
+  },
+
+  _setPackageNotice(text) {
+    // Persistent honesty banner on the package card (audit B4): a demo/
+    // failure reason set via textContent only (it may embed API error text),
+    // removed for real generated results. The whole demo package also keeps
+    // its demoBadge sheets, so two independent signals label the render.
+    if (!this.generatedPreviewCard) return;
+    let note = this.generatedPreviewCard.querySelector('.package-notice');
+    if (!text) {
+      if (note) note.remove();
+      return;
+    }
+    if (!note) {
+      note = document.createElement('div');
+      note.className = 'package-notice';
+      note.setAttribute('role', 'status');
+      this.generatedPreviewCard.insertAdjacentElement('afterbegin', note);
+    }
+    note.textContent = text;
   },
 
   _paintPreviewTab() {
@@ -544,8 +567,14 @@ JobAgent.resumeStudio = {
         // Live result for the selected job, or the demo package (fp 'demo').
         if (r && r.coverText && (r.fp === this.selectedFingerprint() || r.fp === 'demo')) {
           this.triggerDownload(r.coverFilename || 'cover_letter.txt', r.coverText);
+          if (r.fp !== this.selectedFingerprint()) {
+            JobAgent.toast.show('Downloaded the demo cover letter — placeholder text, not generated material.', 'warn');
+          }
         } else {
-          this.triggerDownload('Cover_Letter.txt', 'Dear Hiring Team,\n\nI am writing to express my strong interest... (demo)');
+          // No generated letter exists: the file self-labels as demo AND the
+          // toast discloses it — never a silent download (audit B4).
+          this.triggerDownload('Cover_Letter.txt', 'Dear Hiring Team,\n\nI am writing to express my strong interest... (demo placeholder — generate for a live job)');
+          JobAgent.toast.show('No generated cover letter yet — the file downloaded is demo placeholder text.', 'warn');
         }
       });
     }
@@ -560,7 +589,9 @@ JobAgent.resumeStudio = {
           }, 800);
           JobAgent.toast.show('Downloading tailored package (resume + cover letter).');
         } else {
-          this.triggerDownload('Apply_Package.zip', 'PK [demo package]');
+          // Honest refusal, no fake archive (audit B4): the old 'PK [demo
+          // package]' file looked like a real zip carrying nothing.
+          JobAgent.toast.show('No live package to download yet. Select a live job and press Generate first.', 'warn');
         }
       });
     }
@@ -701,7 +732,9 @@ JobAgent.resumeStudio = {
       JobAgent.toast.show(live
         ? 'Selected job has no live fingerprint. Showing a demo package instead.'
         : 'No live jobs loaded. Running the demo tailor engine instead.', 'warn');
-      this.runShrinkEngine();
+      this.runShrinkEngine({
+        reason: 'No live fingerprint selected — this preview is the demo render, not generated material.',
+      });
       return;
     }
     if (this.shrinkProgressCard) this.shrinkProgressCard.classList.remove('hidden');
@@ -724,8 +757,14 @@ JobAgent.resumeStudio = {
       this.showResult(resume, letter);
       JobAgent.toast.show('Tailored resume + cover letter generated successfully!');
     } catch (e) {
-      JobAgent.toast.show('Live generation failed (' + (e && e.message ? e.message : 'unknown error') + '). Showing a demo package instead.', 'warn');
-      this.runShrinkEngine();
+      const detail = (e && e.message ? e.message : 'unknown error');
+      JobAgent.toast.show('Live generation failed (' + detail + '). Showing the demo package instead.', 'warn');
+      // The failure reason persists on the card — a 3.2s toast is not
+      // enough for the demo fallback to be non-deceptive (audit B4).
+      this.runShrinkEngine({
+        reason: 'Live generation failed: ' + detail
+          + '. This preview is the demo render — not generated material.',
+      });
     } finally {
       this.btnGenerateTailored.disabled = false;
     }
@@ -1088,10 +1127,13 @@ JobAgent.resumeStudio = {
     this._note(this.variantsStatusNote, 'Variant added locally. Drop the file in cvs/ to persist it server-side.', false);
   },
 
-  runShrinkEngine() {
+  runShrinkEngine(context) {
     // Simulated demo (offline fallback) — renders DYNAMIC preview from the
     // selected job + parsed profile so no hardcoded KoboToolbox/Mubashir
-    // fixture is ever shown.
+    // fixture is ever shown. An optional { reason } — why this run is a
+    // demo (no live fingerprint / live generation failed) — is pinned
+    // PERSISTENTLY on the package card: the why must survive the toast TTL
+    // (audit B4), and the card never reads as generated material.
     if (this.shrinkProgressCard) this.shrinkProgressCard.classList.remove('hidden');
     if (this.generatedPreviewCard) this.generatedPreviewCard.classList.add('hidden');
 
@@ -1136,8 +1178,10 @@ JobAgent.resumeStudio = {
         coverText: demoLetter,
         resumeHtml, coverHtml,
       };
-      this._showPackageCard({ filename, jobTitle, company, resumeHtml, coverHtml, defaultTab: 'resume' });
-      JobAgent.toast.show('Demo package ready. The API is unreachable, so live data will replace this.');
+      this._showPackageCard({ filename, jobTitle, company, resumeHtml, coverHtml, defaultTab: 'resume',
+        notice: (context && context.reason) || '' });
+      JobAgent.toast.show('Demo package ready — not generated material.'
+        + ((context && context.reason) ? ' The reason stays on the preview card.' : ''));
     }, 2000);
   },
 
