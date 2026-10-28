@@ -25,6 +25,14 @@ reproduced on a clean-HEAD stash baseline (failing node moved between tests
 on identical code — kill→handle-release race) and fixed in the e2e harness,
 not in app code.
 
+2026-10-28 follow-up (Option A run): frontend E2E is **80 passed, 0 failed**
+— the 77 baseline plus three CV-upload guards (confirmed-upload contract,
+wiring chain, outage fallback). A second EPERM cleanup site in
+`environment.test.mjs` (negative-control `finally`) was fixed with the same
+retry ladder used by `cleanup()`; the node that failed in the first full run
+of the day (`30668ms`, timeout-wait on a locked throwaway dir) now passes in
+~8s.
+
 ## Windows pytest disposition (2026-10-28) — evidence for PM.md §1a A2
 
 Full local Windows run: **1102 passed, 8 failed, 4 skipped, 275s**. The 8
@@ -44,6 +52,28 @@ clean HEAD with every node ID identical, on a diff that touches no Python
 So the count supplied for A2's reconciliation: local Windows 1102 passed /
 8 env-class failures; the Linux lock-only rerun at HEAD (A3) remains the
 number that closes the release gate.
+
+### Option A disposition (2026-10-28, cv-upload run)
+
+Full Windows run with `POST /api/cv/upload` + `tests/test_cv_upload.py`
+(23 new isolated cases): **1124 passed, 4 skipped** — +1102 baseline = the
+new tests, and the failure set proved pre-existing:
+
+- The 8 env-class failures + 1 error above reappeared **node-identical**.
+- One first-run failure was self-inflicted and fixed in the test, not the
+  app: `test_ingest_stays_off_the_heavy_pipeline` inspected global
+  `sys.modules`, so it tripped when earlier files imported crewai. It now
+  asserts the **delta** of modules introduced by the ingest itself, and an
+  adversarial ordering run
+  (`pytest tests/test_crewai_security_compat.py tests/test_cv_upload.py`)
+  passes with crewai already loaded.
+- Observed once across full runs, never in isolation:
+  `test_action_rate_limit.py::test_a_denied_call_reports_how_long_to_wait`
+  failed in one full-suite run while passing in two others (same app code)
+  and passes isolated — file `32/32`, node twice consecutively. The
+  assertion times a wait report, so full-suite load on Windows can starve
+  it; recorded as a timing flake, not a behavior regression. Linux CI
+  remains the arbiter.
 
 Security/CI remediation: `deploy/CI_FAILURE_REMEDIATION.md`. A fresh **168-package**
 locked installation passes dependency consistency. CrewAI is deliberately rolled

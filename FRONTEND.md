@@ -50,8 +50,11 @@ write-only inputs with masked status, never displayed back or stored in browser
 localStorage. The deployment model and backend ownership contracts must be
 agreed first.
 
-Existing personal CV/profile editing and variant workflows remain unchanged;
-the local demo dropzone is not a working backend upload. Scope and release gates:
+Existing personal CV/profile editing and variant workflows remain unchanged.
+The dropzone is a **working upload** now (2026-10-28, `POST /api/cv/upload`):
+the server reply is the only source of a "Registered · tags" claim, and
+deployments without the route (or during an outage) keep the honest
+local-only fallback wording. Scope and release gates:
 `USER_PRODUCT.md`; product decision: `PM.md` §2.1a; future operational rules:
 `PRODUCTION.md` §9.
 

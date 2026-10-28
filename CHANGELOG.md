@@ -1,5 +1,49 @@
 # CHANGELOG.md
 
+## 2026-10-28 — Option A: CV upload ships — the dropzone registers real tagged variants
+
+The B2 story had the honest state but no feature: without an endpoint, picking
+a CV could only say "Selected locally — no upload". This closes PM-3 by
+activating the already-tested CVLibrary machinery instead of inventing a
+parallel store:
+
+- **`POST /api/cv/upload?filename=`** (`api/routers/cv.py` + new
+  `api/cv_store.py`): raw-body upload — **no `python-multipart` dependency
+  added**; the File bytes are the body, the safe filename a query param.
+  Server cap `CV_UPLOAD_MAX_MB` (default 10, clamped 1–50), magic-byte
+  checks per extension, atomic temp+`os.replace` store into `CV_DIR`
+  (default `cvs/`).
+- **Registration == filename:** the stored name is
+  `<safe stem>__<md5[:8]>.<ext>`; domain tags keep living in the filename,
+  so `tools/cv_library._extract_domain_tags` discovers the identical tags at
+  scoring time, and the md5 suffix keeps re-uploads unique while aligning
+  with cv_parser's hash-keyed profile cache.
+- **Offline only (standing rule):** the endpoint never calls the LLM. It
+  probes `extract_cv_text` and applies the stored⇒readable rule —
+  unconsumable input is deleted and rejected 422 (the 2026-10-03
+  poisoned-cache lesson). A fresh (<7 days, non-shell) cached profile for
+  the identical content hash is reported when it already exists.
+- **Auth + attribution:** `action_budget("action")` then `require_token`,
+  mirroring the apply routes; ingest runs on the threadpool, never on the
+  event loop.
+- **Default CV untouched, PII fenced:** `my_cv.pdf` stays primary; `cvs/`
+  is gitignored, mounted rw into scheduler/runner/api in docker-compose,
+  and logs carry name/size/outcome only — never file contents.
+- **Frontend:** `api.js` gains `uploadCv(file)` (raw File body); Resume
+  Studio `uploadCvFile()` is wired into BOTH the dropzone and the +Add
+  Variant picker. The server reply is the only source of any "Registered ·
+  tags" claim; in flight the badge claims just "Uploading…"; on
+  404/501/405/unreachable the honest local-only states remain as fallback;
+  any other failure shows the server's verdict and claims nothing. The B2
+  guard now pins the fallback copy explicitly; new guards cover the
+  confirmed-upload contract, the wiring chain, and the outage fallback.
+  `?v=` cache stamps bumped to 10.
+- **Tests:** new `tests/test_cv_upload.py` (happy/tagging/dedup paths, all
+  rejection codes, stale+shell probe rules, live CVLibrary listing, a
+  no-heavy-imports guard; isolated — no network, no LLM, no real PDF
+  engines, temp dirs only). Final Windows counts for this change are
+  recorded in `TESTER.md`.
+
 ## 2026-10-28 — audit B1 + B2: the dashboard no longer claims successes it never performed
 
 Both P0 "dashboard misleads" from the 2026-10-18 audit **survived the

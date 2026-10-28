@@ -147,7 +147,8 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
 | `API_CACHE_TTL` | `90` | Seconds, clamped to 60–120 |
 | `SITE_ADDRESS` | `:80` | Caddy site address (compose `caddy` service). A real hostname — free: DuckDNS — enables automatic Let's Encrypt HTTPS + HTTP→HTTPS redirect; bare IP stays plain HTTP |
 | `CV_PATH` | `my_cv.pdf` | Primary CV (matching fallback, profile-cache anchor) |
-| `CV_DIR` | empty | Optional CV-variants folder (`cvs/`); `GET /api/cv/variants` lists it, best CV picked per job |
+| `CV_DIR` | empty | Optional CV-variants folder (`cvs/`); `GET /api/cv/variants` lists it, best CV picked per job. `POST /api/cv/upload` stores uploaded variants here |
+| `CV_UPLOAD_MAX_MB` | `10` | Upload cap in MB for `POST /api/cv/upload`, clamped 1–50 so a nonsense value cannot disable the guard |
 | `MIN_MATCH_SCORE` | `70` | Curator threshold for GOOD MATCHES tab |
 | `AUTO_APPLY_CONFIRM` | `false` | Legacy CLI flag, now ignored everywhere (blind submit permanently disabled). The HTTP API ignores it; Greenhouse `/intent` + `/submit` are gated by `SUBMIT_ENABLED=False` (403) plus `APPLY_API_TOKEN`. |
 | `AUTO_APPLY_THRESHOLD` | `75` | Minimum match score for the auto-apply queue |
@@ -394,6 +395,13 @@ no implementation, branch creation or merge into `main` is planned now.
 Canonical scope: `USER_PRODUCT.md`; tracker: `PM.md` §2.1.
 
 ### 9a. Future user product — operations, credentials and CV privacy
+
+Update 2026-10-28: the personal-scale upload slice (Option A) went live under
+this section's rules, ahead of the user lifecycle — content validation +
+server-side cap, explicit parse failure (unreadable file deleted, 422),
+uploads gitignored (`cvs/`) and kept out of images, rw compose mount,
+and no file contents in logs. Ownership, retention and deletion policies
+remain future work on the `user` branch.
 
 - Decide isolated self-hosted vs shared hosted deployment and DB/storage model
   before implementation. Existing shared state and global `.env` are not

@@ -6,6 +6,8 @@ key.example.json
 
 # Personal data
 my_cv.pdf
+# Uploaded CV variants (dashboard POST /api/cv/upload) — PII, never commit.
+cvs/
 PRODUCTION_ROADMAP.md
 
 # Scraped / cached runtime data

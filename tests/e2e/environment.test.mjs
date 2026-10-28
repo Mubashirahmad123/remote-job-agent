@@ -108,7 +108,7 @@ async function cleanup(api, root) {
 
 for (const commentStyle of [false, true]) {
   describe(`environment isolation — ${commentStyle ? 'blank-value/trailing-comment' : 'plain token'} .env`, () => {
-    test('negative control: omitting auth pins reproduces 200 → CV import → 401', () => {
+    test('negative control: omitting auth pins reproduces 200 → CV import → 401', async () => {
       const { root, environment } = fixture(commentStyle);
       try {
         const result = spawnSync(PYTHON, ['env_probe.py'], {
@@ -122,7 +122,23 @@ for (const commentStyle of [false, true]) {
           parser_was_lazy: true, parser_from_fixture: true,
           api_token_loaded: true, apply_token_loaded: true,
         });
-      } finally { rmSync(root, { recursive: true, force: true }); }
+      } finally {
+        // Same EPERM mitigation as cleanup(): on Windows a killed subprocess /
+        // AV scan can hold the throwaway dir for a moment, and rmSync then
+        // fails an otherwise-green test (seen on clean HEAD). Retry on the
+        // short ladder; an unremovable temp dir warns instead of failing.
+        let lastErr = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try { rmSync(root, { recursive: true, force: true }); lastErr = null; break; }
+          catch (error) {
+            lastErr = error;
+            await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+          }
+        }
+        if (lastErr) {
+          console.warn(`cleanup: temp dir ${root} could not be removed: ${lastErr.code || lastErr.message}`);
+        }
+      }
     });
 
     test('current harness stays unauthenticated through real CV import and dashboard boot', async () => {

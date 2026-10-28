@@ -225,8 +225,10 @@ C5 (no double-scoring), Bugs 1–5, §6 circuit breaker + board drops + cached
 gspread client + yield-per-LLM-call accounting, B8 (functional `days_ago()`
 behind `SCRAPER_MAX_AGE_DAYS`, default 0), PM-1 (configurable tier bars) and
 PM-2's backend (opt-in `MAYBE MATCHES` tab).
-Open from that audit: PM-2 dashboard UI, PM-3 (needs real CV variants),
-PM-5 manual review, and the B3 demo-leak e2e suite.
+Open from that audit: PM-2 dashboard UI, PM-5 manual review, and the B3
+demo-leak e2e suite. **PM-3 is closed (2026-10-28):** real CV variants ship
+through `POST /api/cv/upload` into `CV_DIR` (Option A — the existing
+CVLibrary machinery is activated; see `CHANGELOG.md` 2026-10-28).
 
 **Status update 2026-10-28:** B1 and B2 are fixed (`CHANGELOG.md`
 2026-10-28) — the dashboard's two fake-success claims (double-wired Sync
@@ -451,6 +453,19 @@ work, not a standalone upload button.
 **Destination:** a future branch named `user`, not a merge into personal `main`.
 **Status:** deferred, no target date; no branch creation or implementation now.
 The present documentation work does not change the session branch.
+
+**PO decision 2026-10-28 — §2.1a amended by Option A (shipped).** The all-or-
+nothing deferral is reversed for Scenario A only: the personal dashboard
+needed a working upload more than it needed the full user lifecycle, and the
+library machinery to host uploaded variants already existed, tested. Shipped:
+`POST /api/cv/upload` (raw body, no multipart dependency), `CV_UPLOAD_MAX_MB`
+server cap, magic-byte + extractability validation ("stored ⇒ readable" —
+unreadable input is deleted, never registered), tags-in-filename registration
+via the existing `tools/cv_library` extractor, `cvs/` gitignored and mounted
+rw in compose, default `my_cv.pdf` untouched. Not shipped (stays with the
+`user` branch): per-user ownership, retention/deletion policy, bring-your-own
+credentials, profession-agnostic matching. `USER_PRODUCT.md` remains the
+canonical future scope.
 
 `USER_PRODUCT.md` is the canonical future scope: deployment-model decisions,
 profession-aware matching, ownership-aware persistence, per-user credentials,

@@ -310,10 +310,11 @@ describe('happy path — live API', () => {
 
   test('CV import is labeled "selected locally" and claims no upload/parse (B2)', () => {
     // handleUploadedFile() once rendered an emerald "Uploaded & Parsed" badge
-    // and toasted "Extracted skills and contact profile cache" — while no
-    // upload endpoint exists on main (deferred with the future `user`
-    // product, PM.md §2.1a), so nothing was ever uploaded, parsed, extracted
-    // or cached. The UI may only describe what actually happened.
+    // and toasted "Extracted skills and contact profile cache" — while
+    // nothing was ever uploaded, parsed, extracted or cached. The UI may
+    // only describe what actually happened. POST /api/cv/upload now exists;
+    // this handler is the FALLBACK for a deployment without that route (or
+    // during an outage), so its copy must stay humble.
     const doc = ctx.window.document;
     const studio = ctx.window.JobAgent.resumeStudio;
     assert.ok(studio, 'resumeStudio not wired');
@@ -326,6 +327,66 @@ describe('happy path — live API', () => {
     const toast = doc.querySelector('.app-toast');
     assert.ok(toast, 'no toast rendered for the selection');
     assert.match(toast.textContent, /nothing was uploaded or parsed/i, toast.textContent);
+  });
+
+  test('a confirmed upload reports exactly what the server said', async () => {
+    // Component contract: with JobAgent.api.uploadCv stubbed to the server's
+    // honest reply shape, the dropzone must show "Registered · <tags>" with
+    // the real numbers in the toast — and never the invented copy that
+    // triggered audit B2 ("Uploaded & Parsed", "Extracted skills …").
+    const doc = ctx.window.document;
+    const studio = ctx.window.JobAgent.resumeStudio;
+    const orig = ctx.window.JobAgent.api.uploadCv;
+    let sentFile = null;
+    ctx.window.JobAgent.api.uploadCv = async (file) => {
+      sentFile = file;
+      return {
+        stored_name: 'cv_backend__1a2b3c4d.pdf',
+        size_bytes: 2048,
+        tags: ['backend'],
+        profile_cached: false,
+        cached_profile: null,
+        message: 'Registered in the CV library (default CV untouched). Parses on the next pipeline run.',
+      };
+    };
+    try {
+      const file = new ctx.window.File(
+        [new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34])],
+        'cv_backend_pick.pdf', { type: 'application/pdf' },
+      );
+      await studio.uploadCvFile(file);
+      assert.ok(sentFile && sentFile.name === 'cv_backend_pick.pdf',
+        'the picked File object must be the body handed to the upload');
+      const zone = doc.getElementById('dropzoneActiveFile');
+      assert.ok(zone, 'dropzoneActiveFile missing');
+      assert.match(zone.textContent, /Current:\s*cv_backend_pick\.pdf/, zone.textContent);
+      assert.ok(zone.textContent.includes('Registered · backend'), zone.textContent);
+      assert.doesNotMatch(zone.textContent, /& Parsed/, zone.textContent);
+      const toast = doc.querySelector('.app-toast');
+      assert.ok(toast, 'no toast for a confirmed upload');
+      assert.match(toast.textContent, /2\.0 KB/, toast.textContent);
+      assert.match(toast.textContent, /tags: backend/, toast.textContent);
+      assert.match(toast.textContent, /Parses on the next pipeline run/, toast.textContent);
+      assert.doesNotMatch(toast.textContent, /Extracted skills/i, toast.textContent);
+    } finally {
+      ctx.window.JobAgent.api.uploadCv = orig;
+    }
+  });
+
+  test('upload wiring exists end to end: route, client fn, changed handlers', () => {
+    // What a naive edit breaks: renaming uploadCv or reverting the change
+    // handlers silently downgrades the dropzone to the local-only fallback
+    // while every unit test still passes. Pin the chain instead.
+    const read = (rel) => readFileSync(resolve(REPO, 'frontend', rel), 'utf8');
+    const api = read('js/api.js');
+    const studio = read('js/components/resumeStudio.js');
+    assert.match(api, /'\/api\/cv\/upload'/, 'api.js must POST /api/cv/upload');
+    assert.match(api, /async function uploadCv\(/, 'api.js must export an uploadCv client fn');
+    assert.match(api, /uploadCv,/, 'uploadCv must be in the API export list');
+    assert.match(studio, /async uploadCvFile\(/, 'resumeStudio must own the upload handler');
+    assert.match(studio, /JobAgent\.api\.uploadCv\(file\)/, 'the handler must call the real client fn');
+    assert.match(studio, /this\.uploadCvFile\(f\b/, 'both file pickers must route through uploadCvFile');
+    assert.doesNotMatch(studio, /this\.handleUploadedFile\(file\.name/, 'change/drop handlers must not bypass the upload path');
   });
 });
 
@@ -396,6 +457,25 @@ describe('failure path — API unreachable', () => {
     const body = ctx.window.document.body.textContent;
     assert.ok(!/\b(147|24|1,?247)\b/.test(body),
       'legacy hardcoded demo figures must not reappear when live data is missing');
+  });
+
+  test('CV upload falls back to the honest local-only state during an outage', async () => {
+    // B4 second half: with the API dead, the upload path (UNREACHABLE) must
+    // degrade to the same humble wording as before the endpoint existed —
+    // never to a green "Registered" that no server confirmed.
+    const doc = ctx.window.document;
+    const studio = ctx.window.JobAgent.resumeStudio;
+    const file = new ctx.window.File(
+      [new Uint8Array(64)], 'cv_backend_offline.pdf', { type: 'application/pdf' },
+    );
+    await studio.uploadCvFile(file);
+    const zone = doc.getElementById('dropzoneActiveFile');
+    assert.ok(zone, 'dropzoneActiveFile missing');
+    assert.ok(zone.textContent.includes('Selected locally'), zone.textContent);
+    assert.doesNotMatch(zone.textContent, /Registered/, zone.textContent);
+    const toast = doc.querySelector('.app-toast');
+    assert.ok(toast, 'no toast for the offline fallback');
+    assert.match(toast.textContent, /nothing was uploaded or parsed/i, toast.textContent);
   });
 });
 

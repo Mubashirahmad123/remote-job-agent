@@ -440,8 +440,8 @@ JobAgent.resumeStudio = {
     }
 
     // Multi-CV variants: click a card to select it for tailoring; +Add Variant
-    // picks a local .pdf/.docx and adds it to the list (persists locally
-    // until a backend upload endpoint exists — Phase 2 backlog).
+    // picks a .pdf/.docx and registers it server-side via POST /api/cv/upload
+    // (falls back to a local-only card when that route isn't deployed).
     if (this.variantList && !this.variantList.dataset.selectWired) {
       this.variantList.dataset.selectWired = '1';
       this.variantList.style.cursor = 'pointer';
@@ -478,15 +478,18 @@ JobAgent.resumeStudio = {
               JobAgent.toast.show('Variant file exceeds 10MB limit.', 'warn');
               return;
             }
-            this.addLocalVariant(f.name, `${(f.size / 1024).toFixed(1)} KB • Added just now`);
+            // Real ingest via POST /api/cv/upload; a missing/unreachable
+            // route falls back to the local-only add inside uploadCvFile.
+            this.uploadCvFile(f, { surface: 'variant' });
           });
         }
         picker.click();
       });
     }
-    // Dropzone click & drag events: a picked file is preview-only. There is
-    // no upload endpoint (CV upload is deferred with the future `user`
-    // product — PM.md §2.1a), so handleUploadedFile below claims nothing.
+    // Dropzone click & drag events: a picked file is registered via
+    // POST /api/cv/upload (uploadCvFile below — the server reply is the only
+    // source of any "Registered" claim); a missing/unreachable route falls
+    // back to the honest local-only state of handleUploadedFile.
     if (this.cvDropzone && this.cvFileInput) {
       this.cvDropzone.addEventListener('click', () => {
         this.cvFileInput.click();
@@ -495,7 +498,7 @@ JobAgent.resumeStudio = {
       this.cvFileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
           const file = e.target.files[0];
-          this.handleUploadedFile(file.name, file.size);
+          this.uploadCvFile(file);
         }
       });
 
@@ -513,7 +516,7 @@ JobAgent.resumeStudio = {
         this.cvDropzone.classList.remove('drag-over');
         if (e.dataTransfer.files.length > 0) {
           const file = e.dataTransfer.files[0];
-          this.handleUploadedFile(file.name, file.size);
+          this.uploadCvFile(file);
         }
       });
     }
@@ -587,12 +590,13 @@ JobAgent.resumeStudio = {
   },
 
   handleUploadedFile(name, size) {
-    // No upload endpoint exists on main: CV upload is deliberately deferred
-    // with the future `user` product (PM.md §2.1a / USER_PRODUCT.md). A file
-    // picked here is read by this view for its name and size only — nothing
-    // is uploaded, parsed, extracted or cached — so the UI may claim none of
-    // that (audit B2: the old badge said "Uploaded & Parsed" and the toast
-    // invented a skills extraction that never ran; nothing was ever persisted).
+    // Honest LOCAL-ONLY fallback (used by uploadCvFile when the upload
+    // route is absent — 404/501/405 — or the API is unreachable). A file
+    // handled here is read by this view for its name and size only —
+    // nothing is uploaded, parsed, extracted or cached — so the UI may
+    // claim none of that (audit B2: the old badge said "Uploaded & Parsed"
+    // and the toast invented a skills extraction that never ran; nothing
+    // was ever persisted).
     const raw = String(name || '').split(/[\\/]/).pop();
     if (this.dropzoneActiveFile) {
       this.dropzoneActiveFile.innerHTML = `
@@ -602,6 +606,63 @@ JobAgent.resumeStudio = {
     }
     // toast.show renders via textContent, so the raw filename is safe here.
     JobAgent.toast.show(`${raw} selected locally — nothing was uploaded or parsed. The agent still works from your configured CV.`);
+  },
+
+  async uploadCvFile(file, { surface = 'dropzone' } = {}) {
+    // Real ingest: POST /api/cv/upload (raw body via JobAgent.api.uploadCv).
+    // The server reply is the only source of any "Registered" claim; before
+    // it returns, the badge only claims "Uploading…". On 404/501/405 (route
+    // not deployed here) or an unreachable API, fall back to the honest
+    // local-only states so nothing regresses for older deployments; every
+    // other failure shows the server's verdict and claims nothing.
+    const friendly = String((file && file.name) || '').split(/[\\/]/).pop() || 'cv.pdf';
+    const kb = ((file && file.size) || 0) / 1024;
+    const badgeLine = (badge) => `
+          <span class="file-tag">Current: <strong>${this.escapeHtml(friendly)}</strong> (${kb.toFixed(1)} KB)</span>
+          ${badge}`;
+    const setBadge = (badge) => {
+      if (surface === 'dropzone' && this.dropzoneActiveFile) {
+        this.dropzoneActiveFile.innerHTML = badgeLine(badge);
+      }
+    };
+    setBadge('<span class="badge-tag">Uploading…</span>');
+    if (surface === 'variant') JobAgent.toast.show(`Uploading ${friendly}…`);
+
+    let res;
+    try {
+      res = await JobAgent.api.uploadCv(file);
+    } catch (e) {
+      const code = e && e.code;
+      if (code === 'HTTP_404' || code === 'HTTP_501' || code === 'HTTP_405' || code === 'UNREACHABLE') {
+        if (surface === 'variant') {
+          this.addLocalVariant(friendly, `${kb.toFixed(1)} KB • Added locally (not uploaded: no upload endpoint)`);
+        } else {
+          this.handleUploadedFile(friendly, file.size);
+        }
+        return;
+      }
+      setBadge('<span class="badge-tag">Not registered</span>');
+      JobAgent.toast.show(`Upload rejected: ${(e && e.status) ? 'HTTP ' + e.status + ' — ' : ''}${(e && e.message) || 'unknown error'}`, 'warn');
+      return;
+    }
+
+    const tags = Array.isArray(res.tags) && res.tags.length ? res.tags.join(', ') : 'general';
+    const stored = String(res.stored_name || friendly);
+    const parseNote = res.profile_cached
+      ? 'A parsed profile for this exact file is already cached.'
+      : 'Parses on the next pipeline run.';
+    if (surface === 'variant') {
+      try {
+        await this.loadVariants(true);  // the library view now reflects reality
+      } catch (_) { /* loadVariants reports its own errors */ }
+      this._note(this.variantsStatusNote, `Registered "${stored}" (${res.size_bytes || 0} bytes, tags: ${tags}). ${parseNote}`, false);
+    } else {
+      setBadge(`<span class="badge-emerald">Registered · ${this.escapeHtml(tags)}</span>`);
+      // Refresh variants best-effort; never blocks the registration toast.
+      this._variantsLoaded = false;
+      this.loadVariants(true).catch(() => { /* tolerated */ });
+      JobAgent.toast.show(`Uploaded & registered "${stored}" (${((res.size_bytes || 0) / 1024).toFixed(1)} KB, tags: ${tags}). ${parseNote}`);
+    }
   },
 
   setSteps(state) {

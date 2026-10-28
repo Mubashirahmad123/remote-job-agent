@@ -352,6 +352,25 @@ class CvProfileUpdate(BaseModel):
         return v
 
 
+class CvUploadOut(BaseModel):
+    """POST /api/cv/upload response — exactly what the server did with the file.
+
+    `cached_profile` is a fresh on-disk parsed profile for this exact content
+    hash when one already exists (read-only probe, mirrors cv_parser's <7-day
+    freshness + non-shell rules), else null. The endpoint never triggers LLM
+    parsing — registration only; parsing happens in the pipeline as usual.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    stored_name: str
+    size_bytes: int
+    tags: List[str] = Field(default_factory=list)
+    profile_cached: bool = False
+    cached_profile: Optional[Dict[str, Any]] = None
+    message: str = ""
+
+
 class ApplyRequest(BaseModel):
     """POST /api/apply/{fp} body — Phase 2a fill-only.
 

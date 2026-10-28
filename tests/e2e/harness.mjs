@@ -252,7 +252,7 @@ export async function loadDashboard(base, { apiBase = base, page = 'index.html',
     beforeParse(window) {
       // jsdom has no fetch; hand the page Node's. Record every call so a test
       // can assert which endpoints the UI really hit.
-      window.fetch = (input, init) => {
+      window.fetch = async (input, init) => {
         const raw = typeof input === 'string' ? input : input.url;
         // Resolve relative URLs against the document base, exactly as a browser
         // would. Node's fetch requires an absolute URL and throws on '/api/...',
@@ -267,6 +267,13 @@ export async function loadDashboard(base, { apiBase = base, page = 'index.html',
         // calls, so an authenticated page load has to attach it explicitly.
         if (cookie) {
           options.headers = { ...(options.headers || {}), Cookie: cookie };
+        }
+        // jsdom Blob/File bodies are opaque to Node's fetch (it does not know
+        // that prototype); swappable file uploads need real bytes. Strings,
+        // URLSearchParams and FormData have no .arrayBuffer and pass through.
+        const body = options.body;
+        if (body && typeof body.arrayBuffer === 'function') {
+          options.body = new Uint8Array(await body.arrayBuffer());
         }
         return fetch(url, options);
       };
