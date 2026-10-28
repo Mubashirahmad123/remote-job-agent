@@ -50,8 +50,11 @@ write-only inputs with masked status, never displayed back or stored in browser
 localStorage. The deployment model and backend ownership contracts must be
 agreed first.
 
-Existing personal CV/profile editing and variant workflows remain unchanged;
-the local demo dropzone is not a working backend upload. Scope and release gates:
+Existing personal CV/profile editing and variant workflows remain unchanged.
+The dropzone is a **working upload** now (2026-10-28, `POST /api/cv/upload`):
+the server reply is the only source of a "Registered · tags" claim, and
+deployments without the route (or during an outage) keep the honest
+local-only fallback wording. Scope and release gates:
 `USER_PRODUCT.md`; product decision: `PM.md` §2.1a; future operational rules:
 `PRODUCTION.md` §9.
 
@@ -64,6 +67,15 @@ passed**: 36 existing smoke tests, 22 tracker interactions, 6 environment-
 isolation checks and 4 review-polling checks (ten suites plus standalone cases). `npm test --prefix tests/e2e`, the shell runner and frontend
 CI use the same suite list. Layout contracts are static/jsdom checks, not a
 real browser layout/visual pass.
+
+2026-10-28 run (Windows): **77 tests, 0 failed.** Adds three fake-success
+guard cases to smoke (audit B1/B2: Sync Sheets may only be wired by `js/app.js`
+and must show a real outcome; CV import must claim "selected locally", never
+"Uploaded & Parsed"), plus a hardened `environment.test.mjs` cleanup — the
+Windows EPERM / stale-throwaway-DB flake was reproduced on a clean-HEAD stash
+baseline (its failing test node moved between 101 and 140 on identical code)
+and fixed by waiting out the killed uvicorn's handle release before the strict
+assertions.
 
 `tracker.test.mjs` uses a separate opt-in server (`tracker_api.py`) with real
 tracker routes/cache/services and an in-memory fake worksheet. Synthetic rows

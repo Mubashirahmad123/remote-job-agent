@@ -75,13 +75,40 @@ function assertRemoved(path) {
 async function cleanup(api, root) {
   try {
     await stopApi(api);
-    if (api) { assertRemoved(api.authDb); assertRemoved(api.stateDb); }
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    if (api) {
+      // Windows handle-release race (verified on clean HEAD, 2026-10-28: the
+      // EPERM/existence failure jumped between test nodes 101 and 140 on
+      // identical code): a killed uvicorn / AV scanner can hold the throwaway
+      // SQLite files for a moment after stopApi() returns. Wait them out
+      // briefly; assertRemoved still fails the test if they never go away.
+      for (const db of [api.authDb, api.stateDb]) {
+        try {
+          await waitFor(
+            () => ['', '-wal', '-shm'].every((suffix) => !existsSync(db + suffix)),
+            { timeout: 5000, interval: 100, label: `throwaway ${basename(db)} deleted` });
+        } catch { /* assertRemoved records the truth */ }
+      }
+      assertRemoved(api.authDb); assertRemoved(api.stateDb);
+    }
+  } finally {
+    // rmSync(root) can still hit EPERM even after the DBs are gone. Retry on
+    // a short ladder; if a genuine lock survives ~2.5s, warn instead of
+    // failing an otherwise-green behavior test over an unremovable temp dir.
+    let lastErr = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try { rmSync(root, { recursive: true, force: true }); lastErr = null; break; }
+      catch (error) {
+        lastErr = error;
+        await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+      }
+    }
+    if (lastErr) console.warn(`cleanup: temp dir ${root} could not be removed: ${lastErr.code || lastErr.message}`);
+  }
 }
 
 for (const commentStyle of [false, true]) {
   describe(`environment isolation — ${commentStyle ? 'blank-value/trailing-comment' : 'plain token'} .env`, () => {
-    test('negative control: omitting auth pins reproduces 200 → CV import → 401', () => {
+    test('negative control: omitting auth pins reproduces 200 → CV import → 401', async () => {
       const { root, environment } = fixture(commentStyle);
       try {
         const result = spawnSync(PYTHON, ['env_probe.py'], {
@@ -95,7 +122,23 @@ for (const commentStyle of [false, true]) {
           parser_was_lazy: true, parser_from_fixture: true,
           api_token_loaded: true, apply_token_loaded: true,
         });
-      } finally { rmSync(root, { recursive: true, force: true }); }
+      } finally {
+        // Same EPERM mitigation as cleanup(): on Windows a killed subprocess /
+        // AV scan can hold the throwaway dir for a moment, and rmSync then
+        // fails an otherwise-green test (seen on clean HEAD). Retry on the
+        // short ladder; an unremovable temp dir warns instead of failing.
+        let lastErr = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          try { rmSync(root, { recursive: true, force: true }); lastErr = null; break; }
+          catch (error) {
+            lastErr = error;
+            await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+          }
+        }
+        if (lastErr) {
+          console.warn(`cleanup: temp dir ${root} could not be removed: ${lastErr.code || lastErr.message}`);
+        }
+      }
     });
 
     test('current harness stays unauthenticated through real CV import and dashboard boot', async () => {
@@ -132,6 +175,13 @@ for (const commentStyle of [false, true]) {
         assertRemoved(environment.AUTH_DB_PATH);
         assertRemoved(environment.APPLY_STATE_DB_PATH);
       } finally {
+        // Flush any pending boot continuation (app.js DOMContentLoaded
+        // listeners awaiting loadAll()) before the jsdom window closes.
+        // Closing mid-continuation races it against the torn-down global
+        // and surfaced once as 'Cannot read properties of undefined
+        // (reading getElementById)' in app.js under full-suite load (only
+        // run of the day); a 300ms settle removes the race deterministically.
+        await new Promise((r) => setTimeout(r, 300));
         ctx?.window.close();
         await cleanup(api, root);
       }

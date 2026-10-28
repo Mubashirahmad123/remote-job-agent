@@ -55,7 +55,12 @@ google-auth==2.29.0
 
 # PDF generation
 reportlab==4.1.0
-fpdf2==2.7.9
+# CVE-2026-114609/114610 (image loader derefs) fixed in 2.8.8
+fpdf2==2.8.8
+
+# Bounded transitive pins (kept satisfiable with the packages that pull them)
+# litellm comes via crawl4ai (`~=1.48`); exact pin clears CVE-2026-114612, fixed 1.100.4+
+litellm==1.100.4
 
 # Date parsing
 python-dateutil==2.9.0

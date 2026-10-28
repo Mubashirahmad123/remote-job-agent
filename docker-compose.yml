@@ -27,6 +27,9 @@ services:
       - ./.env:/app/.env:ro
       - ./keys.json:/app/keys.json:ro
       - ./my_cv.pdf:/app/my_cv.pdf:ro
+      # Uploaded CV variants (dashboard POST /api/cv/upload); rw so the
+      # pipeline can read what the operator registers from the dashboard.
+      - ./cvs:/app/cvs
       - ./data:/app/data
       - ./logs:/app/logs
       - ./seen_jobs.json:/app/seen_jobs.json
@@ -64,6 +67,9 @@ services:
       - ./.env:/app/.env:ro
       - ./keys.json:/app/keys.json:ro
       - ./my_cv.pdf:/app/my_cv.pdf:ro
+      # Uploaded CV variants (dashboard POST /api/cv/upload); rw so the
+      # pipeline can read what the operator registers from the dashboard.
+      - ./cvs:/app/cvs
       - ./data:/app/data
       - ./logs:/app/logs
       - ./seen_jobs.json:/app/seen_jobs.json
@@ -163,6 +169,9 @@ services:
       - ./.env:/app/.env:ro
       - ./keys.json:/app/keys.json:ro
       - ./my_cv.pdf:/app/my_cv.pdf:ro
+      # Uploaded CV variants (dashboard POST /api/cv/upload); rw so the
+      # pipeline can read what the operator registers from the dashboard.
+      - ./cvs:/app/cvs
       - ./data:/app/data
       - ./logs:/app/logs
       - ./seen_jobs.json:/app/seen_jobs.json

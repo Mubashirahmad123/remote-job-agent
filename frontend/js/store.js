@@ -38,7 +38,7 @@ JobAgent.store = {
     skills: null,
     health: null,
     usingLive: false,
-    dataSource: 'mock', // sheets|snapshot|mock (from GET /api/health)
+    dataSource: 'mock', // 'mock' is a placeholder only until GET /api/health lands sheets|snapshot|empty; never a real dataSource value
     loading: { jobs: false, tracker: false, stats: false, skills: false },
     errors: { jobs: '', tracker: '', stats: '', skills: '' },
   },
@@ -221,7 +221,7 @@ JobAgent.store = {
     };
   },
 
-  // ---------- loaders (live with mock fallback) ----------
+  // ---------- loaders (live only — outages surface as errors; no mock fallback) ----------
 
   async loadJobs() {
     this.state.loading.jobs = true;
@@ -296,7 +296,7 @@ JobAgent.store = {
     } catch (e) {
       this.state.errors.stats = e.message;
       this.state.stats = null;
-      console.warn('[store] stats fallback to mock:', e.message);
+      console.warn('[store] stats load failed — no mock corpus exists:', e.message);
     } finally {
       this.state.loading.stats = false;
       this.notify();

@@ -17,6 +17,118 @@ full rate-limit/auth/proxy/timing suites pass on Windows (**85 tests**,
 including both new boundaries). The full Linux lock-only suite has not rerun
 since; the 1042 figure below predates the fix by exactly those two tests.
 
+2026-10-28 note (Windows): frontend E2E is **77 passed, 0 failed** — the 68
+figure above predates the design-rebuild smoke additions and three new B1/B2
+fake-success guard cases (`npm test --prefix tests/e2e`; all ten suites).
+The e2e `environment.test.mjs` Windows-only EPERM cleanup flake was
+reproduced on a clean-HEAD stash baseline (failing node moved between tests
+on identical code — kill→handle-release race) and fixed in the e2e harness,
+not in app code.
+
+2026-10-28 follow-up (Option A run): frontend E2E is **80 passed, 0 failed**
+— the 77 baseline plus three CV-upload guards (confirmed-upload contract,
+wiring chain, outage fallback). A second EPERM cleanup site in
+`environment.test.mjs` (negative-control `finally`) was fixed with the same
+retry ladder used by `cleanup()`; the node that failed in the first full run
+of the day (`30668ms`, timeout-wait on a locked throwaway dir) now passes in
+~8s.
+
+## Windows pytest disposition (2026-10-28) — evidence for PM.md §1a A2
+
+Full local Windows run: **1102 passed, 8 failed, 4 skipped, 275s**. The 8
+failures + 1 error are **pre-existing**: re-run against a stash baseline on
+clean HEAD with every node ID identical, on a diff that touches no Python
+(audit-fix B1/B2, frontend + e2e only). Classification:
+
+- 5 × `tests/test_docker_locked_dependencies.py::test_docker_ci_shell_commands_and_python_heredoc_parse[*]`
+  — parse/validate the CI Docker shell script; requires a POSIX `bash`, not
+  available locally on Windows. Linux CI gates these.
+- 2 × + 1 error `tests/test_crewai_security_compat.py`
+  (`test_real_agent_task_and_crew_kickoff_use_only_offline_llm`,
+  `test_installed_crewai_metadata_accepts_patched_mcp`) — offline CrewAI/MCP
+  wiring against the deliberately rolled-back pinned stack; Linux CI gates.
+- 1 × `tests/test_url_guard.py::test_the_scan_actually_finds_sinks`.
+
+So the count supplied for A2's reconciliation: local Windows 1102 passed /
+8 env-class failures; the Linux lock-only rerun at HEAD (A3) remains the
+number that closes the release gate.
+
+### Option A disposition (2026-10-28, cv-upload run)
+
+Full Windows run with `POST /api/cv/upload` + `tests/test_cv_upload.py`
+(23 new isolated cases): **1124 passed, 4 skipped** — +1102 baseline = the
+new tests, and the failure set proved pre-existing:
+
+- The 8 env-class failures + 1 error above reappeared **node-identical**.
+- One first-run failure was self-inflicted and fixed in the test, not the
+  app: `test_ingest_stays_off_the_heavy_pipeline` inspected global
+  `sys.modules`, so it tripped when earlier files imported crewai. It now
+  asserts the **delta** of modules introduced by the ingest itself, and an
+  adversarial ordering run
+  (`pytest tests/test_crewai_security_compat.py tests/test_cv_upload.py`)
+  passes with crewai already loaded.
+- Observed once across full runs, never in isolation:
+  `test_action_rate_limit.py::test_a_denied_call_reports_how_long_to_wait`
+  failed in one full-suite run while passing in two others (same app code)
+  and passes isolated — file `32/32`, node twice consecutively. The
+  assertion times a wait report, so full-suite load on Windows can starve
+  it; recorded as a timing flake, not a behavior regression. Linux CI
+  remains the arbiter.
+
+### 2026-10-28 pip-audit wave (fpdf2/litellm upgrades + pillow re-key)
+
+- `deploy/dependency_audit.py`: **OK — 82 findings, all in the baseline,
+  nothing new** (run before and after the baseline restore edit). The wave:
+  `fpdf2 2.7.9→2.8.8` + bounded direct `litellm==1.100.4` clear three real
+  findings; the 11 pillow PYSEC entries (ten verified per-ID against OSV as
+  re-keys of pruned CVEs, plus CVE-2026-112403 as new cover) are accepted
+  with the decision trail in the baseline header. Lock recompiled
+  (`uv pip compile --universal`); venv synced to both new pins and verified
+  via import (`fpdf2 2.8.8`, `litellm 1.100.4`).
+- `UnicodePDF` render smoke (the only fpdf2 consumer, `tools/font_utils.py`)
+  passes on 2.8.8.
+- Full Windows pytest with the upgraded pins: **1126 passed, 4 skipped,
+  8 failed + 1 error** — the failure set again node-identical to the
+  env-class baseline (5× docker heredoc, 2+1 crewai, 1 url_guard).
+- Two further full runs on the same commit (`68821559c`), run at the
+  reviewer's request — **1125 passed each time**, with the baseline set plus
+  exactly one alternating timing-flake failure: run 1
+  (`2:52`) tripped
+  `test_review_handoff.py::test_regeneration_hides_previous_evidence_and_rejects_stale_run_id`,
+  run 2 (`3:40`) tripped the known
+  `test_action_rate_limit.py::test_a_denied_call_reports_how_long_to_wait`.
+  Each node passes in isolation (review-handoff: file `20/20` + the node
+  twice; rate-limit: file `32/32` + the node twice, earlier the same day),
+  and neither failure survives a solo rerun — full-suite load on Windows
+  can starve their wait/heartbeat windows, and the two never failed in the
+  same run. Linux CI remains the arbiter for both.
+
+### B4/B5/Q5 disposition (2026-10-28, frontend demo-honesty run)
+
+Backend delta this slice is `api/cache.py` docstring text only; every other
+change is frontend JS, `index.html` metadata (labels + `?v=10` stamps for the
+edited store/dashboard/jobDrawer assets) and e2e material.
+
+- **Frontend E2E: 85 passed / 0 failed, twice consecutively** with the
+  B4/B5/Q5 diff applied — the 80 baseline plus five new guards (B4 ×3:
+  persistent failure reason on the demo card with "unreachable"
+  misattribution banned; drawer tailor-target effect with the phantom
+  "bookmarked" copy banned; honest package-download refusal. B5:
+  column-parity mapping incl. `needs_review → review`. Q5: "fallback to
+  mock" banned from live-loader sources). One earlier 85-node run showed a
+  single failure: `TypeError … getElementById` at `app.js:51` inside
+  `environment.test.mjs`'s boot test — a jsdom window closed while app.js's
+  `await store.loadAll()` continuation was still pending. Not reproduced on
+  a clean-HEAD stash run (80/80); the harness now settles 300 ms before
+  `ctx.window.close()`, and the two follow-up full runs went 85/85.
+  Harness-only fix; app code untouched.
+- **Windows pytest full run: 1125 passed, 4 skipped, 8 failed + 1 error** —
+  the failure set is node-identical to the recorded env-class baseline (5×
+  docker heredoc, 2+1 crewai, 1 url_guard). The `test_action_rate_limit`
+  timing node passed this run, consistent with its flake classification
+  above (failed 1 of 2 full runs, passes isolated and under load
+  elsewhere). Linux CI remains the arbiter.
+
 Security/CI remediation: `deploy/CI_FAILURE_REMEDIATION.md`. A fresh **168-package**
 locked installation passes dependency consistency. CrewAI is deliberately rolled
 back to 1.6.1 so patched MCP 1.30.0 satisfies its real metadata. Seven offline
