@@ -68,8 +68,6 @@ filelock==4.0.12 CVE-2026-112940
 json-repair==0.25.2 GHSA-xf7x-x43h-rpqh
 lxml==5.4.0 PYSEC-2026-87
 opentelemetry-api==1.34.1 CVE-2026-114603
-pdfminer-six==20231228 PYSEC-2026-1761
-pdfminer-six==20231228 PYSEC-2026-1762
 pillow==10.4.0 CVE-2026-112390
 pillow==10.4.0 CVE-2026-112391
 pillow==10.4.0 CVE-2026-112393

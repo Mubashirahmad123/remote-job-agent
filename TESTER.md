@@ -103,6 +103,65 @@ new tests, and the failure set proved pre-existing:
   can starve their wait/heartbeat windows, and the two never failed in the
   same run. Linux CI remains the arbiter for both.
 
+### A3/A4 evidence + runner decision (2026-10-28, at `ce9018d84`)
+
+- **A3 — CI green at the bundled commit, observed via the GitHub REST API**
+  (no `gh` on this host; endpoint verified working):
+  `actions/runs/40691999221` → **completed / success** — all five jobs
+  (`API + auth + attribution (pytest) (3.11)`, `Dashboard e2e (real API in
+  jsdom)`, `Locked image (x86_64)`, `Locked image (aarch64)`,
+  `Dependency vulnerabilities (pip-audit)`) passed. Per-job pass counts were
+  NOT ingested: job-level log download requires an authenticated token that
+  this host does not have, and counting from a partial view would be
+  invention. Job-level success is the CI gate itself; recorded local counts
+  elsewhere in this file remain the only locally-observed numbers, and the
+  expectation that Linux runs MORE test nodes than many Windows-classified
+  skips (the 5× + 3× Bash skips run for real on Linux) is satisfied by
+  construction of those skips' conditions.
+- **A4 — runner decision recorded AND implemented in `ci.yml`:** before the
+  change, the run's labels were 4 × `ubuntu-latest` + 1 × `ubuntu-24.04-arm`
+  (queried from the same API call above). GitHub's `ubuntu-latest` rides the
+  26.04 migration that started 2026-10-19, so every `runs-on` was pinned to
+  `ubuntu-24.04` for the release window (matrix x86_64 likewise, with the
+  rationale in a comment at the matrix; ARM stays `ubuntu-24.04-arm` as
+  before). This is PO recommendation #3 turned into config, not just prose.
+  The first CI run after this change is itself the verification that the
+  pinned runner ships the full toolchain.
+
+### B10 pdfminer wave (2026-10-28, pdfplumber 0.11.9)
+
+- **Constraint that shaped the choice:** `pdfminer.six` is pinned by its only
+  consumer `pdfplumber` (hard `==` pin), and the fix versions are
+  `20251230` (PYSEC-2026-1761) / `20251107` (PYSEC-2026-1762). The newest
+  pdfplumber (0.11.10) pins `pdfminer.six==20260107` BUT requires
+  `Pillow>=12.2.0`, which has an empty intersection with crawl4ai's
+  `pillow~=10.4` — taking it would reproduce the ResolutionImpossible docker
+  failure class recorded on 2026-10-08 (`zhipuai`/pyjwt). **pdfplumber 0.11.9**
+  is the newest release still accepting `Pillow>=9.1` and it pins
+  `pdfminer.six==20251230`, past BOTH fix lines.
+- `requirements.txt`: `pdfplumber==0.11.4 → ==0.11.9` (exact pin, bounded);
+  lock recompiled with `--universal` — the diff is exactly two package lines
+  (`pdfminer-six 20231228→20251230`, `pdfplumber 0.11.4→0.11.9`), nothing else
+  moved. Venv re-synced and verified: `pdfplumber 0.11.9 | pdfminer-six
+  20251230`.
+- Behavior-compatibility check: pdfplumber consumers are
+  `tools/resume_generator.py` (1-page check) and `tools/cv_parser.py` (text
+  extraction); `test_resume_generator` + `test_cv_upload` pass on 0.11.9
+  (84/84 together with the hygiene suite).
+- **Audit ratchet, in order:** `deploy/dependency_audit.py` first reported
+  `FIXED — 2 baseline entries no longer reproduce` + `OK — 80 findings, all in
+  the baseline; nothing new`; only then were the two
+  `pdfminer-six==20231228 PYSEC-2026-1761/1762` lines pruned from the
+  baseline; re-audit **OK — 80 findings, nothing new** (a pruned entry cannot
+  return silently — the audit now fails if it did).
+- **lxml stays accepted, not forgotten:** PYSEC-2026-87 (local file read via
+  `resolve_entities`) is fixed only in lxml 6.1.0, but `crawl4ai==0.3.74`
+  requires `lxml~=5.3`, so 6.x is unsatisfiable until the B11 crawl4ai
+  migration — same blockers as pillow.
+- **Full Windows pytest with the bumped pins: 1145 passed / 9 skipped /
+  0 failed** (221s) — identical to the pre-wave count at `ce9018d84`, i.e.
+  the pin bump introduced no drift; same 9 skips, all accounted for above.
+
 ### B4/B5/Q5 disposition (2026-10-28, frontend demo-honesty run)
 
 Backend delta this slice is `api/cache.py` docstring text only; every other

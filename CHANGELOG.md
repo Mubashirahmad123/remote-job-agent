@@ -1,5 +1,31 @@
 # CHANGELOG.md
 
+## 2026-10-28 (d) — B10 wave: pdfplumber 0.11.9 clears both pdfminer.six advisories
+
+- `pdfplumber 0.11.4 → 0.11.9` (the only consumer pinning `pdfminer.six`).
+  The locked `pdfminer.six==20251230` is past both fix lines —
+  PYSEC-2026-1761 (CMap pickle deserialization, fixed 20251230) and
+  PYSEC-2026-1762 (arbitrary code execution via crafted PDF CMap path, fixed
+  20251107).
+- Why not 0.11.10 (which is newer still, pinning `pdfminer.six==20260107`):
+  it requires `Pillow>=12.2.0`, which has an empty intersection with
+  `crawl4ai==0.3.74`'s `pillow~=10.4` — the resolution becomes unsatisfiable
+  and `docker build` fails (the same failure class as the recorded
+  zhipuai/pyjwt conflict of 2026-10-08). 0.11.9 is the newest release that
+  still accepts `Pillow>=9.1`.
+- Lock diff is exactly two package lines (`--universal` compile); venv
+  re-synced and verified by import. Affected consumers
+  (`tools/resume_generator.py` 1-page check, `tools/cv_parser.py` text
+  extraction) green.
+- Audit ratchet observed in order: FIXED reported for both entries →
+  baseline prune (`pdfminer-six==20231228` ×2 gone) → re-audit OK (80
+  findings, nothing new). Square-one conflicts (`test_dependency_hygiene`
+  pinning baseline↔lock agreement) fail until the prune lands — enforced
+  sequencing, not convention.
+- lxml (PYSEC-2026-87, fix 6.1.0) remains accepted-but-blocked:
+  `crawl4ai==0.3.74` requires `lxml~=5.3`; unlocks with the B11 migration,
+  together with pillow→13.0.0.
+
 ## 2026-10-28 (c) — A1/A2 portability closed + B6/B7/B8/B9 backlog bundle
 
 - **A1** — portability hunks of `40e5fc1ab` (another branch) applied by hand:

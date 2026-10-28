@@ -317,9 +317,9 @@ packaging==26.3
     #   pytest
 pandas==2.3.3
     # via python-jobspy
-pdfminer-six==20231228
+pdfminer-six==20251230
     # via pdfplumber
-pdfplumber==0.11.4
+pdfplumber==0.11.9
     # via
     #   -r requirements.txt
     #   crewai
