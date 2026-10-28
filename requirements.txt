@@ -35,16 +35,32 @@ google-genai>=1.0.0,<2
 
 # Job scraping
 python-jobspy==1.1.4
-playwright==1.47.0
-playwright-stealth==1.0.6
-crawl4ai==0.3.74
+# playwright>=1.49 and playwright-stealth>=2.0 are floors set by crawl4ai 0.9.5
+# (B11 migration, 2026-10-28). playwright-stealth 2.x removed the module-level
+# `stealth_sync`; tools/playwright_scraper.py degrades to plain Playwright on
+# ImportError and crawl4ai carries the stealth role now (tf-stealth is gone,
+# 0.9.x uses playwright-stealth directly).
+playwright==1.56.0
+playwright-stealth==2.0.0
+# 0.9.5 = the newest crawl4ai: unlocks pillow 13.x + lxml 6.x (the two oldest
+# accepted advisory sets), requires Python>=3.10. It hard-pins
+# `unclecode-litellm==1.81.13` — a "pre-compromise fork" of litellm that ships
+# a full top-level litellm/ tree. That fork is why the `litellm==1.100.4` direct
+# pin below is GONE: litellm (real) and the fork both write the litellm package
+# directory and clobber each other at install. See deploy/audit-baseline.txt
+# for the ratchet note on the fork.
+crawl4ai==0.9.5
+
+# B11 explicit lower-bound pins forced to fixed versions that clear advisory suites:
+pillow==13.0.0        # clears 11 PYSEC pillow entries; satisfies pdfplumber>=9.1
+lxml==6.1.0           # fixes PYSEC-2026-87; within crawl4ai's <7 bound
 
 # CV parsing
 # pdfplumber 0.11.9 = the newest release that still accepts Pillow>=9.1, so it
 # clears both pdfminer.six advisories (PYSEC-2026-1761/1762 — its locked
-# pdfminer.six==20251230 is past both fix lines 20251230/20251107) without
-# breaking crawl4ai's pillow~=10.4 bound (0.11.10 requires Pillow>=12.2 and
-# makes the resolution unsatisfiable until the B11 crawl4ai migration).
+# pdfminer.six==20251230 is past both fix lines 20251230/20251107).
+# (Its original rationale — avoiding the pillow~=10.4 clash against
+# crawl4ai 0.3.74 — ended with the B11 crawl4ai 0.9.5 migration.)
 pdfplumber==0.11.9
 python-docx==1.1.2
 
@@ -64,8 +80,12 @@ reportlab==4.1.0
 fpdf2==2.8.8
 
 # Bounded transitive pins (kept satisfiable with the packages that pull them)
-# litellm comes via crawl4ai (`~=1.48`); exact pin clears CVE-2026-114612, fixed 1.100.4+
-litellm==1.100.4
+# litellm: the 2026-10-28 direct pin litellm==1.100.4 (CVE-2026-114612, fixed
+# 1.100.4+) was removed the same day by the crawl4ai 0.9.5 migration — the
+# hard-pinned unclecode-litellm fork collides on the litellm module tree. The
+# advisory's exploit target (litellm's PROXY ADMIN endpoint) targets a
+# deployment this repo never runs; also unscanned under the fork name.
+# Keep real-litellm from coming back while the fork is pinned.
 
 # Date parsing
 python-dateutil==2.9.0
