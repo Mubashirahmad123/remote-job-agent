@@ -435,6 +435,15 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     print(f"   Fingerprint duplicates: {fp_duplicates} | Remaining: {len(unique_jobs)}")
     tracker.stage("post_dedup", count_by_source(unique_jobs))
 
+    # Opt-in shadow evaluation BEFORE legacy filters: unknown/rejected legacy
+    # inputs must remain observable. It cannot modify the jobs or live selection.
+    try:
+        from tools.matching_shadow import run_optional_shadow
+        run_optional_shadow(unique_jobs)
+    except Exception as exc:
+        # Do not leak profile paths, content or extracted private facts.
+        print(f"   ⚠️ Matching shadow failed ({type(exc).__name__}); live selection unchanged")
+
     # ── Country / Location filter ──
     print("\n🌍 Country filter...")
     before_country = len(unique_jobs)

@@ -1,5 +1,60 @@
 # TESTER.md — Testing Guide
 
+## 2026-10-29 — latest matching adversarial QA
+
+Full locked Linux pytest: **1205 passed, 8 skipped, 32 warnings in 69.43s**.
+Frontend: **88 passed, 0 failures/skips in 36.14s** (jsdom). Matching: **57
+passed**, **97% branch-aware coverage across all four matching modules**.
+`pip check` passes. Four RED-first defects fixed: incomplete essential rejection,
+zero-overlap learnable eligibility, and profile/shadow string-collection coercion.
+Seven skips are optional FAISS and one deferred Lever. See tests/MATCHING_QA.md
+for acceptance gaps and operational risks. **NO-GO for live cutover**; ordinary
+scraped evidence still needs extraction/enrichment and real labeled evaluation.
+Global whitespace check has a pre-existing PM.md EOF blank-line warning.
+
+
+## 2026-10-29 — matching runtime continuation
+
+Latest full locked Linux Python suite: **1200 passed, 8 skipped, 32 warnings**
+in 73.00s (`.venv/bin/python -m pytest tests/ -q -rs --tb=short`). New matching
+suite now has **52 cases** (34 prior + 18 runtime/shadow cases). Seven skips are
+optional FAISS; one is deferred Lever. No dependencies or frontend code changed;
+the previous 88-test frontend run was not repeated in this continuation.
+Coverage figures below describe the earlier foundation, not these runtime additions.
+Relocation/sponsorship, learnable/essential gaps, ranking, temporary SQLite cache/
+review persistence, operator profile loading and non-mutating shadow execution
+have regression tests. Live adoption remains NO-GO pending extraction/enrichment,
+real labels, preference calibration and shadow evidence. The optional curator hook
+is default-off; no live scraping, migration, deployment or submission executed.
+
+
+## 2026-10-29 — matching foundation QA follow-up
+
+Fresh Linux Python 3.11.2 venv installed from requirements.lock.txt.
+Full `pytest tests/ -q -rs --tb=short`: **1182 passed, 8 skipped, 32 warnings**
+in 71.67s. Skips: seven optional FAISS cases and one deferred Lever case.
+Frontend `npm test --prefix tests/e2e`: **88 passed**, no skips/failures,
+43.74s (jsdom, not Chrome). `pip check` passes. New matching tests: **34 passed**;
+branch-aware coverage for the two new modules: **100%** (not product accuracy).
+Three QA regressions reproduced RED then fixed: contradictory location evidence,
+over-broad support title exclusion, numeric weight overflow. See
+`tests/MATCHING_QA.md` for implementation gaps and acceptance audit.
+Verdict: foundation checks pass; **NO-GO for live matcher adoption** until
+extraction/enrichment, essential-gap semantics, shadow integration and labeled
+evaluation exist. No full-system/browser/deployment verification inferred.
+
+
+## 2026-10-29 — matching foundation, targeted verification only
+
+`python -m unittest tests.test_matching_policy tests.test_matching_score -v`:
+**28 passed** (14 eligibility + 14 requirement-scoring contracts).
+`git diff --check`: clean. These synthetic fixtures establish behavior, not
+historical matching accuracy. No network calls, live pipeline rollout, full
+pytest run or frontend rerun. New unittest cases are also pytest-collectable.
+No claim of release-wide GO; live adoption awaits extraction/enrichment,
+confirmed candidate policy, labeled evaluation, and shadow comparison.
+
+
 Mirrors the `tester` subagent (`.opencode/agents/tester.md`). Latest local Linux
 lock-only verification (2026-10-16), including tracker/environment/review handoff regressions: **1042 pytest
 passed, 8 skipped, 32 warnings** and **68 frontend E2E tests passed**. Skips:

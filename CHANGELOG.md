@@ -1,5 +1,47 @@
 # CHANGELOG.md
 
+## 2026-10-29 — matching adversarial QA follow-up
+
+- Fixed incomplete essential evidence causing rejection, zero-overlap learnable
+  jobs becoming eligible, and string collections silently becoming character sets
+  at operator-profile and structured shadow boundaries. Five regressions added.
+- Fresh full Python run: 1205 passed / 8 expected skips; frontend: 88 passed.
+  Four-module matching coverage: 97%, with 57 matching-specific cases.
+- No live cutover; operational and product limitations recorded in MATCHING_QA.
+
+
+## 2026-10-29 — matching runtime continuation (shadow only)
+
+- Added explicit onsite/hybrid relocation destinations and tri-state sponsorship
+  handling. Remote restrictions cannot be bypassed by relocation sponsorship.
+- Required gaps explicitly marked learnable may lower fit without blocking;
+  essential gaps reject; unclassified gaps remain review. Alias duplicates cannot
+  erase essential status. Policy/scorer versions bumped to v2.
+- Separate preference/freshness tie-breaking; no mutation of fit scores.
+- Added personal SQLite extraction cache (owner/content/version) and latest-review
+  queue with profile/scorer/extractor provenance, plus old/new label metric helpers.
+- Added default-off curator shadow hook before legacy country filtering, controlled
+  by MATCHING_SHADOW_PROFILE. Missing structured extraction remains unknown.
+  Shadow failures log only exception type and never change live selection.
+- Full regression: 1200 passed, 8 expected skips; no real labeled evaluation claimed.
+
+
+## 2026-10-29 — deterministic matching foundation (not live)
+
+- Added pure three-state eligibility policy and structured requirement coverage.
+- Required skills support OR alternatives, alias normalization, explicit weights,
+  deduplication and source evidence. Preferred coverage remains separate; no
+  anti-skill double penalties or confidence multiplication.
+- Results include per-field evidence completeness and profile/extractor/scorer
+  versions. Missing evidence and required gaps route to review. All required gaps
+  currently require review conservatively; this policy is not calibrated yet.
+- Up-to-N selection excludes review/rejected results and never fills a quota.
+- No live curator integration, network fetching, or dependency changes. No PR.
+- QA follow-up: 34 targeted tests with 100% branch-aware module coverage;
+  full locked Python suite 1182 passed / 8 skipped; frontend 88 passed.
+  Fixed RED-first location-conflict, title-exclusion and numeric-boundary bugs.
+  Full limitations and NO-GO for live adoption: tests/MATCHING_QA.md.
+
 ## 2026-10-28 (d) — B10 wave: pdfplumber 0.11.9 clears both pdfminer.six advisories
 
 - `pdfplumber 0.11.4 → 0.11.9` (the only consumer pinning `pdfminer.six`).
