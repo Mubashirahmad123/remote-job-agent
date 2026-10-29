@@ -875,3 +875,4 @@ The 2b feature will be shipped in this exact order, with no shortcuts:
 4. **Endpoint code (Greenhouse only)** — done: the two specified routes exist with full triple-gate + claim-first + verification + refill field-readback/minimum-profile/attachment gates. Keep the UI toggle disabled until the Greenhouse submit build is tested and reviewed — that unlock is a separate decision.
 
 After all four close, the UI toggle becomes enabled and the submit opcode is reachable.
+
