@@ -378,3 +378,28 @@ document is the sign-off that the single-supervised-run assumption holds.
   the API screenshot returns 200, retain timing logs and inspect metadata before
   considering any separately authorized submit-path work. Do not bypass CAPTCHA
   or treat metadata availability alone as permission to submit.
+
+### 2026-10-29 — A5/D1 fill-only rerun (supervised)
+
+- **Target:** Greenhouse public demo board, Full Stack Engineer, Democorp
+  (`https://job-boards.greenhouse.io/example/jobs/83446`), fingerprint
+  `94bcd024022152dc3d0d3280d778c1dd`.
+- **Mode:** real Chrome, fill-only (First Name, Last Name, Email, Phone),
+  stops before intent/submit API calls. No auto-submit, no reCAPTCHA bypass.
+- **Outcome:** form fields filled and verified via side-by-side pre/post
+  screenshots; duration 12.1s. Confirmation metadata previously verified
+  present (`/example/jobs/83446/confirmation`); reCAPTCHA present on submit
+  button but not encountered during fill phase. No application data persisted
+  to API or Sheets; screenshot artifacts retained under
+  `data/submit_runs/`.
+- **Screenshot:** pre-fill and post-fill PNG captured in
+  `data/submit_runs/1793255001000-94bcd024022152dc3d0d3280d778c1dd/`.
+- **Evidence:** browser trace shows form completion; no intent/submit
+  requests; reCAPTCHA not triggered during fill. Session satisfies the
+  A5/D1 live-Chrome rerun authorization per LIVE_SUBMIT.md §3 (fill-only,
+  SUBMIT_DRY_RUN modality, human-verified screenshot gate).
+- **Next:** keep submit disarmed (SUBMIT_ENABLED remains false). The A5/D1
+  trace is now complete; future work may include an authorized fill-and-review
+  or submit dry-run, subject to separate operator decision.
+
+---
