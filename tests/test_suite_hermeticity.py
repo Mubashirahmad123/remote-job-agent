@@ -214,7 +214,7 @@ class TestRepoDataDirIsNotABuildArtifact:
     def test_data_directory_is_gitignored(self):
         # If this ever stops being true, a test run could stage a database
         # containing Argon2id password hashes for commit.
-        gitignore = (REPO_ROOT / ".gitignore").read_text()
+        gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
         assert any(
             line.strip() in ("data/", "data/*.db", "/data/")
             for line in gitignore.splitlines()
@@ -287,7 +287,7 @@ class TestSourceIsNotSilentlyGitignored:
         # artifact dir lives at the root, so each rule should say so.
         import re
 
-        lines = (REPO_ROOT / ".gitignore").read_text().splitlines()
+        lines = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
         unanchored = [
             line
             for line in lines

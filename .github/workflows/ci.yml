@@ -24,7 +24,7 @@ concurrency:
 jobs:
   api-tests:
     name: API + auth + attribution (pytest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -135,7 +135,7 @@ jobs:
 
   frontend-e2e:
     name: Dashboard e2e (real API in jsdom)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -183,7 +183,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          # A4 (2026-10-28): pinned for the release window instead of riding
+          # `ubuntu-latest` — the 26.04 runner migration started 2026-10-19,
+          # and an image/Chromium/lockful build must not change underneath a
+          # release. Re-ride after the window.
+          - runner: ubuntu-24.04
             arch: x86_64
           - runner: ubuntu-24.04-arm
             arch: aarch64
@@ -322,7 +326,7 @@ jobs:
   # advisory must not be able to mask (or be masked by) a test failure.
   dependency-audit:
     name: Dependency vulnerabilities (pip-audit)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7

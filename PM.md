@@ -225,8 +225,32 @@ C5 (no double-scoring), Bugs 1–5, §6 circuit breaker + board drops + cached
 gspread client + yield-per-LLM-call accounting, B8 (functional `days_ago()`
 behind `SCRAPER_MAX_AGE_DAYS`, default 0), PM-1 (configurable tier bars) and
 PM-2's backend (opt-in `MAYBE MATCHES` tab).
-Open from that audit: PM-2 dashboard UI, PM-3 (needs real CV variants),
-PM-5 manual review, and the B3 demo-leak e2e suite.
+Open from that audit: PM-2 dashboard UI, PM-5 manual review, and the B3
+demo-leak e2e suite. **PM-3 is closed (2026-10-28):** real CV variants ship
+through `POST /api/cv/upload` into `CV_DIR` (Option A — the existing
+CVLibrary machinery is activated; see `CHANGELOG.md` 2026-10-28).
+
+**Status update 2026-10-28 (b):** B1 and B2 are fixed (`CHANGELOG.md`
+2026-10-28) — the dashboard's two fake-success claims (double-wired Sync
+Sheets toast; "Uploaded & Parsed" for a file that is never uploaded) were
+removed at source without building any upload feature, and the first three
+concrete B3 demo-leak guard cases landed in `tests/e2e/smoke.test.mjs`
+(the remaining B3 scope stays open). **Q5, B4 and B5 are also fixed the
+same day** (`CHANGELOG.md` 2026-10-28: demo-surface disclosure — generation
+failure reason pinned on the preview card, drawer save recast to the real
+tailor-target mechanic, fake `Apply_Package.zip` download replaced by an
+honest refusal; `needs_review` added to `dashboard._trackerColumn()`;
+mock-wording sweep). Frontend E2E after those land: recorded in
+`TESTER.md` (2026-10-28). The `environment.test.mjs` Windows EPERM
+cleanup flake was reproduced on a clean-HEAD stash baseline (its failing
+node moved between tests on identical code — a kill→handle-release race,
+not app behavior) and fixed in the test harness; two same-class findings
+were fixed later that day (a second EPERM cleanup site, and a jsdom
+boot-continuation race before `window.close()`).
+Windows pytest disposition for A2 recorded in `TESTER.md` (2026-10-28):
+**1102 passed / 8 env-class failures**, all reproduced on a clean-HEAD
+baseline with identical node IDs (no Python touched by this diff); the Linux
+lock-only rerun at HEAD (A3) remains the closing gate.
 
 **Review follow-up 2026-10-21 (second review of the same run) — all five
 items closed:** title keywords are now derived from the CV's experience
@@ -270,17 +294,17 @@ baseline ratchets.
 
 | # | Task | Owner | Eff | Acceptance | Depends |
 |---|---|---|---|---|---|
-| B1 | Fix double-wired `btnSyncSheets` (`navigation.js:67-78`): remove fake spinner + unconditional toast | Software Engineer | S | Exactly one handler; toast reflects the real outcome | — |
-| B2 | Fix fake upload success (`resumeStudio.js:587-596`): no "Uploaded & Parsed" without an endpoint | Software Engineer | S | Honest disabled/error state; caught by B3 | — |
-| B3 | Demo-leak e2e suite (+ double-wiring + 401-mid-action recovery cases) | Software Engineer | M | Suite fails on any success-claim without a real API success; runs in CI | B1, B2 |
-| B4 | Honest-demo pass: non-real filenames + explicit demo toast for corrupt demo artifacts; no silent `runShrinkEngine` fallback; Save toast, drawer boilerplate and identity panel labeled demo | Software Engineer | M | Every demo path visibly labeled; B3 extended | B3 |
-| B5 | Table parity + taxonomy: jobDesk TABLE loading/error/empty states; `_trackerColumn` includes `needs_review`; remove dead `appliedPackagesList` | Software Engineer | S | Table- and taxonomy-parity e2e green | B3 |
-| B6 | Tests for `PUT /api/cv/profile` (currently zero) | Senior Dev | S | Happy/invalid/partial-merge cases in `test_api_cv.py` | — |
-| B7 | Submit-claim heartbeat/fencing parity with the fill path — or a documented single-supervised-run assumption | Senior Dev | M | Concurrent-claim rejection tested, or sign-off note in `LIVE_SUBMIT.md` before any dry run | A5 |
-| B8 | `days_ago()` stub (`agents/scrapper.py:176-178`): restore date filtering per PO #4 | Junior Dev | S | Date filter functional + tested, or bypass documented as deliberate | PO #4 |
-| B9 | Backend test/fix bundle: runs-registry watchdog (or documented restart caveat), bad-tab-400 + non-PNG-screenshot tests; `ApplyOut` response_model only after verifying UI review-polling fields survive (PO #5) | Senior Dev | M | Targeted tests green; decision recorded | — |
-| B10 | Vuln ratchet wave 1: lxml, pdfminer, then pillow→12.1.1 — one at a time: bounded pin → `uv pip compile --universal` → full suites → docker CI → audit → prune FIXED-only baseline lines | QA | M | Baseline shrinks only via FIXED lines; suites + docker CI green each step | A4 |
-| B11 | Vuln ratchet wave 2: crawl4ai→0.8.0 (drives the JS scraper; highest regression risk) | QA | L | JS-rendered scraper smoke passes post-bump; audit rerun | B10 |
+| B1 | ✅ 2026-10-28 — Fix double-wired `btnSyncSheets` (`navigation.js:146-157` at fix time): the fake 800ms spinner + unconditional success toast removed; app.js's live handler is the only wiring | Software Engineer | S | Exactly one handler; toast reflects the real outcome — static + behavioral guard in smoke.test.mjs | — |
+| B2 | ✅ 2026-10-28 — Fix fake upload success (`resumeStudio.js:587-596` at fix time): no "Uploaded & Parsed"/extraction claims; renders "Selected locally — no upload" and an honest toast | Software Engineer | S | Honest state for a pick without an endpoint; caught by the new B2 guard case | — |
+| B3 | Demo-leak e2e suite (+ double-wiring + 401-mid-action recovery cases) — partial 2026-10-28: the 3 fake-success guard cases landed (single-wiring, no-fake-sync-toast, CV-pick honesty), plus the B4/B5/Q5 guards below. 401-mid-action recovery closed 2026-10-28: mid-session revocation (expiry/other-device logout) → first page API call → whole-page bounce to login pinned in smoke.test.mjs. Remaining demo surfaces beyond smoke still open | Software Engineer | M | Suite fails on any success-claim without a real API success; runs in CI | B1, B2 |
+| B4 | ✅ 2026-10-28 — the three lying demo surfaces closed (`CHANGELOG.md` 2026-10-28): a failed live generation pins its reason PERSISTENTLY on the preview card via `runShrinkEngine({reason})` and never blames "API unreachable" for HTTP failures; the drawer save's phantom "saved list" toast recast to the real tailor-target mechanic (button relabeled "Tailor target"); the fake `Apply_Package.zip` download replaced by an honest refusal, demo cover downloads disclosed | Software Engineer | M | Five new e2e guards (persistent reason, no-unreachable-misattribution, drawer effect + dead copy banned, honest refusal); demo card keeps its `demoBadge` sheets | — |
+| B5 | ✅ 2026-10-28 (closed in two increments): (1) `_trackerColumn` includes `needs_review` (mapping-table guard in smoke.test.mjs); dead `appliedPackagesList` confirmed gone (orphan-element inventory e2e — row wording was stale). (2) jobDesk TABLE now mirrors the card grid's loading / API-error / empty states (`jobDesk.js` + `jobs.css`, state rows in `<tbody>`), with two e2e guards: outage → `.jobs-table-state.is-error` row; empty filter → both views state "No remote jobs match" | Software Engineer | S | Table- and taxonomy-parity e2e green | B3 |
+| B6 | ✅ 2026-10-28 — `PUT /api/cv/profile` coverage in `tests/test_api_cv.py` (`TestPutCvProfile`): route contract (happy echo of merged profile, empty body, 501 no-anchor, 422-not-500 on bad declared types, garbage extras tolerated) + REAL-merge semantics against `cache.save_cv_profile` (partial merge preserves untouched fields, skills comma-string coercion at the schema boundary, None clears, whitelist drops unknowns, name/full_name sync, never-LLM guard). 11 new tests | Senior Dev | S | Happy/invalid/partial-merge cases in `test_api_cv.py` | — |
+| B7 | ✅ 2026-10-28 — the "concurrent-claim rejection tested" branch: `tests/test_apply_submit_primitives.py::test_concurrent_*` (barrier-synchronized, real SQLite) already pin one-winner/one-row for same-fingerprint race and daily-cap extraction. Decision + single-supervised-run sign-off recorded in `LIVE_SUBMIT.md` §6b: submit keeps TTL-from-claimed_at liveness (a ~180s click sequence), not the fill path's heartbeat (minutes of work) — a recorded-only watchdog would widen the double-submit window; heartbeat needed only if submit ever becomes multi-operator | Senior Dev | M | Concurrent-claim rejection tested, or sign-off note in `LIVE_SUBMIT.md` before any dry run | A5 |
+| B8 | ✅ 2026-10-28 — `days_ago()` is real (parses `posted_date_iso`; unit-tested in `test_audit_fixes.py`); the date filter runs in `scrape_all` behind opt-in `SCRAPER_MAX_AGE_DAYS` (default 0 keeps no-filter behavior), unparseable dates KEPT (documented inline + docstring) = bypass documented as deliberate (PO #4) | Junior Dev | S | Date filter functional + tested, or bypass documented as deliberate | PO #4 |
+| B9 | ✅ 2026-10-28 — bundle closed: (1) runs-registry: no watchdog deliberately (Python can't kill a hung thread; a recorded-only watchdog frees the budget for a second hung run) — restart-caveat documented in `api/runs.py` docstring + pinned by `test_wedged_run_blocks_then_restart_recovered` (409 while wedged → registry clear = restart equivalent → 202 again). (2) bad-tab-400 pinned for `/api/jobs` + `/api/apply/queue` (skills + refresh already covered). (3) Screenshot endpoint now confirms image type by magic bytes (text file named .png → octet-stream, never image/png), new tests in `test_error_disclosure.py`. (4) `ApplyOut` stays UNWRAPPED (PO #5 verified): the UI reads 6 fields the model would strip (`autoApply.js` toQueueResult/awaitReview); decision recorded in the model docstring | Senior Dev | M | Targeted tests green; decision recorded | — |
+| B10 | Vuln ratchet wave 1: lxml, pdfminer, then **pillow→13.0.0** (2026-10-28 retarget — the 2026 advisory set fixes only in 13.0.0, verified per-advisory against OSV; the 12.x target no longer clears it) — one at a time: bounded pin → `uv pip compile --universal` → full suites → docker CI → audit → prune FIXED-only baseline lines. 2026-10-28 partial: fpdf2→2.8.8 and bounded litellm==1.100.4 landed outside this wave; **pdfminer wave landed 2026-10-28**: pdfplumber `0.11.4 → 0.11.9` (the newest release still accepting `Pillow>=9.1` — 0.11.10 requires Pillow>=12.2 which makes the resolution unsatisfiable against crawl4ai's `pillow~=10.4`), lock now ships `pdfminer.six==20251230`, past BOTH fix lines (20251230 for PYSEC-2026-1761, 20251107 for PYSEC-2026-1762); audit reported both FIXED, baseline lines pruned, re-audit OK (80 findings). pillow itself and **lxml** (PYSEC-2026-87, fixed 6.1.0) stay blocked by crawl4ai==0.3.74's `pillow~=10.4` / `lxml~=5.3` (audit-baseline 2026-10-28 note) | QA | M | Baseline shrinks only via FIXED lines; suites + docker CI green each step | A4 |
+| B11 | Vuln ratchet wave 2: crawl4ai→0.8.0 (drives the JS scraper; highest regression risk — renders B10's pillow→13.0.0 resolvable in the same migration window) | QA | L | JS-rendered scraper smoke passes post-bump; audit rerun | B10 |
 
 Exit: B1–B9 done (B10/B11 may trail), demo-leak suite green, reviewer APPROVE.
 
@@ -328,8 +352,12 @@ Exit: C1–C5 done → production use authorized.
 2. **Armed submit at all?** — if D3 confirms reCAPTCHA blocks, close the
    automatable-submit track permanently (keep fill-and-review only).
    Recommend: decide on D1/D2 evidence; default close.
-3. **Ubuntu runner** — pin `ubuntu-24.04` for the release window (26.04
-   migration starts 2026-10-19), re-ride later. Recommend: pin for Phase A.
+3. **Ubuntu runner — DONE 2026-10-28 (A4):** `ubuntu-latest` was riding the
+   26.04 migration window that started 2026-10-19; all four `runs-on`
+   invocations in `ci.yml` are now pinned to `ubuntu-24.04` (ARM stays
+   `ubuntu-24.04-arm`), with the rationale at the docker matrix. Verified
+   before the change via the runs API (labels 4×ubuntu-latest +
+   1×ubuntu-24.04-arm at `ce9018d84`).
 4. **`days_ago()` date filtering** — restore, or keep the bypass as
    documented deliberate config.
 5. **`ApplyOut` response_model** — recommend leaving the raw dict on
@@ -436,6 +464,19 @@ work, not a standalone upload button.
 **Destination:** a future branch named `user`, not a merge into personal `main`.
 **Status:** deferred, no target date; no branch creation or implementation now.
 The present documentation work does not change the session branch.
+
+**PO decision 2026-10-28 — §2.1a amended by Option A (shipped).** The all-or-
+nothing deferral is reversed for Scenario A only: the personal dashboard
+needed a working upload more than it needed the full user lifecycle, and the
+library machinery to host uploaded variants already existed, tested. Shipped:
+`POST /api/cv/upload` (raw body, no multipart dependency), `CV_UPLOAD_MAX_MB`
+server cap, magic-byte + extractability validation ("stored ⇒ readable" —
+unreadable input is deleted, never registered), tags-in-filename registration
+via the existing `tools/cv_library` extractor, `cvs/` gitignored and mounted
+rw in compose, default `my_cv.pdf` untouched. Not shipped (stays with the
+`user` branch): per-user ownership, retention/deletion policy, bring-your-own
+credentials, profession-agnostic matching. `USER_PRODUCT.md` remains the
+canonical future scope.
 
 `USER_PRODUCT.md` is the canonical future scope: deployment-model decisions,
 profession-aware matching, ownership-aware persistence, per-user credentials,
@@ -834,3 +875,4 @@ The 2b feature will be shipped in this exact order, with no shortcuts:
 4. **Endpoint code (Greenhouse only)** — done: the two specified routes exist with full triple-gate + claim-first + verification + refill field-readback/minimum-profile/attachment gates. Keep the UI toggle disabled until the Greenhouse submit build is tested and reviewed — that unlock is a separate decision.
 
 After all four close, the UI toggle becomes enabled and the submit opcode is reachable.
+

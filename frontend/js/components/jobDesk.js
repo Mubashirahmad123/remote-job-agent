@@ -292,9 +292,23 @@ JobAgent.jobDesk = {
       }
     }
 
-    // 2. Render Table View
+    // 2. Render Table View — same honest states as the card grid: the table
+    // must never render a blank <tbody> on loading, API error or empty
+    // filters (AUDIT B5, 2026-10-28). Banner duplication is avoided: the
+    // card grid above already carries it.
     if (this.jobsTableBody) {
       const stackOf = (job) => Array.isArray(job.tech_stack) ? job.tech_stack : [];
+      const state = JobAgent.store.state;
+      if (state.loading.jobs) {
+        this.jobsTableBody.innerHTML =
+          `<tr><td colspan="8" class="jobs-table-state">Loading live jobs from <code>/api/jobs</code>…</td></tr>`;
+      } else if (state.errors.jobs) {
+        this.jobsTableBody.innerHTML =
+          `<tr><td colspan="8" class="jobs-table-state is-error">API error: ${this.escapeHtml(String(state.errors.jobs))}</td></tr>`;
+      } else if (jobs.length === 0) {
+        this.jobsTableBody.innerHTML =
+          `<tr><td colspan="8" class="jobs-table-state">No remote jobs match current filters</td></tr>`;
+      } else {
       this.jobsTableBody.innerHTML = jobs.map(job => `
         <tr data-id="${String(job.id).replace(/"/g, '&quot;')}">
           <td>
@@ -321,6 +335,7 @@ JobAgent.jobDesk = {
           </td>
         </tr>
       `).join('');
+      }
     }
 
     // 3. Entrance motion — only when the view is entered, never on a filter

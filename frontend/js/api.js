@@ -9,7 +9,8 @@
  *   system  -> POST /api/jobs/refresh
  *   runs    -> POST /api/scrape, GET /api/scrape[/{run_id}]
  *   materials -> POST /api/resume/{fp}, GET download, POST /api/cover-letter/{fp}, GET download
- *   cv        -> GET /api/cv/profile, GET /api/cv/variants (Phase 2, may 404/501)
+ *   cv        -> GET/PUT /api/cv/profile (may 501), GET /api/cv/variants,
+ *               POST /api/cv/upload (raw file body; 404/501 = not deployed)
  *   apply     -> POST /api/apply/{fp} (review), GET /api/apply/{fp}/screenshot
  *   auth      -> GET /api/auth/me, POST /api/auth/logout
  * Backend contract: api/schemas.py (JobOut, TrackerEntry, HealthOut).
@@ -271,6 +272,21 @@ JobAgent.api = (() => {
     }
   }
 
+  // POST /api/cv/upload — raw-body ingest: the File itself is the body, the
+  // safe filename rides in the query string (no multipart endpoint). 404/501
+  // mean the route isn't deployed in this backend; the caller falls back to
+  // its honest local-only state. Any other error is surfaced as-is.
+  async function uploadCv(file) {
+    const name = (file && file.name) || '';
+    return await request('/api/cv/upload' + query({ filename: name }), {
+      method: 'POST',
+      body: file,
+      headers: {
+        'Content-Type': (file && file.type) || 'application/octet-stream',
+      },
+    });
+  }
+
   return {
     baseUrl,
     getHealth,
@@ -298,5 +314,6 @@ JobAgent.api = (() => {
     getCvProfile,
     updateCvProfile,
     getCvVariants,
+    uploadCv,
   };
 })();

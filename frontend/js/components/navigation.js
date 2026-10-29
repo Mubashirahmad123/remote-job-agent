@@ -18,7 +18,6 @@ JobAgent.navigation = {
     this.navItems = document.querySelectorAll('.nav-item');
     this.viewPanels = document.querySelectorAll('.view-panel');
     this.currentViewTitle = document.getElementById('currentViewTitle');
-    this.btnSyncSheets = document.getElementById('btnSyncSheets');
     this.btnScrapeNow = document.getElementById('btnScrapeNow');
     this.scrapeStatusCard = document.getElementById('scrapeStatusCard');
     // The sidebar's own brand row is the control: click the panel to fold it
@@ -143,18 +142,12 @@ JobAgent.navigation = {
       }
     });
 
-    if (this.btnSyncSheets) {
-      this.btnSyncSheets.addEventListener('click', () => {
-        this.btnSyncSheets.innerHTML = '<span>Syncing...</span>';
-        setTimeout(() => {
-          this.btnSyncSheets.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
-            <span>Sync Sheets</span>
-          `;
-          JobAgent.toast.show('Google Sheets sync complete: ALL JOBS, TOP MATCHES, APPLIED up to date.');
-        }, 800);
-      });
-    }
+    // #btnSyncSheets is owned exclusively by js/app.js, which calls the real
+    // POST /api/jobs/refresh and reports the live outcome to the user. A
+    // second handler here once fired a fake "Google Sheets sync complete"
+    // toast from its own 800ms setTimeout (audit B1, PM.md §1a) beside the
+    // real handler — a guaranteed-success claim on top of work it never did.
+    // Nothing in this file may attach a listener to that button.
 
     if (this.scrapeStatusCard) {
       this.scrapeStatusCard.addEventListener('click', () => this.switchTab('scrape'));

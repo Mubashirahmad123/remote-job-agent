@@ -225,6 +225,39 @@ def test_a_handwritten_lookup_message_is_still_passed_through(signed_in, monkeyp
     assert _detail(response) == "No screenshot exists yet (package-only, no fill run)"
 
 
+def test_a_text_file_named_png_is_not_served_as_image_png(signed_in, monkeypatch, tmp_path):
+    """AUDIT B9 (2026-10-28): the screenshot route used to label media type by
+    file extension. The before-submit screenshot is the operator's proof of
+    what was filled — a text or HTML file named `.png` served as image/png
+    would present non-image bytes as that proof. Content is now confirmed by
+    magic bytes; anything else degrades to application/octet-stream (download,
+    never an image render)."""
+    from api import apply as apply_service
+
+    fake = tmp_path / "review.png"
+    fake.write_text("<html>not an image</html>", encoding="utf-8")
+    monkeypatch.setattr(
+        apply_service, "get_review_screenshot_path", lambda fingerprint: fake)
+    response = signed_in.get(f"/api/apply/{BOGUS_FP}/screenshot")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/octet-stream")
+
+
+def test_a_real_png_is_still_served_as_image_png(signed_in, monkeypatch, tmp_path):
+    from api import apply as apply_service
+
+    fake = tmp_path / "review.png"
+    # 1x1 transparent PNG — real magic bytes, real content.
+    fake.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06"
+        b"\x00\x00\x00\x1f\x15\xc4\x89")
+    monkeypatch.setattr(
+        apply_service, "get_review_screenshot_path", lambda fingerprint: fake)
+    response = signed_in.get(f"/api/apply/{BOGUS_FP}/screenshot")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+
+
 # --- the opposite failure mode: an API that says nothing ---------------------
 
 

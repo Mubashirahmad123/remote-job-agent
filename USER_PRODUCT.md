@@ -38,6 +38,58 @@ on `main` stay unchanged.
   background runs, caches, generated materials, tracker writes and apply state.
   Attribution alone is not data isolation.
 
+### Dashboard Profile — future user-product scope
+
+Decision recorded: **2026-10-29**. Add a dedicated **Profile** section to the
+future user product; do not build this dashboard feature on personal `main` as
+part of the current matching-foundation work. This is planning, not a shipped
+feature or authorization to create/switch branches.
+
+The profile must capture each user's own matching policy rather than hardcode
+the owner's preferences:
+
+- Current residence/work country and explicitly declared work rights.
+- Remote-work arrangements and the countries from which the user will work.
+- Relocation destinations, willingness to relocate, and sponsorship needs.
+- Seniority bands, relevant experience, acceptable role families and professions.
+- Confirmed skills, essential constraints, learnable gaps and avoided stacks.
+- Employer-region, industry/startup, timezone and daily-shortlist preferences,
+  kept distinct from eligibility requirements.
+
+Keep user-confirmed policy separate from CV-extracted facts. Do not infer work
+rights from residence, employer headquarters, a CV, or the word “remote”. A US
+employer hiring remotely from India is different from a US-residents-only job;
+relocation with unknown sponsorship goes to review. Missing required profile
+answers remain unknown, never silently filled with the owner's defaults.
+
+Use the profile as versioned input to the three-layer matcher: eligibility gates
+(pass/fail/unknown), requirement-based fit, and per-field evidence completeness.
+Every match must retain its profile/scorer/extractor versions. Saving changed
+preferences must clearly distinguish saved configuration from pending/completed
+rematching; historical results must not appear freshly evaluated automatically.
+
+Persistence and API access must be bound to the authenticated user/workspace,
+with ownership enforced server-side. Include validation, honest load/save/error
+states, profile completeness, export/reset/delete behavior and appropriate
+retention rules; never expose secrets as ordinary profile fields.
+
+Acceptance criteria for the future implementation:
+
+- Two users can save different policies and cannot read or modify each other's
+  profiles, matches or derived caches, including through background jobs.
+- Remote eligibility, relocation sponsorship, ambiguous seniority and missing
+  answers have explicit pass/fail/unknown regression coverage.
+- Saved changes survive reload; failed saves never display success.
+- CV import cannot silently overwrite user-confirmed work rights/preferences.
+- Profile-version changes invalidate relevant match caches and permit deliberate
+  rematching without rewriting the provenance of historical decisions.
+- API and real-browser tests cover validation, keyboard access and error recovery.
+
+The owner's example (India work, sponsored Saudi/UAE relocation, international
+remote work explicitly permitting India) is a test scenario only, not a default
+for new accounts. Profession-aware policy remains required; web-development
+role families must not become universal product rules.
+
 ### Persistence and isolation
 
 - Design database-backed per-user persistence for profiles, jobs/matches,

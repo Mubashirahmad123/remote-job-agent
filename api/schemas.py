@@ -352,6 +352,25 @@ class CvProfileUpdate(BaseModel):
         return v
 
 
+class CvUploadOut(BaseModel):
+    """POST /api/cv/upload response — exactly what the server did with the file.
+
+    `cached_profile` is a fresh on-disk parsed profile for this exact content
+    hash when one already exists (read-only probe, mirrors cv_parser's <7-day
+    freshness + non-shell rules), else null. The endpoint never triggers LLM
+    parsing — registration only; parsing happens in the pipeline as usual.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    stored_name: str
+    size_bytes: int
+    tags: List[str] = Field(default_factory=list)
+    profile_cached: bool = False
+    cached_profile: Optional[Dict[str, Any]] = None
+    message: str = ""
+
+
 class ApplyRequest(BaseModel):
     """POST /api/apply/{fp} body — Phase 2a fill-only.
 
@@ -407,7 +426,18 @@ class ApplySubmitOut(BaseModel):
 
 
 class ApplyOut(BaseModel):
-    """Phase 2a fill-review result (terminal state: screenshot + package)."""
+    """Phase 2a fill-review result (terminal state: screenshot + package).
+
+    DECIDED (AUDIT B9 / PO #5, 2026-10-28): this model is intentionally NOT
+    wired as the POST /api/apply/{fp} response_model. Verified against the
+    real UI (frontend/js/components/autoApply.js toQueueResult/awaitReview):
+    the dashboard reads apply_url, fill_error, field_verification,
+    profile_fields_verified, browser_opened and review_run_id from the raw
+    fill-review dict — six of which this model would strip (view models
+    built from toQueueResult would silently blank out). Revisit only when
+    the fill result becomes a stable external contract (the future `user`
+    product), and then expand the model first, wrap second.
+    """
 
     status: str = "filled_ready"
     mode: str = "review"

@@ -98,6 +98,14 @@ class TestJobsDataContract:
                 f"not date-shaped: {posted!r}"
             )
 
+    def test_unknown_tab_is_400_not_500(self, client):
+        # AUDIT B9 (2026-10-28): jobs.py maps the cache's ValueError to a 400
+        # — pin the contract (skills + refresh covered theirs elsewhere).
+        r = client.get("/api/jobs", params={"tab": "APPLIED"})
+        assert r.status_code == 400
+        assert "Unknown jobs tab" in r.json()["detail"]
+        assert "incident" not in r.json()["detail"]
+
     def test_fingerprints_unique(self, client):
         jobs = client.get("/api/jobs", params={"limit": 500}).json()
         fps = [j["job_fingerprint"] for j in jobs]

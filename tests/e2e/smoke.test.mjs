@@ -70,7 +70,9 @@ describe('happy path — live API', () => {
   let ctx;
   before(async () => {
     ctx = await loadDashboard(api.base);
-    await waitFor(() => ctx.window.JobAgent?.store?.state?.stats, { label: 'stats loaded' });
+    // Boot path, not an assertion: 30s so parallel-suite load can't turn a slow
+  // stats boot into a hook failure that sinks this file unit.
+  await waitFor(() => ctx.window.JobAgent?.store?.state?.stats, { label: 'stats loaded', timeout: 30000 });
   }, { timeout: 60000 });
 
   test('page boots with no uncaught same-origin script errors', () => {
@@ -183,6 +185,27 @@ describe('happy path — live API', () => {
     assert.ok(titles.includes('Senior back-end Engineer'), `got ${JSON.stringify(titles)}`);
   });
 
+  test('an empty filtered list states it in BOTH views, not just the cards (B5)', async () => {
+    // Drive the store through its real public API (the same path the search
+    // input uses). The card grid got its empty state in the first pass; the
+    // table view used to render a blank <tbody> that read as a layout bug.
+    const win = ctx.window;
+    win.JobAgent.store.setFilter('search', 'zzz-no-such-job-e2e');
+    try {
+      await waitFor(() => {
+        const el = win.document.getElementById('jobsGridContainer');
+        return el && el.textContent.includes('No remote jobs match') ? el : null;
+      }, { label: 'card grid empty state' });
+      const tbody = win.document.getElementById('jobsTableBody');
+      const stateRow = tbody && tbody.querySelector('tr td.jobs-table-state:not(.is-error)');
+      assert.ok(stateRow, `table must state emptiness, got: ${(tbody && tbody.innerHTML || '').slice(0, 160)}`);
+      assert.match(stateRow.textContent, /No remote jobs match/);
+    } finally {
+      // Must land before the next test re-renders with demos data.
+      win.JobAgent.store.setFilter('search', '');
+    }
+  });
+
   test('no "undefined" / "NaN" / "[object Object]" leaks into rendered text', () => {
     const body = ctx.window.document.body.textContent;
     for (const bad of ['undefined', 'NaN', '[object Object]']) {
@@ -286,6 +309,199 @@ describe('happy path — live API', () => {
     window.JobAgent.toast.show('check', 'warn');
     assert.ok(window.document.querySelector('.toast-icon.is-warn'), 'warn toasts need .toast-icon.is-warn');
   });
+
+  test('Sync Sheets fires the real refresh exactly once and never fakes success (B1)', async () => {
+    // navigation.js used to wire a second handler on this button that showed
+    // "Syncing..." and then, from its own 800ms setTimeout, a guaranteed
+    // "Google Sheets sync complete" toast — a success claim on work it never
+    // did, running beneath the real handler in app.js (audit 2026-10-18, B1).
+    const doc = ctx.window.document;
+    const btn = doc.getElementById('btnSyncSheets');
+    assert.ok(btn, 'btnSyncSheets missing');
+    const refreshHits = () => ctx.requests.filter((u) => u.includes('/api/jobs/refresh')).length;
+    const before = refreshHits();
+    btn.click();
+    await waitFor(() => refreshHits() > before, { label: 'POST /api/jobs/refresh issued' });
+    await waitFor(() => /refreshed|refresh failed/i.test(
+      doc.querySelector('.app-toast')?.textContent || ''), { label: 'the outcome toast' });
+    // Wait past the retired fake handler's 800ms window: on that regression
+    // its success copy would appear now and stay for the toast TTL.
+    await new Promise((r) => ctx.window.setTimeout(r, 950));
+    const toasts = [...doc.querySelectorAll('.app-toast')].map((t) => t.textContent).join(' | ');
+    assert.doesNotMatch(toasts, /sync complete/i);
+  });
+
+  test('CV import is labeled "selected locally" and claims no upload/parse (B2)', () => {
+    // handleUploadedFile() once rendered an emerald "Uploaded & Parsed" badge
+    // and toasted "Extracted skills and contact profile cache" — while
+    // nothing was ever uploaded, parsed, extracted or cached. The UI may
+    // only describe what actually happened. POST /api/cv/upload now exists;
+    // this handler is the FALLBACK for a deployment without that route (or
+    // during an outage), so its copy must stay humble.
+    const doc = ctx.window.document;
+    const studio = ctx.window.JobAgent.resumeStudio;
+    assert.ok(studio, 'resumeStudio not wired');
+    studio.handleUploadedFile('fixture_cv.pdf', 2048);
+    const zone = doc.getElementById('dropzoneActiveFile');
+    assert.ok(zone, 'dropzoneActiveFile missing');
+    assert.match(zone.textContent, /Current:\s*fixture_cv\.pdf/, zone.textContent);
+    assert.ok(zone.textContent.includes('Selected locally'), zone.textContent);
+    assert.doesNotMatch(zone.textContent, /& Parsed/, zone.textContent);
+    const toast = doc.querySelector('.app-toast');
+    assert.ok(toast, 'no toast rendered for the selection');
+    assert.match(toast.textContent, /nothing was uploaded or parsed/i, toast.textContent);
+  });
+
+  test('a confirmed upload reports exactly what the server said', async () => {
+    // Component contract: with JobAgent.api.uploadCv stubbed to the server's
+    // honest reply shape, the dropzone must show "Registered · <tags>" with
+    // the real numbers in the toast — and never the invented copy that
+    // triggered audit B2 ("Uploaded & Parsed", "Extracted skills …").
+    const doc = ctx.window.document;
+    const studio = ctx.window.JobAgent.resumeStudio;
+    const orig = ctx.window.JobAgent.api.uploadCv;
+    let sentFile = null;
+    ctx.window.JobAgent.api.uploadCv = async (file) => {
+      sentFile = file;
+      return {
+        stored_name: 'cv_backend__1a2b3c4d.pdf',
+        size_bytes: 2048,
+        tags: ['backend'],
+        profile_cached: false,
+        cached_profile: null,
+        message: 'Registered in the CV library (default CV untouched). Parses on the next pipeline run.',
+      };
+    };
+    try {
+      const file = new ctx.window.File(
+        [new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34])],
+        'cv_backend_pick.pdf', { type: 'application/pdf' },
+      );
+      await studio.uploadCvFile(file);
+      assert.ok(sentFile && sentFile.name === 'cv_backend_pick.pdf',
+        'the picked File object must be the body handed to the upload');
+      const zone = doc.getElementById('dropzoneActiveFile');
+      assert.ok(zone, 'dropzoneActiveFile missing');
+      assert.match(zone.textContent, /Current:\s*cv_backend_pick\.pdf/, zone.textContent);
+      assert.ok(zone.textContent.includes('Registered · backend'), zone.textContent);
+      assert.doesNotMatch(zone.textContent, /& Parsed/, zone.textContent);
+      const toast = doc.querySelector('.app-toast');
+      assert.ok(toast, 'no toast for a confirmed upload');
+      assert.match(toast.textContent, /2\.0 KB/, toast.textContent);
+      assert.match(toast.textContent, /tags: backend/, toast.textContent);
+      assert.match(toast.textContent, /Parses on the next pipeline run/, toast.textContent);
+      assert.doesNotMatch(toast.textContent, /Extracted skills/i, toast.textContent);
+    } finally {
+      ctx.window.JobAgent.api.uploadCv = orig;
+    }
+  });
+
+  test('upload wiring exists end to end: route, client fn, changed handlers', () => {
+    // What a naive edit breaks: renaming uploadCv or reverting the change
+    // handlers silently downgrades the dropzone to the local-only fallback
+    // while every unit test still passes. Pin the chain instead.
+    const read = (rel) => readFileSync(resolve(REPO, 'frontend', rel), 'utf8');
+    const api = read('js/api.js');
+    const studio = read('js/components/resumeStudio.js');
+    assert.match(api, /'\/api\/cv\/upload'/, 'api.js must POST /api/cv/upload');
+    assert.match(api, /async function uploadCv\(/, 'api.js must export an uploadCv client fn');
+    assert.match(api, /uploadCv,/, 'uploadCv must be in the API export list');
+    assert.match(studio, /async uploadCvFile\(/, 'resumeStudio must own the upload handler');
+    assert.match(studio, /JobAgent\.api\.uploadCv\(file\)/, 'the handler must call the real client fn');
+    assert.match(studio, /this\.uploadCvFile\(f\b/, 'both file pickers must route through uploadCvFile');
+    assert.doesNotMatch(studio, /this\.handleUploadedFile\(file\.name/, 'change/drop handlers must not bypass the upload path');
+  });
+
+  test('dashboard column mapping counts needs_review as review (B5 tracker parity)', () => {
+    // The dashboard metrics used to bucket needs_review under 'applied'
+    // while the tracker itself knew the column — a silent count drift.
+    const dashboard = ctx.window.JobAgent.dashboard;
+    assert.ok(dashboard && typeof dashboard._trackerColumn === 'function',
+      'dashboard._trackerColumn missing');
+    assert.equal(dashboard._trackerColumn('needs_review'), 'review');
+    for (const [status, column] of [
+      ['review', 'review'], ['filled_ready', 'review'], ['package_only', 'review'],
+      ['applied', 'applied'], ['interviewing', 'interview'], ['offer', 'offer'],
+      ['rejected', 'archived'],
+    ]) {
+      assert.equal(dashboard._trackerColumn(status), column,
+        `column mapping drifted for status ${status}`);
+    }
+  });
+
+  test('a failed live generation shows the demo card with a persistent reason', async () => {
+    // The old behavior: a 3.2s warn toast, then the demo engine rendered a
+    // package indistinguishable from generated material (and even blamed
+    // 'the API is unreachable' while the API had just answered 500).
+    const doc = ctx.window.document;
+    const studio = ctx.window.JobAgent.resumeStudio;
+    const btn = doc.getElementById('btnGenerateTailored');
+    assert.ok(btn, 'btnGenerateTailored missing');
+    const select = doc.getElementById('tailorJobSelect');
+    const liveOption = [...select.options].find(
+      (o) => o.value && !/^mock-/.test(o.value) && !/^\d+$/.test(o.value));
+    if (liveOption) select.value = liveOption.value;
+    const origResume = ctx.window.JobAgent.api.createResume;
+    ctx.window.JobAgent.api.createResume = () => Promise.reject(new Error('HTTP 500: boom'));
+    try {
+      btn.click();
+      const note = await waitFor(() => {
+        const card = doc.getElementById('generatedPreviewCard');
+        const el = card && card.querySelector('.package-notice');
+        return (el && el.textContent.includes('Live generation failed')) ? el : null;
+      }, { label: 'persistent demo reason on the preview card', timeout: 15000 });
+      assert.match(note.textContent, /not generated material/);
+      assert.doesNotMatch(note.textContent, /unreachable/i,
+        'an HTTP failure must not be mislabeled as an outage');
+      assert.equal(btn.disabled, false, 'the generate button must recover for a retry');
+    } finally {
+      ctx.window.JobAgent.api.createResume = origResume;
+    }
+  });
+
+  test('the drawer save button sets the real tailor target, not a phantom bookmark', () => {
+    // The old toast claimed 'Job bookmarked in your saved list' — a list
+    // that exists nowhere. The button now performs the real Tailor-target
+    // mechanic; the guard pins copy AND effect.
+    const restore = ctx.window.JobAgent.store.state.selectedJob;
+    try {
+      ctx.window.JobAgent.store.state.selectedJob = {
+        job_title: 'Backend Dev (B4 fixture)', job_fingerprint: 'fp-e2e-b4', id: 1,
+      };
+      const drawer = ctx.window.JobAgent.jobDrawer;
+      assert.ok(drawer && drawer.btnDrawerSave, 'btnDrawerSave wiring missing');
+      drawer.btnDrawerSave.click();
+      const toasts = [...ctx.window.document.querySelectorAll('.app-toast')]
+        .map((t) => t.textContent).join(' | ');
+      assert.doesNotMatch(toasts, /bookmarked/i, 'the phantom saved-list copy must stay dead');
+      assert.match(toasts, /Tailor target set/, toasts);
+    } finally {
+      ctx.window.JobAgent.store.state.selectedJob = restore;
+    }
+  });
+
+  test('demo package download refuses honestly instead of shipping a fake .zip', () => {
+    const doc = ctx.window.document;
+    const studio = ctx.window.JobAgent.resumeStudio;
+    const btn = doc.getElementById('btnDownloadPackage');
+    assert.ok(btn, 'btnDownloadPackage missing');
+    studio.lastResult = null;
+    btn.click();
+    const toasts = [...doc.querySelectorAll('.app-toast')].map((t) => t.textContent).join(' | ');
+    assert.match(toasts, /No live package to download/i, toasts);
+    assert.doesNotMatch(toasts, /Downloading tailored package/, toasts);
+  });
+
+  test('stale mock wording stays out of the live-loaders sources (Q5)', () => {
+    // The mock corpus never existed in this codebase; a 'fallback to mock'
+    // claim anywhere (comment or console copy) is the stale wording the
+    // audit flagged — including the '[store] stats fallback to mock' warn.
+    const read = (rel) => readFileSync(resolve(REPO, 'frontend', rel), 'utf8');
+    for (const rel of ['js/store.js', 'js/components/dashboard.js', 'js/app.js']) {
+      assert.doesNotMatch(read(rel), /fallback to mock/i,
+        `${rel} still claims a mock fallback that never existed`);
+    }
+  });
 });
 
 describe('failure path — API unreachable', () => {
@@ -351,10 +567,41 @@ describe('failure path — API unreachable', () => {
       'must not claim mock data that was never shipped');
   });
 
+  test('the job desk TABLE also states the API error, never a blank tbody (B5)', async () => {
+    // The card grid got this banner in the first pass; the table view used
+    // to render an empty <tbody> that read as a layout bug.
+    const body = await waitFor(() => {
+      const el = ctx.window.document.getElementById('jobsTableBody');
+      return el && el.textContent.includes('API error') ? el : null;
+    }, { label: 'jobs table error row' });
+    const stateRow = body.querySelector('tr td.jobs-table-state.is-error');
+    assert.ok(stateRow, `expected an .jobs-table-state.is-error row, got: ${body.innerHTML.slice(0, 160)}`);
+    assert.match(stateRow.textContent, /API error/);
+  });
+
   test('no fabricated numbers appear anywhere during an outage', () => {
     const body = ctx.window.document.body.textContent;
     assert.ok(!/\b(147|24|1,?247)\b/.test(body),
       'legacy hardcoded demo figures must not reappear when live data is missing');
+  });
+
+  test('CV upload falls back to the honest local-only state during an outage', async () => {
+    // B4 second half: with the API dead, the upload path (UNREACHABLE) must
+    // degrade to the same humble wording as before the endpoint existed —
+    // never to a green "Registered" that no server confirmed.
+    const doc = ctx.window.document;
+    const studio = ctx.window.JobAgent.resumeStudio;
+    const file = new ctx.window.File(
+      [new Uint8Array(64)], 'cv_backend_offline.pdf', { type: 'application/pdf' },
+    );
+    await studio.uploadCvFile(file);
+    const zone = doc.getElementById('dropzoneActiveFile');
+    assert.ok(zone, 'dropzoneActiveFile missing');
+    assert.ok(zone.textContent.includes('Selected locally'), zone.textContent);
+    assert.doesNotMatch(zone.textContent, /Registered/, zone.textContent);
+    const toast = doc.querySelector('.app-toast');
+    assert.ok(toast, 'no toast for the offline fallback');
+    assert.match(toast.textContent, /nothing was uploaded or parsed/i, toast.textContent);
   });
 });
 
@@ -495,6 +742,33 @@ describe('login flow — auth enforced', () => {
     }, { label: 'session invalidated server-side' });
   });
 
+  test('a mid-action 401 bounces the live page to login instead of failing silently (B3)', async () => {
+    // Recovery contract: the session dies while the dashboard is up (expiry,
+    // another-device logout) and the FIRST API call afterwards redirects the
+    // whole page to login.html. A silent 401 here means every action on screen
+    // keeps failing while looking alive.
+    const cookie = await authed.login();
+    const mctx = await loadDashboard(authed.base, { cookie });
+    await waitFor(() => {
+      const el = mctx.window.document.getElementById('sessionChip');
+      return el && !el.classList.contains('hidden') ? el : null;
+    }, { label: 'session chip' });
+
+    // Revoke OUTSIDE the page, exactly as expiry/other-device logout does.
+    const kill = await fetch(`${authed.base}/api/auth/logout`, {
+      method: 'POST', headers: { Cookie: cookie },
+    });
+    assert.ok(kill.ok, 'external revocation should succeed');
+
+    // A mid-action call from the page: the harness still carries the (now
+    // dead) cookie, so the server answers 401 and api.js must bounce.
+    mctx.window.JobAgent.api.getStats().catch(() => {}); // redirect throws by design
+    await waitFor(() => (mctx.navigations.length ? mctx.navigations : null),
+      { label: 'mid-action 401 redirect' });
+    assert.ok(mctx.requests.some((u) => u.includes('/api/stats')),
+      'the bounce must have been triggered by a real API call');
+  });
+
   test('an unauthenticated dashboard load is bounced to the login page', async () => {
     const ctx = await loadDashboard(authed.base);  // no cookie
     await waitFor(() => (ctx.navigations.length ? ctx.navigations : null),
@@ -594,6 +868,17 @@ describe('header layout contract', () => {
       assert.ok(tag, `no #${id} in index.html`);
       assert.match(tag[0], /aria-label="[^"]+"/, `#${id} loses its accessible name when a tier hides its label`);
     }
+  });
+
+  test('#btnSyncSheets has exactly one wiring owner — js/app.js (B1 guard)', () => {
+    // navigation.js once wired a second handler that faked a success toast
+    // from its own setTimeout (audit 2026-10-18, B1). Only app.js may
+    // subscribe to this button, and only to the real /api/jobs/refresh.
+    const nav = read('js/components/navigation.js');
+    assert.doesNotMatch(nav, /btnSyncSheets[^\n]*addEventListener/, 'navigation.js must never attach a listener to btnSyncSheets');
+    const app = read('js/app.js');
+    assert.match(app, /getElementById\('btnSyncSheets'\)/, 'app.js must remain the wiring owner');
+    assert.match(app, /refreshJobs/, 'the owner handler must call the live refresh');
   });
 
   test('#btnSignOut is the last item in .header-right', () => {

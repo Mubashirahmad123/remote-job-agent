@@ -1,5 +1,291 @@
 # CHANGELOG.md
 
+## 2026-10-29 — matching adversarial QA follow-up
+
+- Fixed incomplete essential evidence causing rejection, zero-overlap learnable
+  jobs becoming eligible, and string collections silently becoming character sets
+  at operator-profile and structured shadow boundaries. Five regressions added.
+- Fresh full Python run: 1205 passed / 8 expected skips; frontend: 88 passed.
+  Four-module matching coverage: 97%, with 57 matching-specific cases.
+- No live cutover; operational and product limitations recorded in MATCHING_QA.
+
+
+## 2026-10-29 — matching runtime continuation (shadow only)
+
+- Added explicit onsite/hybrid relocation destinations and tri-state sponsorship
+  handling. Remote restrictions cannot be bypassed by relocation sponsorship.
+- Required gaps explicitly marked learnable may lower fit without blocking;
+  essential gaps reject; unclassified gaps remain review. Alias duplicates cannot
+  erase essential status. Policy/scorer versions bumped to v2.
+- Separate preference/freshness tie-breaking; no mutation of fit scores.
+- Added personal SQLite extraction cache (owner/content/version) and latest-review
+  queue with profile/scorer/extractor provenance, plus old/new label metric helpers.
+- Added default-off curator shadow hook before legacy country filtering, controlled
+  by MATCHING_SHADOW_PROFILE. Missing structured extraction remains unknown.
+  Shadow failures log only exception type and never change live selection.
+- Full regression: 1200 passed, 8 expected skips; no real labeled evaluation claimed.
+
+
+## 2026-10-29 — deterministic matching foundation (not live)
+
+- Added pure three-state eligibility policy and structured requirement coverage.
+- Required skills support OR alternatives, alias normalization, explicit weights,
+  deduplication and source evidence. Preferred coverage remains separate; no
+  anti-skill double penalties or confidence multiplication.
+- Results include per-field evidence completeness and profile/extractor/scorer
+  versions. Missing evidence and required gaps route to review. All required gaps
+  currently require review conservatively; this policy is not calibrated yet.
+- Up-to-N selection excludes review/rejected results and never fills a quota.
+- No live curator integration, network fetching, or dependency changes. No PR.
+- QA follow-up: 34 targeted tests with 100% branch-aware module coverage;
+  full locked Python suite 1182 passed / 8 skipped; frontend 88 passed.
+  Fixed RED-first location-conflict, title-exclusion and numeric-boundary bugs.
+  Full limitations and NO-GO for live adoption: tests/MATCHING_QA.md.
+
+## 2026-10-28 (d) — B10 wave: pdfplumber 0.11.9 clears both pdfminer.six advisories
+
+- `pdfplumber 0.11.4 → 0.11.9` (the only consumer pinning `pdfminer.six`).
+  The locked `pdfminer.six==20251230` is past both fix lines —
+  PYSEC-2026-1761 (CMap pickle deserialization, fixed 20251230) and
+  PYSEC-2026-1762 (arbitrary code execution via crafted PDF CMap path, fixed
+  20251107).
+- Why not 0.11.10 (which is newer still, pinning `pdfminer.six==20260107`):
+  it requires `Pillow>=12.2.0`, which has an empty intersection with
+  `crawl4ai==0.3.74`'s `pillow~=10.4` — the resolution becomes unsatisfiable
+  and `docker build` fails (the same failure class as the recorded
+  zhipuai/pyjwt conflict of 2026-10-08). 0.11.9 is the newest release that
+  still accepts `Pillow>=9.1`.
+- Lock diff is exactly two package lines (`--universal` compile); venv
+  re-synced and verified by import. Affected consumers
+  (`tools/resume_generator.py` 1-page check, `tools/cv_parser.py` text
+  extraction) green.
+- Audit ratchet observed in order: FIXED reported for both entries →
+  baseline prune (`pdfminer-six==20231228` ×2 gone) → re-audit OK (80
+  findings, nothing new). Square-one conflicts (`test_dependency_hygiene`
+  pinning baseline↔lock agreement) fail until the prune lands — enforced
+  sequencing, not convention.
+- lxml (PYSEC-2026-87, fix 6.1.0) remains accepted-but-blocked:
+  `crawl4ai==0.3.74` requires `lxml~=5.3`; unlocks with the B11 migration,
+  together with pillow→13.0.0.
+
+## 2026-10-28 (c) — A1/A2 portability closed + B6/B7/B8/B9 backlog bundle
+
+- **A1** — portability hunks of `40e5fc1ab` (another branch) applied by hand:
+  4 bare `read_text()` → `encoding="utf-8"`
+  (`test_dependency_hygiene`, `test_embedding_cache`, `test_suite_hermeticity`
+  ×2; the other 5 already landed via `test_glm_client`) + url_guard report-key
+  normalization `.replace("\\", "/")`. This is what actually fixed the
+  persistent Windows failure
+  `test_url_guard.py::test_the_scan_actually_finds_sinks` (dict-key mismatch
+  `'agents\auto_applier.py'` vs `'agents/auto_applier.py'`), evidenced RED→GREEN
+  with `PYTHONIOENCODING` unset.
+- **A2** — all pre-existing Windows failures diagnosed first, then fixed
+  honestly (no skip power): (1) the CrewAI `offline_sdk` guard fired on the
+  Proactor event loop's self-pipe (stdlib `socket.socketpair()` on Windows
+  connects an ephemeral 127.0.0.1 pair to itself) — the guard now exempts only
+  that caller frame and forwards to the real connect, so the file is 7/7; (2)
+  the mcp-metadata failure was local venv drift (crewai 1.14.7 vs lock's
+  1.6.1), cured by a full re-sync to `requirements.lock.txt`; (3) the 5 docker
+  heredoc failures came from `shutil.which("bash")` finding the **WSL launcher
+  stub** on a host with no WSL distro — replaced with a functional
+  `_usable_bash()` probe (`bash -n` must succeed), so they are justified skips
+  with an exact reason here and real checks on Linux CI. Full run:
+  **1140 passed / 9 skipped / 0 failed** (9 skips every one justified:
+  5 docker + 3 POSIX-Bash leak-injection + 1 deliberate Lever) — the old
+  env-class failure baseline is retired; see `TESTER.md`.
+- **B6** — `PUT /api/cv/profile` no longer has zero coverage:
+  `test_api_cv.py::TestPutCvProfile` (11 tests) pins the route contract (happy
+  merged echo, empty body, 501 no-anchor, 422-not-500, whitelisted extras) and
+  the REAL merge semantics of `cache.save_cv_profile` (partial merge preserves
+  untouched fields; skills comma-string is coerced at the schema boundary;
+  None clears; name/full_name stay in sync; never touches the LLM).
+- **B7** — the tested branch: submit-claim concurrent rejection was already
+  barrier-synchronized in `tests/test_apply_submit_primitives.py
+  ::test_concurrent_*`; disposition + single-supervised-run sign-off recorded
+  in `LIVE_SUBMIT.md` §6b (submit keeps TTL liveness — a heartbeat would only
+  widen the double-submit window; revisit if multi-operator ever ships).
+- **B8** — `days_ago()` is real (unit-tested in `test_audit_fixes.py`); the
+  date filter is opt-in via `SCRAPER_MAX_AGE_DAYS` with unparseable dates KEPT,
+  documented as deliberate config (PO #4).
+- **B9** — bundle: no runs-registry watchdog by design (a recorded-only
+  watchdog frees the budget for a second hung run; restart-caveat documented
+  in `api/runs.py` + pinned by a wedged-run recovery test); bad-tab-400 tests
+  for `/api/jobs` and `/api/apply/queue`; the screenshot endpoint now verifies
+  image type by magic bytes (a text file named `.png` can no longer be served
+  as `image/png` as fake operator evidence); `ApplyOut` stays unbundled after
+  verifying the UI reads six fields the model would strip (PO #5, decision
+  recorded in the schema docstring).
+- **B5 remainder / B3 remainder** — jobDesk TABLE mirrors card-grid
+  loading/error/empty states (state rows in `<tbody>`, `jobs.css`) with e2e
+  guards; mid-action 401 recovery pinned (external session revocation → first
+  page API call → full-page bounce to login). E2E now **88 passed / 0 failed**.
+
+## 2026-10-28 (b) — pip-audit wave: fpdf2 + litellm upgraded, pillow re-keyed and re-accepted
+
+The advisory databases re-keyed pillow's 2026 CVE records into PYSEC/GHSA
+aliases on 2026-10-28, which both wiped ten old baseline lines and produced
+eleven "new" findings at the same pin. Verified against OSV (aliases
+individually checked): **10 of the 11 are the same vulnerabilities under new
+IDs** (fixed only in pillow **13.0.0**), and one (`PYSEC-2026-4332`, alias
+CVE-2026-112403) is genuinely additional coverage that never had a CVE record
+in the baseline.
+
+- **Upgraded (both fixes real and resolvable):**
+  - `fpdf2 2.7.9 → 2.8.8` clears CVE-2026-114609/114610 (shared image loader
+    dereference, "prior to 2.8.8"). Direct pin; render smoke + suite green.
+  - New bounded direct pin `litellm==1.100.4` clears CVE-2026-114612 (fixed
+    1.100.4+). `litellm` arrives via crawl4ai (`~=1.48` — any 1.x), so the
+    pin is satisfiable without touching crawl4ai.
+- **Accepted, owned in `deploy/audit-baseline.txt`:** the 11 pillow PYSEC
+  entries. Pillow cannot move at all while `crawl4ai==0.3.74` requires
+  `pillow~=10.4`, and crawl4ai's own fix line is five minors away — so this
+  stays B10-class staged work, whose pillow wave target is now **13.0.0**
+  (the 12.x target in the original plan no longer covers the 2026 set). The
+  baseline header keeps the full decision trail (2026-10-16 MCP, 2026-10-27
+  pillow-blocked-by-crawl4ai, 2026-10-28 re-key events).
+- Pruned the 10 obsolete `pillow==10.4.0 CVE-2026-…` lines (no longer
+  reproduce as CVE records; their PYSEC successors hold the risk slot, so a
+  regression can still never come back silently).
+- Lock recompiled (`uv pip compile --universal`), venv synced, audit runs
+  **OK — 82 findings, all in the baseline, nothing new.** Full pytest counts
+  recorded in `TESTER.md`.
+
+## 2026-10-28 — audit B4 + B5 + Q5: the remaining fake/demo surfaces close
+
+- **B4 — the three demo surfaces now disclose themselves:**
+  1. *Generation catch → demo engine.* A live-generation failure previously
+     left only a 3.2s toast, then `runShrinkEngine()` rendered a package
+     indistinguishable from generated material, and its final toast blamed
+     "the API is unreachable" even when the API had just answered 500. Now
+     the failure reason is pinned PERSISTENTLY on the preview card
+     (`.package-notice`, `textContent`-only) via `runShrinkEngine({reason})`,
+     and the card toast reads "Demo package ready — not generated
+     material." — the why outlives the toast TTL.
+  2. *Drawer save.* The toast claimed "Job bookmarked in your saved list"
+     — no saved list exists anywhere in this product. The button now
+     performs the job card's real Tailor mechanic (`setSelectedJob`, with
+     the `rja_tailor_fp` queue fallback) and says so; the button is
+     relabeled "Tailor target".
+  3. *Demo package download.* The old fallback downloaded
+     `Apply_Package.zip` whose body was the text `PK [demo package]` — a
+     fake archive. It now refuses honestly with a warn toast. Demo/missing
+     cover-letter downloads keep working but carry self-labeling content
+     and a disclosure toast.
+- **B5 — `dashboard._trackerColumn()` was missing `needs_review`** — the
+  tracker itself mapped the status, but dashboard pipeline metrics silently
+  bucketed those rows under "applied". Now mapped `needs_review → review`,
+  with a guard test pinning the whole mapping table against tracker parity.
+- **Q5 — stale mock wording** swept: the `[store] stats fallback to mock`
+  console copy, the store header's "loaders (live with mock fallback)", the
+  `dataSource: 'mock'` placeholder comment, the Studio's "mockData.js
+  fallback" comment, and `api/cache.py data_source()`'s "UI shows mock
+  fallback" docstring. No behavior change (the pre-health `'mock'`
+  placeholder value that consumers branch on stays — its comment now says
+  that plainly).
+- **e2e guards (+5 in smoke.test.mjs):** column-parity mapping; the
+  persistent-reason failed-generation flow; drawer tailor-target effect
+  with the old "bookmarked" copy banned; the honest package-download
+  refusal; and "fallback to mock" strings banned from live-loader sources.
+  Harness: environment.test.mjs now settles 300ms before `window.close()`
+  so a pending app.js boot continuation cannot race the torn-down jsdom
+  global (observed once during the day's full-suite runs as
+  `document is undefined` in app.js:51; did not reproduce on a clean-HEAD
+  run, nor after the settle across two further full runs).
+- Final run counts are recorded in `TESTER.md`.
+
+## 2026-10-28 — Option A: CV upload ships — the dropzone registers real tagged variants
+
+The B2 story had the honest state but no feature: without an endpoint, picking
+a CV could only say "Selected locally — no upload". This closes PM-3 by
+activating the already-tested CVLibrary machinery instead of inventing a
+parallel store:
+
+- **`POST /api/cv/upload?filename=`** (`api/routers/cv.py` + new
+  `api/cv_store.py`): raw-body upload — **no `python-multipart` dependency
+  added**; the File bytes are the body, the safe filename a query param.
+  Server cap `CV_UPLOAD_MAX_MB` (default 10, clamped 1–50), magic-byte
+  checks per extension, atomic temp+`os.replace` store into `CV_DIR`
+  (default `cvs/`).
+- **Registration == filename:** the stored name is
+  `<safe stem>__<md5[:8]>.<ext>`; domain tags keep living in the filename,
+  so `tools/cv_library._extract_domain_tags` discovers the identical tags at
+  scoring time, and the md5 suffix keeps re-uploads unique while aligning
+  with cv_parser's hash-keyed profile cache.
+- **Offline only (standing rule):** the endpoint never calls the LLM. It
+  probes `extract_cv_text` and applies the stored⇒readable rule —
+  unconsumable input is deleted and rejected 422 (the 2026-10-03
+  poisoned-cache lesson). A fresh (<7 days, non-shell) cached profile for
+  the identical content hash is reported when it already exists.
+- **Auth + attribution:** `action_budget("action")` then `require_token`,
+  mirroring the apply routes; ingest runs on the threadpool, never on the
+  event loop.
+- **Default CV untouched, PII fenced:** `my_cv.pdf` stays primary; `cvs/`
+  is gitignored, mounted rw into scheduler/runner/api in docker-compose,
+  and logs carry name/size/outcome only — never file contents.
+- **Frontend:** `api.js` gains `uploadCv(file)` (raw File body); Resume
+  Studio `uploadCvFile()` is wired into BOTH the dropzone and the +Add
+  Variant picker. The server reply is the only source of any "Registered ·
+  tags" claim; in flight the badge claims just "Uploading…"; on
+  404/501/405/unreachable the honest local-only states remain as fallback;
+  any other failure shows the server's verdict and claims nothing. The B2
+  guard now pins the fallback copy explicitly; new guards cover the
+  confirmed-upload contract, the wiring chain, and the outage fallback.
+  `?v=` cache stamps bumped to 10.
+- **Tests:** new `tests/test_cv_upload.py` (happy/tagging/dedup paths, all
+  rejection codes, stale+shell probe rules, live CVLibrary listing, a
+  no-heavy-imports guard; isolated — no network, no LLM, no real PDF
+  engines, temp dirs only). Final Windows counts for this change are
+  recorded in `TESTER.md`.
+
+## 2026-10-28 — audit B1 + B2: the dashboard no longer claims successes it never performed
+
+Both P0 "dashboard misleads" from the 2026-10-18 audit **survived the
+2026-10-26 design rebuild** (the rebuild carried the two fakes across into the
+new markup; re-verified at current HEAD before fixing). Fixed at the source of
+the claim — no new feature was built for either:
+
+- **B1 — Sync Sheets had two handlers, and the fake one always "succeeded".**
+  `js/components/navigation.js` attached a second click handler to
+  `#btnSyncSheets` beside the real one in `js/app.js`: an 800ms "Syncing…"
+  spinner then a guaranteed "Google Sheets sync complete: ALL JOBS, TOP
+  MATCHES, APPLIED up to date" toast, regardless of what the real
+  `POST /api/jobs/refresh` did. The fake handler and its now-unused ref are
+  removed; the real handler (outcome-keyed honest toasts) is the only wiring.
+- **B2 — Resume import claimed "Uploaded & Parsed" for a file it never
+  uploaded.** Picking a file in the CV Studio dropzone rendered an emerald
+  "Uploaded & Parsed" badge and toasted "Extracted skills and contact profile
+  cache" — while no upload endpoint exists on `main` (CV upload is deferred
+  with the future `user` product, PM.md §2.1a), so nothing was uploaded,
+  parsed, extracted or cached. The panel now renders "Selected locally — no
+  upload" and the toast describes what actually happened, including that the
+  agent still works from the configured on-disk CV (`CV_PATH`/`CV_DIR`).
+  The filename also passes through `escapeHtml` before the `innerHTML` badge
+  now; previously it was interpolated raw.
+- **Guard tests — the first three concrete cases of the B3 demo-leak suite**
+  (`tests/e2e/smoke.test.mjs`): (1) #btnSyncSheets may only be wired by
+  `js/app.js` and its handler must call the live refresh (static, in header
+  layout contract); (2) a Sync click must issue the refresh, show an
+  outcome-keyed toast, and no "sync complete" copy may appear inside the
+  retired fake handler's 800ms window (behavioral, live API); (3) a CV pick
+  must render "Selected locally" and a "nothing was uploaded or parsed" toast
+  (behavioral).
+- **Frontend E2E: 77 passed, 0 failed** (Windows, full `npm test --prefix
+  tests/e2e`).
+- **Harness fix — pre-existing Windows flake, proven not caused by this diff:**
+  the full-suite run showed `tests/e2e/environment.test.mjs` cleanup failures
+  (EPERM removing the temp isolation dir; throwaway SQLite files apparently
+  still present after `stopApi`). A clean-HEAD stash-baseline run reproduced
+  the failure with the failing node **moving between tests** (101 vs 140) on
+  identical code — a kill→handle-release race, not app behavior. `cleanup()`
+  now waits (bounded, `waitFor`) for the throwaway DBs (`''`, `-wal`, `-shm`)
+  to vanish before the strict `assertRemoved`, and retries the temp-dir
+  `rmSync` on a ladder, warning instead of failing an otherwise-green test if
+  a genuine lock survives. Suite green on Windows after the fix.
+
+Still open from the audit: Q5 (store.js mock-label sweep), B4 (honest-demo
+pass on the remaining demo surfaces: demo shrink fallback, drawer save toast,
+package download demo mode), B5 table parity.
+
 ## 2026-10-21 (b) — review follow-up: title signals, zero-scoring, rejection rules, ranking transparency
 
 Five findings from the second review of the same 2026-10-18 run, verified

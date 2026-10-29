@@ -11,6 +11,8 @@ Gate placement (submit unreachable, not merely unrequested):
     re-enable submit over HTTP. See api/safety.py SUBMIT_ENABLED=False.
 """
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -190,6 +192,34 @@ _MEDIA_BY_SUFFIX = {
     ".webp": "image/webp",
 }
 
+_MAGIC = {
+    "image/png": lambda head: head.startswith(b"\x89PNG\r\n\x1a\n"),
+    "image/jpeg": lambda head: head.startswith(b"\xff\xd8\xff"),
+    # WebP = RIFF container with "WEBP" at byte 8.
+    "image/webp": lambda head: head[:4] == b"RIFF" and head[8:12] == b"WEBP",
+}
+
+
+def _screenshot_media_type(path: Path) -> str:
+    """Media type that matches the file CONTENT, not just its name.
+
+    AUDIT B9 (2026-10-28): suffix alone let a text file named `.png` be
+    served as image/png — the review UI would present non-image bytes as
+    the operator's visual evidence. The image type is now confirmed by
+    magic bytes; anything else degrades to application/octet-stream
+    (download, never inline render). Unreadable files degrade the same way
+    instead of guessing.
+    """
+    expected = _MEDIA_BY_SUFFIX.get(path.suffix.lower())
+    if expected is None:
+        return "application/octet-stream"
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(12)
+    except OSError:
+        return "application/octet-stream"
+    return expected if _MAGIC[expected](head) else "application/octet-stream"
+
 
 @router.get("/api/apply/{job_fingerprint}/review-status")
 def review_status(job_fingerprint: str, run_id: str | None = None,
@@ -225,5 +255,5 @@ def apply_screenshot(job_fingerprint: str, _: None = Depends(require_token)):
         # str(FileNotFoundError) IS the absolute path, so it would tell the
         # caller exactly where artifacts live inside the container.
         raise missing("Screenshot")
-    media_type = _MEDIA_BY_SUFFIX.get(path.suffix.lower(), "application/octet-stream")
+    media_type = _screenshot_media_type(path)
     return FileResponse(str(path), media_type=media_type, filename=path.name)
