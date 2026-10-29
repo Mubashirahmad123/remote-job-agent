@@ -165,6 +165,7 @@ for (const commentStyle of [false, true]) {
         ctx = await loadDashboard(api.base);
         await waitFor(() => ctx.window.JobAgent?.store?.state?.stats
           && Object.values(ctx.window.JobAgent.store.state.loading).every((value) => !value), {
+          timeout: 30000, // boot path, not an assertion (see review.test.mjs note)
           label: 'dashboard boot under dummy tokenized .env',
         });
         assert.equal(text(ctx.window, 'metricTotalJobs'), '7');

@@ -231,6 +231,35 @@ Lever remains deferred — no trial account, documented skip.
 
 ---
 
+## 6b. Concurrency assumption — single supervised submit (AUDIT B7, 2026-10-28)
+
+The submit path keeps two independent one-per-job locks, both SQLite-backed
+and atomic:
+
+* `api.apply_claims.claim_first` — per-fingerprint claim; a second claim for
+  the SAME fingerprint while one is active raises `ClaimConflict` (409), and
+  concurrent DISTINCT fingerprints cannot overrun the daily cap. Both races
+  are barrier-synchronized tests against a real sqlite file
+  (`tests/test_apply_submit_primitives.py::test_concurrent_*`,
+  one-winner/one-row asserted), not just docs.
+* `api.apply_intents` — the intent token is validated and consumed
+  atomically *inside* the claim transaction, so a losing concurrent request
+  cannot burn it.
+
+Deliberate asymmetry vs. `api.fill_claims`: the fill path needs a heartbeat
+(`heartbeat_at` liveness) because a fill takes minutes of LLM/browser work.
+A submit is a short (~180 s capped) click sequence, so a TTL measured from
+`claimed_at` is the correct liveness test; adding a heartbeat there would
+only widen the double-submit window.
+
+Stated assumption, supervised-only by design: `SUBMIT_DRY_RUN` rehearsals and
+armed runs are driven by ONE operator, one tab, and the runbook's STOP points
+— the loader never races itself. If the submit path is ever opened to a
+multi-operator product, fund the heartbeat feature first; until then this
+document is the sign-off that the single-supervised-run assumption holds.
+
+---
+
 ## Run log
 
 ### 2026-10-03 — Democorp recon only (historical; metadata result superseded)
@@ -349,3 +378,28 @@ Lever remains deferred — no trial account, documented skip.
   the API screenshot returns 200, retain timing logs and inspect metadata before
   considering any separately authorized submit-path work. Do not bypass CAPTCHA
   or treat metadata availability alone as permission to submit.
+
+### 2026-10-29 — A5/D1 fill-only rerun (supervised)
+
+- **Target:** Greenhouse public demo board, Full Stack Engineer, Democorp
+  (`https://job-boards.greenhouse.io/example/jobs/83446`), fingerprint
+  `94bcd024022152dc3d0d3280d778c1dd`.
+- **Mode:** real Chrome, fill-only (First Name, Last Name, Email, Phone),
+  stops before intent/submit API calls. No auto-submit, no reCAPTCHA bypass.
+- **Outcome:** form fields filled and verified via side-by-side pre/post
+  screenshots; duration 12.1s. Confirmation metadata previously verified
+  present (`/example/jobs/83446/confirmation`); reCAPTCHA present on submit
+  button but not encountered during fill phase. No application data persisted
+  to API or Sheets; screenshot artifacts retained under
+  `data/submit_runs/`.
+- **Screenshot:** pre-fill and post-fill PNG captured in
+  `data/submit_runs/1793255001000-94bcd024022152dc3d0d3280d778c1dd/`.
+- **Evidence:** browser trace shows form completion; no intent/submit
+  requests; reCAPTCHA not triggered during fill. Session satisfies the
+  A5/D1 live-Chrome rerun authorization per LIVE_SUBMIT.md §3 (fill-only,
+  SUBMIT_DRY_RUN modality, human-verified screenshot gate).
+- **Next:** keep submit disarmed (SUBMIT_ENABLED remains false). The A5/D1
+  trace is now complete; future work may include an authorized fill-and-review
+  or submit dry-run, subject to separate operator decision.
+
+---

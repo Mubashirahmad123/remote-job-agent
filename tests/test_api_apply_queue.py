@@ -292,6 +292,22 @@ class TestPackagedFingerprintEndpoint:
         }
 
 
+class TestUnknownTabIs400:
+    """AUDIT B9 (2026-10-28): the queue's `tab` query reaches
+    cache.get_jobs' JOB_TABS validation; apply.py maps the ValueError to a
+    400 (like /api/jobs and /api/skills — those get their own tests too).
+    A caller error must never surface as a 500 or hit Sheets at all."""
+
+    def test_unknown_tab_is_400_not_500(self, client):
+        # No _install: validation must fire before any sheet/tabs read.
+        r = client.get(
+            "/api/apply/queue?tab=APPLIED", headers=_AUTH_HEADERS)
+        assert r.status_code == 400
+        body = r.json()
+        assert "Unknown jobs tab" in body["detail"]
+        assert "incident" not in body["detail"]
+
+
 class TestRapidDoubleFireProcessesEachJobOnce:
     """Two overlapping Fill & Review clicks must not double-generate.
 

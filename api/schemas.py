@@ -426,7 +426,18 @@ class ApplySubmitOut(BaseModel):
 
 
 class ApplyOut(BaseModel):
-    """Phase 2a fill-review result (terminal state: screenshot + package)."""
+    """Phase 2a fill-review result (terminal state: screenshot + package).
+
+    DECIDED (AUDIT B9 / PO #5, 2026-10-28): this model is intentionally NOT
+    wired as the POST /api/apply/{fp} response_model. Verified against the
+    real UI (frontend/js/components/autoApply.js toQueueResult/awaitReview):
+    the dashboard reads apply_url, fill_error, field_verification,
+    profile_fields_verified, browser_opened and review_run_id from the raw
+    fill-review dict — six of which this model would strip (view models
+    built from toQueueResult would silently blank out). Revisit only when
+    the fill result becomes a stable external contract (the future `user`
+    product), and then expand the model first, wrap second.
+    """
 
     status: str = "filled_ready"
     mode: str = "review"

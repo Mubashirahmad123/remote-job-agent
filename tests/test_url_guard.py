@@ -323,7 +323,10 @@ def test_the_scan_actually_finds_sinks():
                 continue
         sinks = list(_calls_in(tree))
         if sinks:
-            found[os.path.relpath(path, REPO)] = len(sinks)
+            # Normalize path separators for cross-platform comparison (the
+            # asserts below and the report printer use forward slashes; on
+            # Windows os.path.relpath yields backslashes otherwise).
+            found[os.path.relpath(path, REPO).replace("\\", "/")] = len(sinks)
     assert "agents/auto_applier.py" in found, f"sinks not detected: {found}"
     assert "tools/playwright_scraper.py" in found, f"sinks not detected: {found}"
     assert "tools/submit_recon.py" in found, f"sinks not detected: {found}"

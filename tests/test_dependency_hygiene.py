@@ -312,7 +312,7 @@ def test_writing_the_baseline_sorts_and_dates_it(tmp_path):
     audit = _audit_module()
     target = tmp_path / "baseline.txt"
     audit.write_baseline(target, {"z==1 P-9", "a==1 P-1", "m==1 P-5"})
-    written = target.read_text()
+    written = target.read_text(encoding="utf-8")
     body = [line for line in written.splitlines() if line and not line.startswith("#")]
     assert body == ["a==1 P-1", "m==1 P-5", "z==1 P-9"]
     assert re.search(r"^# Recorded: \d{4}-\d{2}-\d{2}", written, re.M)

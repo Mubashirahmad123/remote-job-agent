@@ -103,6 +103,85 @@ new tests, and the failure set proved pre-existing:
   can starve their wait/heartbeat windows, and the two never failed in the
   same run. Linux CI remains the arbiter for both.
 
+### A3/A4 evidence + runner decision (2026-10-28, at `ce9018d84`)
+
+- **A3 — CI green at the bundled commit, observed via the GitHub REST API**
+  (no `gh` on this host; endpoint verified working):
+  `actions/runs/40691999221` → **completed / success** — all five jobs
+  (`API + auth + attribution (pytest) (3.11)`, `Dashboard e2e (real API in
+  jsdom)`, `Locked image (x86_64)`, `Locked image (aarch64)`,
+  `Dependency vulnerabilities (pip-audit)`) passed. Per-job pass counts were
+  NOT ingested: job-level log download requires an authenticated token that
+  this host does not have, and counting from a partial view would be
+  invention. Job-level success is the CI gate itself; recorded local counts
+  elsewhere in this file remain the only locally-observed numbers, and the
+  expectation that Linux runs MORE test nodes than many Windows-classified
+  skips (the 5× + 3× Bash skips run for real on Linux) is satisfied by
+  construction of those skips' conditions.
+- **A4 — runner decision recorded AND implemented in `ci.yml`:** before the
+  change, the run's labels were 4 × `ubuntu-latest` + 1 × `ubuntu-24.04-arm`
+  (queried from the same API call above). GitHub's `ubuntu-latest` rides the
+  26.04 migration that started 2026-10-19, so every `runs-on` was pinned to
+  `ubuntu-24.04` for the release window (matrix x86_64 likewise, with the
+  rationale in a comment at the matrix; ARM stays `ubuntu-24.04-arm` as
+  before). This is PO recommendation #3 turned into config, not just prose.
+  The first CI run after this change is itself the verification that the
+  pinned runner ships the full toolchain.
+
+### B10 pdfminer wave (2026-10-28, pdfplumber 0.11.9)
+
+- **Constraint that shaped the choice:** `pdfminer.six` is pinned by its only
+  consumer `pdfplumber` (hard `==` pin), and the fix versions are
+  `20251230` (PYSEC-2026-1761) / `20251107` (PYSEC-2026-1762). The newest
+  pdfplumber (0.11.10) pins `pdfminer.six==20260107` BUT requires
+  `Pillow>=12.2.0`, which has an empty intersection with crawl4ai's
+  `pillow~=10.4` — taking it would reproduce the ResolutionImpossible docker
+  failure class recorded on 2026-10-08 (`zhipuai`/pyjwt). **pdfplumber 0.11.9**
+  is the newest release still accepting `Pillow>=9.1` and it pins
+  `pdfminer.six==20251230`, past BOTH fix lines.
+- `requirements.txt`: `pdfplumber==0.11.4 → ==0.11.9` (exact pin, bounded);
+  lock recompiled with `--universal` — the diff is exactly two package lines
+  (`pdfminer-six 20231228→20251230`, `pdfplumber 0.11.4→0.11.9`), nothing else
+  moved. Venv re-synced and verified: `pdfplumber 0.11.9 | pdfminer-six
+  20251230`.
+- Behavior-compatibility check: pdfplumber consumers are
+  `tools/resume_generator.py` (1-page check) and `tools/cv_parser.py` (text
+  extraction); `test_resume_generator` + `test_cv_upload` pass on 0.11.9
+  (84/84 together with the hygiene suite).
+- **Audit ratchet, in order:** `deploy/dependency_audit.py` first reported
+  `FIXED — 2 baseline entries no longer reproduce` + `OK — 80 findings, all in
+  the baseline; nothing new`; only then were the two
+  `pdfminer-six==20231228 PYSEC-2026-1761/1762` lines pruned from the
+  baseline; re-audit **OK — 80 findings, nothing new** (a pruned entry cannot
+  return silently — the audit now fails if it did).
+- **lxml stays accepted, not forgotten:** PYSEC-2026-87 (local file read via
+  `resolve_entities`) is fixed only in lxml 6.1.0, but `crawl4ai==0.3.74`
+  requires `lxml~=5.3`, so 6.x is unsatisfiable until the B11 crawl4ai
+  migration — same blockers as pillow.
+- **Full Windows pytest with the bumped pins: 1145 passed / 9 skipped /
+  0 failed** (221s) — identical to the pre-wave count at `ce9018d84`, i.e.
+  the pin bump introduced no drift; same 9 skips, all accounted for above.
+
+### e2e flake: review.test.mjs boot-hook overrun (2026-10-28, at `aae372658`)
+
+- CI run `40693708819` failed ONLY in `Dashboard e2e` (pytest/docker×2/
+  pip-audit all green — which also certifies the pdfplumber bump on Linux).
+  Node-free reproduction locally matched it: in full-suite run #1,
+  `review.test.mjs` failed at FILE level (its 4 inner nodes all passed) with
+  the harness signal `Test hook "beforeEach" ... generated asynchronous
+  activity after the test ended` + a teardown `TypeError` — the stats-boot
+  `waitFor` (default 10s) overran under six concurrently booting suite
+  processes (jsdom + uvicorn each). Solo run: 4/4 pass. Run #2 of the same
+  full suite: 88/0 pass. Zero code delta in review paths between the
+  passing `ce9018d84` run and the failing `aae372658` run — load timing,
+  not the pdfplumber bump.
+- Class fix: the three BOOT-path waits (review.test.mjs stats boot,
+  environment.test.mjs boot, smoke.test.mjs stats loaded) now carry explicit
+  `timeout: 30000` (aligned with startApi's own 30s boot budget). The
+  `waitFor` DEFAULT stays 10s on purpose — it also budget-limits negative
+  tests, which must not lengthen silently. Verified with a full local e2e
+  run: **88 passed / 0 failed** post-hardening.
+
 ### B4/B5/Q5 disposition (2026-10-28, frontend demo-honesty run)
 
 Backend delta this slice is `api/cache.py` docstring text only; every other
@@ -128,6 +207,75 @@ edited store/dashboard/jobDrawer assets) and e2e material.
   timing node passed this run, consistent with its flake classification
   above (failed 1 of 2 full runs, passes isolated and under load
   elsewhere). Linux CI remains the arbiter.
+
+### A1+A2+B6+B9 disposition (2026-10-28, portability + PUT cv-profile run)
+
+**A1 — portability hunks of `40e5fc1ab` applied by hand (4 utf-8 `read_text`
+fixes + url_guard path normalization).** Acceptance verified: with
+`PYTHONIOENCODING` unset, `tests/test_url_guard.py::test_the_scan_actually_finds_sinks`
+is RED→GREEN on Windows — the persistent env-class failure was a dict-key
+mismatch (`'agents\auto_applier.py'` vs the asserted `'agents/auto_applier.py'`; the
+report printer kept raw relpaths). Touched files suite: `test_url_guard +
+test_dependency_hygiene + test_embedding_cache + test_suite_hermeticity`
+= **172/172 passed**.
+
+**A2 — diagnosed before any skip (all previously-failing Windows nodes now
+green or justified skips):**
+
+- CrewAI pair was two distinct, verifyable causes, not an env-class unknown:
+  1. `offline_sdk`'s blanket `socket.connect` denial fired on a **Windows-only
+     false positive**: crewai's first event-bus emit lazily builds
+     `asyncio.new_event_loop()`; the Proactor self-pipe goes through stdlib
+     `socket.socketpair()`, which (no `AF_UNIX` pairs on Windows) binds,
+     listens and connects one ephemeral 127.0.0.1 pair to itself inside that
+     helper. The guard now exempts only calls whose immediate caller frame is
+     stdlib `socket.socketpair` (forwarded to the real connect; every other
+     connection, loopback included, stays denied + recorded). File after fix:
+     **7/7** (~57s).
+  2. `test_installed_crewai_metadata_accepts_patched_mcp` failed on **venv
+     drift**, not a pin problem: the lock is consistent (`crewai==1.6.1` +
+     `mcp==1.30.0`, both committed), but the local venv had crewai 1.14.7
+     whose `mcp~=1.26.0` dragged mcp to 1.26.0 during a partial sync. Full
+     re-sync to the lock (`uv pip install -r requirements.lock.txt`) restores
+     crewai 1.6.1 / mcp 1.30.0 / litellm 1.100.4 / fpdf2 2.8.8.
+- Docker heredoc ×5: root cause exact — `shutil.which("bash")` finds
+  `C:\Windows\system32\bash.EXE`, the WSL launcher stub (no distro installed),
+  which dies at `execvpe(/bin/bash)`. The guard is now a **functional probe**
+  (`bash -n` on `exit 0` must return 0): 8 passed / **5 justified skips**
+  with that reason on this host; Linux CI runs the check for real.
+- Two more full runs (background), tracking each backend increment:
+  - **1129 passed / 9 skipped** with A1+A2 only (pre-B6).
+  - **1140 passed / 9 skipped / 0 failed** with B6 included.
+  - **Final: 1145 passed / 9 skipped / 0 failed** (226s) with B6 + all of
+    B9 (wedged-run recovery, bad-tab-400s, screenshot content-sniff) — the
+    definitive local Windows count for this bundle. Every skip accounted
+    for below.
+
+**B6 — `tests/test_api_cv.py::TestPutCvProfile`, 11 new tests** (route
+contract + real-merge semantics of `cache.save_cv_profile`): file
+**21/21 passed** alone; the full-suite runs above include them.
+
+**B9 — bundle:** `test_api_phase2.py` wedged-run recovery
+(`test_wedged_run_blocks_then_restart_recovered`), bad-tab-400 for
+`/api/jobs` + `/api/apply/queue`, screenshot content-type honesty
+(text-named-.png → octet-stream; real PNG → image/png) in
+`test_error_disclosure.py`; touched-suite run **52/52 passed**.
+
+**Skip accounting for the 9 (zero unexplained):**
+5 × `test_docker_locked_dependencies.py::test_docker_ci_shell_commands_and_python_heredoc_parse[*]`
+— functional-Bash probe justification above;
+3 × `tests/test_image_leak_check.py:243` — Docker CI shell failure-injection
+requires POSIX Bash (env-conditional, pre-existing);
+1 × `tests/test_apply_submit_primitives.py:413` — Lever submit deferred, no
+live confirmation-text observation without a paid account (deliberate,
+documented).
+
+**Frontend E2E after B5-table/B3-401 additions: 88 passed / 0 failed** (85
+baseline + 3 new guards: outage table error row, empty-filter state in BOTH
+views, mid-action 401 bounce).
+
+The old env-class baseline (5 docker + 2+1 crewai + 1 url_guard as FAILURES)
+is retired by this section: those nodes are now green or justified skips.
 
 Security/CI remediation: `deploy/CI_FAILURE_REMEDIATION.md`. A fresh **168-package**
 locked installation passes dependency consistency. CrewAI is deliberately rolled

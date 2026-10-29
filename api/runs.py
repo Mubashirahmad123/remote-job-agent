@@ -8,6 +8,17 @@ parses the CV on import). Only one active run at a time (409 on overlap).
 
 Run dict: {run_id, status, phase, scraped, curated, error,
             started_at, finished_at}. status: queued|running|done|error.
+
+No watchdog, deliberately (AUDIT B9, 2026-10-28): the worker is a plain
+thread, and Python cannot terminate a hung thread — a watchdog could only
+flip the record to "error" while the thread kept consuming resources, and
+freeing the budget would let a second scrape start beside the hung one.
+The registry is also in-memory by design, so the operator recovery is
+defined and safe: `docker compose restart api` empties `_runs`, which
+clears the 409 and lets a new run start; nothing on disk (Sheets, caches,
+tracker files) is touched or left stale by a restart, and the hung thread
+dies with the process. A single hung run blocking the "run" action budget
+until restart is the accepted trade-off.
 """
 
 import logging

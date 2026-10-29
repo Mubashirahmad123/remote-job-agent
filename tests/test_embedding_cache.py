@@ -190,7 +190,7 @@ def test_floats_survive_the_round_trip_bit_for_bit(tmp_path):
 def test_the_cache_is_written_as_readable_json(tmp_path):
     target = tmp_path / "cv_embeddings.json"
     save_cv_embeddings(EMBEDDINGS, target)
-    assert json.loads(target.read_text()) == EMBEDDINGS
+    assert json.loads(target.read_text(encoding="utf-8")) == EMBEDDINGS
     assert not target.read_bytes().startswith(b"\x80"), "that is a pickle, not JSON"
 
 

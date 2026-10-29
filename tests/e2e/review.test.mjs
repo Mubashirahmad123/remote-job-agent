@@ -21,8 +21,13 @@ before(async () => { api = await startApi({ port: 8771, tracker: true }); }, { t
 after(async () => { await stopApi(api); });
 beforeEach(async () => {
   ctx = await loadDashboard(api.base);
+  // Boot path, not an assertion: under `node --test` parallelism six suites
+  // boot jsdom + uvicorn at once, and this budget is what makes a slow stats
+  // boot a 2s delay instead of a hook failure that sinks the whole file unit
+  // (observed: CI/local full-suite hit exactly this at 10s default).
   await waitFor(() => ctx.window.JobAgent?.store?.state?.stats
-    && Object.values(ctx.window.JobAgent.store.state.loading).every((value) => !value));
+    && Object.values(ctx.window.JobAgent.store.state.loading).every((value) => !value),
+    { timeout: 30000, label: 'stats boot' });
   posts = 0;
   reads = [];
   work = null;

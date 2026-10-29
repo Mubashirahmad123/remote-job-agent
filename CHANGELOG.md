@@ -1,5 +1,83 @@
 # CHANGELOG.md
 
+## 2026-10-28 (d) — B10 wave: pdfplumber 0.11.9 clears both pdfminer.six advisories
+
+- `pdfplumber 0.11.4 → 0.11.9` (the only consumer pinning `pdfminer.six`).
+  The locked `pdfminer.six==20251230` is past both fix lines —
+  PYSEC-2026-1761 (CMap pickle deserialization, fixed 20251230) and
+  PYSEC-2026-1762 (arbitrary code execution via crafted PDF CMap path, fixed
+  20251107).
+- Why not 0.11.10 (which is newer still, pinning `pdfminer.six==20260107`):
+  it requires `Pillow>=12.2.0`, which has an empty intersection with
+  `crawl4ai==0.3.74`'s `pillow~=10.4` — the resolution becomes unsatisfiable
+  and `docker build` fails (the same failure class as the recorded
+  zhipuai/pyjwt conflict of 2026-10-08). 0.11.9 is the newest release that
+  still accepts `Pillow>=9.1`.
+- Lock diff is exactly two package lines (`--universal` compile); venv
+  re-synced and verified by import. Affected consumers
+  (`tools/resume_generator.py` 1-page check, `tools/cv_parser.py` text
+  extraction) green.
+- Audit ratchet observed in order: FIXED reported for both entries →
+  baseline prune (`pdfminer-six==20231228` ×2 gone) → re-audit OK (80
+  findings, nothing new). Square-one conflicts (`test_dependency_hygiene`
+  pinning baseline↔lock agreement) fail until the prune lands — enforced
+  sequencing, not convention.
+- lxml (PYSEC-2026-87, fix 6.1.0) remains accepted-but-blocked:
+  `crawl4ai==0.3.74` requires `lxml~=5.3`; unlocks with the B11 migration,
+  together with pillow→13.0.0.
+
+## 2026-10-28 (c) — A1/A2 portability closed + B6/B7/B8/B9 backlog bundle
+
+- **A1** — portability hunks of `40e5fc1ab` (another branch) applied by hand:
+  4 bare `read_text()` → `encoding="utf-8"`
+  (`test_dependency_hygiene`, `test_embedding_cache`, `test_suite_hermeticity`
+  ×2; the other 5 already landed via `test_glm_client`) + url_guard report-key
+  normalization `.replace("\\", "/")`. This is what actually fixed the
+  persistent Windows failure
+  `test_url_guard.py::test_the_scan_actually_finds_sinks` (dict-key mismatch
+  `'agents\auto_applier.py'` vs `'agents/auto_applier.py'`), evidenced RED→GREEN
+  with `PYTHONIOENCODING` unset.
+- **A2** — all pre-existing Windows failures diagnosed first, then fixed
+  honestly (no skip power): (1) the CrewAI `offline_sdk` guard fired on the
+  Proactor event loop's self-pipe (stdlib `socket.socketpair()` on Windows
+  connects an ephemeral 127.0.0.1 pair to itself) — the guard now exempts only
+  that caller frame and forwards to the real connect, so the file is 7/7; (2)
+  the mcp-metadata failure was local venv drift (crewai 1.14.7 vs lock's
+  1.6.1), cured by a full re-sync to `requirements.lock.txt`; (3) the 5 docker
+  heredoc failures came from `shutil.which("bash")` finding the **WSL launcher
+  stub** on a host with no WSL distro — replaced with a functional
+  `_usable_bash()` probe (`bash -n` must succeed), so they are justified skips
+  with an exact reason here and real checks on Linux CI. Full run:
+  **1140 passed / 9 skipped / 0 failed** (9 skips every one justified:
+  5 docker + 3 POSIX-Bash leak-injection + 1 deliberate Lever) — the old
+  env-class failure baseline is retired; see `TESTER.md`.
+- **B6** — `PUT /api/cv/profile` no longer has zero coverage:
+  `test_api_cv.py::TestPutCvProfile` (11 tests) pins the route contract (happy
+  merged echo, empty body, 501 no-anchor, 422-not-500, whitelisted extras) and
+  the REAL merge semantics of `cache.save_cv_profile` (partial merge preserves
+  untouched fields; skills comma-string is coerced at the schema boundary;
+  None clears; name/full_name stay in sync; never touches the LLM).
+- **B7** — the tested branch: submit-claim concurrent rejection was already
+  barrier-synchronized in `tests/test_apply_submit_primitives.py
+  ::test_concurrent_*`; disposition + single-supervised-run sign-off recorded
+  in `LIVE_SUBMIT.md` §6b (submit keeps TTL liveness — a heartbeat would only
+  widen the double-submit window; revisit if multi-operator ever ships).
+- **B8** — `days_ago()` is real (unit-tested in `test_audit_fixes.py`); the
+  date filter is opt-in via `SCRAPER_MAX_AGE_DAYS` with unparseable dates KEPT,
+  documented as deliberate config (PO #4).
+- **B9** — bundle: no runs-registry watchdog by design (a recorded-only
+  watchdog frees the budget for a second hung run; restart-caveat documented
+  in `api/runs.py` + pinned by a wedged-run recovery test); bad-tab-400 tests
+  for `/api/jobs` and `/api/apply/queue`; the screenshot endpoint now verifies
+  image type by magic bytes (a text file named `.png` can no longer be served
+  as `image/png` as fake operator evidence); `ApplyOut` stays unbundled after
+  verifying the UI reads six fields the model would strip (PO #5, decision
+  recorded in the schema docstring).
+- **B5 remainder / B3 remainder** — jobDesk TABLE mirrors card-grid
+  loading/error/empty states (state rows in `<tbody>`, `jobs.css`) with e2e
+  guards; mid-action 401 recovery pinned (external session revocation → first
+  page API call → full-page bounce to login). E2E now **88 passed / 0 failed**.
+
 ## 2026-10-28 (b) — pip-audit wave: fpdf2 + litellm upgraded, pillow re-keyed and re-accepted
 
 The advisory databases re-keyed pillow's 2026 CVE records into PYSEC/GHSA

@@ -109,13 +109,31 @@ def test_each_native_image_must_pass_runtime_tests_and_leak_checks():
     assert "/submit" not in script
 
 
+def _usable_bash() -> str | None:
+    """Return a Bash path that can actually run `bash -n`, or None.
+
+    A bare shutil.which("bash") is not enough: on some Windows hosts it finds
+    C:Windows/system32/bash.EXE — the WSL launcher — which fails at
+    execvpe(/bin/bash) when no WSL distribution is installed. Syntax
+    validation is impossible without a functional Bash, and native Docker CI
+    performs it on Linux runners.
+    """
+    bash = shutil.which("bash")
+    if bash is None:
+        return None
+    probe = subprocess.run([bash, "-n"], input="exit 0", text=True, capture_output=True)
+    return bash if probe.returncode == 0 else None
+
+
 @pytest.mark.parametrize("step", [step for step in docker_job()["steps"] if "run" in step],
                          ids=lambda step: step["name"])
 def test_docker_ci_shell_commands_and_python_heredoc_parse(step):
     script = step["run"]
-    bash = shutil.which("bash")
+    bash = _usable_bash()
     if bash is None:
-        pytest.skip("Bash syntax validation requires Bash; native Docker CI runs on Linux")
+        pytest.skip("Bash syntax validation requires a functional Bash "
+                    "(no WSL distro is installed where which('bash') points); "
+                    "native Docker CI runs this check on Linux runners")
     result = subprocess.run([bash, "-n"], input=script, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
     if "<<'PY'" in script:
