@@ -135,8 +135,10 @@ fastuuid==0.14.0
     # via unclecode-litellm
 feedparser==6.0.11
     # via -r requirements.txt
-filelock==4.0.12
-    # via huggingface-hub
+filelock==4.2.4
+    # via
+    #   -r requirements.txt
+    #   huggingface-hub
 flatbuffers==25.12.19
     # via onnxruntime
 fonttools==4.66.1

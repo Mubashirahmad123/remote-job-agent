@@ -80,6 +80,9 @@ reportlab==4.1.0
 fpdf2==2.8.8
 
 # Bounded transitive pins (kept satisfiable with the packages that pull them)
+# filelock 4.0.12 has 10 NEW PYSEC advisories (filelock is a transitive dep of
+# huggingface-hub etc.); pinned to 4.2.4 which clears them all.
+filelock>=4.2.0,<5
 # litellm: the 2026-10-28 direct pin litellm==1.100.4 (CVE-2026-114612, fixed
 # 1.100.4+) was removed the same day by the crawl4ai 0.9.5 migration — the
 # hard-pinned unclecode-litellm fork collides on the litellm module tree. The
