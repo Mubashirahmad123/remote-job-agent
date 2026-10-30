@@ -1,5 +1,14 @@
 # CHANGELOG.md
 
+## 2026-10-30 — real E2E validation run fbd2c54f337c (scrape + fill + playwright)
+
+Live Windows validation with real server, real scrape, real fill and playwright-cli cross-check.
+- Run fbd2c54f337c: fetched 481, scraped 178, curated 5, boards_ok 26, empty 20, failed 0
+- Sheets delta: ALL JOBS 54 → 74 (+20 new rows). TOP MATCHES 5 curated from this cycle
+- Fill paths validated: package-only (Arbeitnow Mistral.ai) with live LLM fallback Gemini 503 → Groq; Greenhouse demo seed (Democorp 83446) filled_ready with screenshot, submit kill-switch held; playwright-cli independent fill on real Greenhouse form verified with attachments
+- Defects recorded: B1 UnicodeEncodeError on emoji print in `agents/auto_applier.py:generate_apply_package`, I2 Greenhouse file-attach readback false negative (`files.length=None`), A1 boards_done > boards_total synthetic tracker counting
+- Artifacts: `logs/realtest/TEST_REPORT.md`, `logs/realtest/scraped_today_new_rows.csv`, `logs/realtest/curated_jobs_list.csv`, 5-subagent reviews
+
 ## 2026-10-29 — matching adversarial QA follow-up
 
 - Fixed incomplete essential evidence causing rejection, zero-overlap learnable

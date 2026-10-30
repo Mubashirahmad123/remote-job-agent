@@ -123,6 +123,14 @@ on the future `user` product track, with no target date. See `USER_PRODUCT.md`.
 Lever submit remains deliberately out of scope. No branch creation is authorized
 by this checklist.
 
+### Real E2E run recorded (2026-10-30, run fbd2c54f337c)
+Live Windows run with real server, real scrape, real fill + playwright-cli cross-check:
+- Scrape run fbd2c54f337c: fetched 481, scraped 178, curated 5, boards_ok 26, empty 20, failed 0
+- Sheets state after run: ALL JOBS 74 rows (+20 new), TOP MATCHES 5 curated
+- Fill paths exercised: package-only (Arbeitnow Mistral.ai) with live LLM fallback Gemini→Groq; Greenhouse demo seed (Democorp 83446) filled_ready with screenshot; playwright-cli independent fill verified
+- Defects surfaced: B1 UnicodeEncodeError on emoji print, I2 Greenhouse file-attach readback false negative, A1 boards_done > boards_total synthetic tracker counting
+Full artifacts: `logs/realtest/TEST_REPORT.md`, `logs/realtest/scraped_today_new_rows.csv`, `logs/realtest/curated_jobs_list.csv`
+
 ### Latest recorded verification (2026-10-15)
 
 | Environment | Pytest | Frontend E2E |

@@ -1,5 +1,27 @@
 # TESTER.md — Testing Guide
 
+## 2026-10-30 — real E2E scrape + fill + playwright validation (run fbd2c54f337c)
+
+Live server on Windows (uvicorn + venv), scrape cycle `POST /api/scrape` run_id `fbd2c54f337c` completed 2026-10-30:
+- fetched 481, scraped 178, boards_ok 26 / empty 20 / failed 0, phase done
+- Sheets write verified: ALL JOBS grew from 54 → 74 (+20 new rows)
+- Sources post-run: Arbeitnow 41, Shine 11, JustJoinIt 4, Jobicy 4, DailyRemote 5, WeWorkRemotely 2, NoFluffJobs 2, RemoteOK 1, WeAreDevelopers 1, Arc/Remotive/Adzuna 1 each
+- Zero Greenhouse URLs found → demo seed used for fill path
+
+Fill paths validated live:
+- Package-only (Mistral.ai Arbeitnow 84): `package_only` with tailored resume/cover generated (Gemini 503 → Groq fallback succeeded)
+- Greenhouse demo (Democorp 83446 seeded via `tools/seed_demo_job.py`, JOBS_SOURCE=snapshot): `filled_ready`, field_verification verified (first/last/email/phone), screenshot captured, submit kill-switch held
+- Independent playwright-cli cross-check on real Greenhouse form: fields filled and verified, resume + cover DOM-confirmed attached, screenshot before-submit, console clean
+
+Artifacts: `logs/realtest/TEST_REPORT.md`, `logs/realtest/scraped_today_new_rows.csv` (20 new rows), `logs/realtest/curated_jobs_list.csv` (5 TOP MATCHES), `logs/realtest/screenshot_via_api.png`, `logs/realtest/gh_pwcli_before_submit.png`
+
+Defects surfaced:
+- B1 UnicodeEncodeError on emoji print in `agents/auto_applier.py:generate_apply_package` under cp1252 stdout; workaround PYTHONUTF8=1 applied, proper stdio hardening + logging migration required
+- I2 Greenhouse file-attach readback `files.length=None` false negative (DOM attach succeeded)
+- A1 boards_done 46 > boards_total 43 due to 3 synthetic tracker rows counted
+
+See `logs/realtest/TEST_REPORT.md` for full logs, per-board counts, job lists, and 5-subagent reviews.
+
 ## 2026-10-29 — latest matching adversarial QA
 
 Full locked Linux pytest: **1205 passed, 8 skipped, 32 warnings in 69.43s**.
