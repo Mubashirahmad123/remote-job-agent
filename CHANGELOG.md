@@ -1,5 +1,15 @@
 # CHANGELOG.md
 
+## 2026-10-31 — fix pyasn1 security findings
+
+- Raise the bounded pyasn1 floor to 0.6.5 and regenerate the universal lock;
+  no other locked package changed. This release fixes CVE-2026-119194 through
+  CVE-2026-119197 and remains compatible with locked pyasn1-modules and rsa.
+- Offline regressions guard the floor, every locked pyasn1 variant and audit
+  baseline, and exercise RSA/Google-auth signing with synthetic keys. The local
+  audit ratchet passes with 8 pre-existing baselined findings; these four CVEs
+  were not suppressed, and the remaining findings are not claimed to be fixed.
+
 ## 2026-10-31 — Windows output, scrape progress and review attachment fixes
 
 - Harden redirected stdout/stderr without changing their encoding; move apply

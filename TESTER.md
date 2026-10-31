@@ -14,11 +14,19 @@ Validation on this checkout: **1,249 Python tests passed, 23 skipped** (15 of
 those are the opt-in browser cases); **91 frontend/HTTP tests passed**; and
 **15 offline Chromium tests passed** when opted in on Linux. `pip check`,
 bytecode compilation and `git diff --check` also passed. The
-[Windows regression run](https://github.com/Mubashirahmad123/remote-job-agent/actions/runs/41179467337)
-passed strict cp1252 redirected-output, progress, review/safety, and offline
-Chromium checks. The Docker Chromium CI step also passed on x86-64 and ARM64;
-Docker was unavailable locally. The separate dependency-audit job reported
-new pyasn1 advisories and did not pass.
+[Windows regression run](https://github.com/Mubashirahmad123/remote-job-agent/actions/runs/41179923914)
+passed **174 tests, 0 failures, 0 skips**: strict cp1252 redirected-output,
+progress, review/safety, and offline Chromium checks. The Docker Chromium CI
+step also passed on x86-64 and ARM64; Docker was unavailable locally.
+
+The [earlier CI audit](https://github.com/Mubashirahmad123/remote-job-agent/actions/runs/41179923905)
+failed on four new pyasn1 advisories in 0.6.4. The lock now selects **0.6.5**,
+which PyPI identifies as the fix for CVE-2026-119194 through CVE-2026-119197.
+The local dependency-audit ratchet passes with **8 existing baselined findings**;
+these four advisories were not added to the baseline. A passing ratchet does
+not mean the rest of the dependency tree is vulnerability-free. Dependency
+hygiene tests also exercise offline RSA/Google-auth compatibility with a
+synthetic key; no real credentials or network are involved.
 
 - **B1:** API, CLI and scheduler harden stdout/stderr independently while
   preserving the parent stream encoding; non-encodable characters are escaped.

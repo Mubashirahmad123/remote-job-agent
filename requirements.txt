@@ -80,6 +80,9 @@ reportlab==4.1.0
 fpdf2==2.8.8
 
 # Bounded transitive pins (kept satisfiable with the packages that pull them)
+# pyasn1 0.6.4 has CVE-2026-119194 through CVE-2026-119197; 0.6.5 fixes
+# all four. The upper bound matches pyasn1-modules, used by Google auth.
+pyasn1>=0.6.5,<0.7
 # filelock 4.0.12 has 10 NEW PYSEC advisories (filelock is a transitive dep of
 # huggingface-hub etc.); pinned to 4.2.4 which clears them all.
 filelock>=4.2.0,<5
