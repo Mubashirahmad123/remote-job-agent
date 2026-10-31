@@ -112,7 +112,7 @@ def _run_simple_pipeline(progress, tracker=None) -> Dict[str, int]:
     monkeypatch this, never the real pipeline.
     """
     from agents.curator import curate
-    from agents.scrapper import MASTER_BOARDS, scrape_all
+    from agents.scrapper import scrape_all
     from tools.yield_tracker import YieldTracker
 
     tracker = tracker or YieldTracker()
@@ -126,7 +126,7 @@ def _run_simple_pipeline(progress, tracker=None) -> Dict[str, int]:
         tracker.save()
     except Exception:
         pass
-    summary = _summarize_boards(tracker.boards, len(MASTER_BOARDS))
+    summary = _summarize_boards(tracker.snapshot(), _board_total())
     summary["scraped"] = len(jobs or [])
     summary["curated"] = len(top)
     return summary
@@ -210,13 +210,14 @@ def _worker(run_id: str) -> None:
                 total = _board_total()
             except Exception:
                 total = 0
-            summary = _summarize_boards(tracker.boards, total)
+            boards = tracker.snapshot()
+            summary = _summarize_boards(boards, total)
             with _lock:
                 run = _runs.get(run_id)
                 if run is None or run["status"] not in ("queued", "running"):
                     return
                 run.update(summary)
-                run["boards"] = _board_snapshot(tracker.boards)
+                run["boards"] = _board_snapshot(boards)
                 previous = run.setdefault("_event_board_state", {})
                 for board, details in run["boards"].items():
                     state = (details.get("status"), details.get("fetched", 0))
@@ -252,7 +253,7 @@ def _worker(run_id: str) -> None:
                             "boards_ok", "boards_failed", "boards_empty", "fetched"):
                     if key in counts:
                         run[key] = counts[key]
-                run["boards"] = _board_snapshot(tracker.boards)
+                run["boards"] = _board_snapshot(tracker.snapshot())
                 run.pop("_event_board_state", None)
                 _add_event(
                     run,
@@ -294,10 +295,15 @@ def _worker(run_id: str) -> None:
 
 
 def _board_total() -> int:
-    """Number of boards scrape_all iterates (import-time cheap, no CV parse)."""
-    from agents.scrapper import MASTER_BOARDS
+    """Planned tracker work items: board loop plus three optional passes.
 
-    return len(MASTER_BOARDS)
+    These synthetic rows are scraper stages, not additional independent job
+    boards. A union also prevents double-counting if a configured name is ever
+    reused. Import remains lazy and does not parse the CV.
+    """
+    from agents.scrapper import MASTER_BOARDS, SYNTHETIC_TRACKER_BOARDS
+
+    return len(set(MASTER_BOARDS) | set(SYNTHETIC_TRACKER_BOARDS))
 
 
 def start_scrape() -> Dict[str, Any]:

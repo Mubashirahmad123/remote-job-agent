@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Offline attachment fixture</title></head>
+<body>
+<form id="application-form">
+  <label for="first_name">First name</label><input id="first_name" name="first_name">
+  <label for="last_name">Last name</label><input id="last_name" name="last_name">
+  <label for="email">Email</label><input id="email" name="email" type="email">
+  <label for="phone">Phone</label><input id="phone" name="phone" type="tel">
+  <section class="field" id="resume-field">
+    <label for="resume">Resume/CV</label>
+    <div class="upload"><input id="resume" type="file"></div>
+  </section>
+  <section class="field" id="cover-field">
+    <label for="cover_letter">Cover Letter</label>
+    <div class="upload"><input id="cover_letter" type="file"></div>
+  </section>
+  <button type="submit">Submit application</button>
+</form>
+<script>
+// Synthetic React-style remount: the file input disappears after change.
+// This fixture never sends a request or submits an application.
+window.submitClicks = 0;
+document.querySelector('form').addEventListener('submit', event => {
+  event.preventDefault(); window.submitClicks++;
+});
+if (window.fixtureMode === 'ambiguous') {
+  const second = document.createElement('input');
+  second.type = 'file'; second.id = 'resume-extra';
+  document.querySelector('#resume-field .upload').appendChild(second);
+}
+if (window.fixtureMode === 'wipe' || window.fixtureMode === 'wipe_clears_files') {
+  let selected = false;
+  document.querySelectorAll('input[type=file]').forEach(input => {
+    input.addEventListener('change', () => {
+      selected = true;
+      setTimeout(() => { document.querySelector('#first_name').value = ''; }, 50);
+    });
+  });
+  document.querySelector('#first_name').addEventListener('input', () => {
+    if (selected && window.fixtureMode === 'wipe_clears_files') {
+      document.querySelectorAll('input[type=file]').forEach(input => { input.value = ''; });
+    }
+  });
+}
+if (window.fixtureMode === 'remount' || window.fixtureMode === 'drop') {
+  document.querySelectorAll('input[type=file]').forEach(input => {
+    input.addEventListener('change', () => {
+      const file = input.files[0];
+      const parent = input.parentElement;
+      setTimeout(() => {
+        parent.replaceChildren();
+        if (window.fixtureMode === 'remount' && file) {
+          const chip = document.createElement('span');
+          chip.textContent = file.name;
+          const remove = document.createElement('button');
+          remove.type = 'button'; remove.textContent = 'Remove file';
+          parent.append(chip, remove);
+        }
+      }, 50);
+    });
+  });
+}
+</script>
+</body>
+</html>

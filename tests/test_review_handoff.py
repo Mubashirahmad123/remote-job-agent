@@ -54,7 +54,12 @@ def setup(monkeypatch, tmp_path):
         return {'status': 'filled_ready', 'screenshot_path': str(path),
                 'confirmation_path': '/fixture/thanks', 'confirmation_message': 'Fixture received',
                 'field_verification': state.get('verification', 'verified'),
-                'profile_fields_verified': ['first_name', 'email']}
+                'profile_fields_verified': ['first_name', 'email'],
+                'resume_attached': state.get('resume_attached', True),
+                'resume_verify': state.get('resume_verify', 'files_present'),
+                'cover_letter_attached': False,
+                'cover_letter_pasted': state.get('cover_pasted', True),
+                'cover_letter_verify': state.get('cover_verify', 'verified')}
 
     class Browser:
         def new_page(self, **kwargs):
@@ -338,3 +343,46 @@ def test_poll_completion_and_claim_release_use_one_sqlite_snapshot():
             thread.join(6)
             assert not thread.is_alive()
         conn.close()
+
+
+@pytest.mark.parametrize('changes,reason', [
+    ({'resume_attached': False, 'resume_verify': 'unavailable'}, 'Resume attachment'),
+    ({'resume_attached': True, 'resume_verify': 'unavailable'}, 'Resume attachment'),
+    ({'cover_pasted': False, 'cover_verify': 'no_input_found'}, 'Cover letter'),
+    ({'cover_pasted': True, 'cover_verify': 'mismatch'}, 'Cover letter'),
+])
+def test_late_attachment_problem_is_visible_and_persists_as_needs_review(setup, changes, reason):
+    setup.state.update(changes)
+    run = setup.client.post(f'/api/apply/{FP}', json={}).json()
+    assert run['status'] == 'review_pending'
+    setup.gate.set()
+    result = terminal(setup.client, run)
+    assert result['status'] == 'needs_review'
+    assert reason in result['fill_error']
+    assert result['resume_verify'] == changes.get('resume_verify', 'files_present')
+    assert result['cover_letter_verify'] == changes.get('cover_verify', 'verified')
+    assert result['submit_enabled'] is False
+    assert apply_state.get_review_artifact(FP)['fill_status'] == 'needs_review'
+    assert setup.client.get(result['screenshot_url']).status_code == 200
+
+
+def test_visible_resume_chip_is_reported_as_ui_only_evidence(setup):
+    setup.state.update(resume_attached=True, resume_verify='ui_confirmed')
+    run = setup.client.post(f'/api/apply/{FP}', json={}).json()
+    setup.gate.set()
+    result = terminal(setup.client, run)
+    assert result['status'] == 'filled_ready'
+    assert result['resume_attached'] is True
+    assert result['resume_verify'] == 'ui_confirmed'
+    assert result['submit_enabled'] is False
+
+
+def test_missing_generated_materials_are_never_reported_ready(setup, monkeypatch):
+    monkeypatch.setattr(service, '_prepare_submit_materials', lambda job: {
+        'resume_path': None, 'cover_letter_text': ''})
+    run = setup.client.post(f'/api/apply/{FP}', json={}).json()
+    setup.gate.set()
+    result = terminal(setup.client, run)
+    assert result['status'] == 'needs_review'
+    assert 'Resume was not generated' in result['fill_error']
+    assert 'Cover letter was not generated' in result['fill_error']

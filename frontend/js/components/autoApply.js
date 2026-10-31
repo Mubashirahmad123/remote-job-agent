@@ -153,6 +153,8 @@ JobAgent.autoApply = {
       browserOpened: response.browser_opened === true,
       error: response.fill_error || '',
       fieldVerification: response.field_verification || '',
+      resumeVerification: response.resume_verify || '',
+      coverVerification: response.cover_letter_verify || '',
       profileFieldsVerified: Array.isArray(response.profile_fields_verified)
         ? response.profile_fields_verified
         : [],
@@ -337,20 +339,40 @@ JobAgent.autoApply = {
       const status = document.createElement('p');
       const failed = Boolean(result.error) || result.status === 'error' || result.status === 'playwright_not_installed';
       const needsReview = result.status === 'needs_review';
-      status.className = failed
-        ? 'review-result-status is-error'
-        : needsReview
-          ? 'review-result-status is-warning'
-          : 'review-result-status';
+      status.className = needsReview
+        ? 'review-result-status is-warning'
+        : failed ? 'review-result-status is-error' : 'review-result-status';
       status.textContent = needsReview
-        ? 'needs_review: required fields missing. Review manually before any submit.'
-          + (result.fieldVerification ? ' (' + result.fieldVerification + ')' : '')
+        ? 'Needs review: ' + (result.error || 'Fields or attachments need manual verification.')
         : result.error
           ? result.status + ': ' + result.error
           : result.browserOpened
             ? 'Form filled in open browser · Review and submit manually if ready'
             : result.status + ' · ' + result.tier;
       item.append(heading, status);
+      if (result.resumeVerification || result.coverVerification) {
+        const descriptions = {
+          files_present: 'file name/size verified in input',
+          ui_confirmed: 'visible in form; input unverified',
+          verified: 'text verified',
+          skipped: 'not provided',
+          no_input_found: 'no matching field',
+          ambiguous_input: 'multiple matching fields',
+          file_missing: 'file missing',
+          file_empty: 'file is empty',
+          file_mismatch: 'selected file does not match',
+          empty_after_set: 'empty after upload',
+          unavailable: 'verification unavailable',
+          mismatch: 'text mismatch',
+          error: 'upload or readback error',
+        };
+        const describe = value => descriptions[value] || 'unverified';
+        const documents = document.createElement('p');
+        documents.className = 'review-result-path review-result-documents';
+        documents.textContent = 'Resume: ' + describe(result.resumeVerification)
+          + ' · Cover letter: ' + describe(result.coverVerification);
+        item.appendChild(documents);
+      }
       if (result.applyUrl && !result.browserOpened) {
         const applyLink = document.createElement('a');
         applyLink.className = 'review-result-link';

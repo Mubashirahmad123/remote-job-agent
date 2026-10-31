@@ -1,5 +1,85 @@
 # TESTER.md — Testing Guide
 
+## 2026-10-31 — scrape progress and fill-review regressions
+
+The `feat/fix` report below is historical evidence from the user's Windows
+run. Its `logs/realtest/` files are gitignored and were not available in this
+checkout. The fixes below were tested on Linux with the locked Python packages
+and an **offline synthetic Chromium form**, not on the live Greenhouse demo or
+Windows. No live scrape, Sheets write, ATS request, or application was sent.
+
+Validation on this checkout: **1,249 Python tests passed, 23 skipped** (15 of
+those are the opt-in browser cases); **91 frontend/HTTP tests passed**; and
+**15 offline Chromium tests passed** when opted in. `pip check`, bytecode
+compilation and `git diff --check` also passed. The new Docker Chromium CI
+step was not run locally because Docker is unavailable here.
+
+- **B1:** API, CLI and scheduler harden stdout/stderr independently while
+  preserving the parent stream encoding; non-encodable characters are escaped.
+  Package/form diagnostics use logging. A subprocess regression exercises
+  `PYTHONIOENCODING=cp1252:strict` with UTF-8 mode disabled, including a worker
+  thread and the package error path. Docker explicitly enables Python UTF-8.
+- **A1:** progress plans include configured board entries **and** the three
+  synthetic JobSpy/Playwright/Crawl4AI work items. They are not three additional
+  independent boards. The monitor snapshots tracker rows before iterating; a
+  no-network `scrape_all` orchestration test checks emitted rows against the plan.
+- **I2:** bounded fresh-DOM readback distinguishes matching file inputs from
+  a visible, field-scoped filename/remove chip and from missing, mismatched or
+  unreadable inputs. Success requires two consecutive observations 400ms apart;
+  fields are checked again after file settling. API and CLI review outcomes
+  apply the same policy, and the dashboard exposes the evidence; missing
+  materials become `needs_review`. A chip is UI evidence **only**: the separate
+  Greenhouse submit refill still requires a matching native file input or full
+  cover-text readback before it may click. Ambiguous inputs are not selected.
+- **Safety:** ATS detection now checks the actual hostname, not a lookalike host,
+  URL path, query or user-info. Authenticated health and startup logs report
+  the effective `disarmed` / `dry_run` / `armed` submit mode; the environment
+  can arm it, so a false module constant alone is not evidence of disarming.
+  TestClient and real-HTTP Uvicorn tests authenticate with dummy credentials
+  and dynamically assert disarmed intent/submit return 403 before browser work.
+- **Q1:** no upstream playwright-cli defect is asserted or changed; the Windows
+  quote observation remains an unisolated harness issue.
+
+Browser regression command (no external requests; Docker CI runs it with
+`--network none`):
+
+```bash
+RUN_OFFLINE_BROWSER_TESTS=1 python -m pytest tests/test_attachment_browser.py -q
+```
+
+Chromium must be installed for that opt-in command; the ordinary pytest suite
+skips those cases. Its fake form exercises input removal, visible/hidden/wrong
+chips, wrong filename/size, a dropped input, ambiguous inputs, post-upload
+field repair, attachment loss after repair, Lever cover truncation and the
+no-click invariant. These fixtures do not prove the current live site's DOM or
+server-side upload acceptance. Matching filename and size also does not prove
+byte-for-byte file identity.
+
+### Required supervised Windows follow-up (not performed here)
+
+1. In a new process explicitly set `SUBMIT_ENABLED=false` and
+   `SUBMIT_DRY_RUN=false`, then check authenticated `/api/health` reports
+   `submit_mode: disarmed`. Probe `/intent` and `/submit` with the appropriate
+   auth and confirm 403 before any form testing; recheck health after a fill
+   because lazy `.env` imports can otherwise change unset environment values.
+   Do not use live submission.
+2. Start with `PYTHONUTF8=0` and `PYTHONIOENCODING=cp1252:strict`, redirect
+   stdout/stderr, and exercise package creation and a fill-only review; confirm
+   the run completes and logs are readable. Restore environment variables after.
+3. With explicit permission, use the demo posting and isolated snapshot/data
+   files (back up/restore any existing snapshot before seeding). Check the exact
+   resume/cover verification states, screenshot, and `review-status` result.
+   `ui_confirmed` is not native-input proof; keep submit disarmed. Restore live
+   Sheets configuration and the original snapshot after the rehearsal.
+
+Architectural follow-up: measure direct ATS-URL prevalence across scrape
+cycles before changing sourcing; a single zero count is not proof of a scraper
+bug. Redirect resolution needs SSRF and rate-limit review. The existing
+30-minute review watchdog fences stale writes but cannot kill a hung browser
+thread; true cancellation needs process isolation, not just a shorter wait.
+Two-key submit arming is a separate compatibility-sensitive policy decision and
+was not silently introduced in this fix.
+
 ## 2026-10-30 — real E2E scrape + fill + playwright validation (run fbd2c54f337c)
 
 Live server on Windows (uvicorn + venv), scrape cycle `POST /api/scrape` run_id `fbd2c54f337c` completed 2026-10-30:
@@ -9,9 +89,9 @@ Live server on Windows (uvicorn + venv), scrape cycle `POST /api/scrape` run_id 
 - Zero Greenhouse URLs found → demo seed used for fill path
 
 Fill paths validated live:
-- Package-only (Mistral.ai Arbeitnow 84): `package_only` with tailored resume/cover generated (Gemini 503 → Groq fallback succeeded)
-- Greenhouse demo (Democorp 83446 seeded via `tools/seed_demo_job.py`, JOBS_SOURCE=snapshot): `filled_ready`, field_verification verified (first/last/email/phone), screenshot captured, submit kill-switch held
-- Independent playwright-cli cross-check on real Greenhouse form: fields filled and verified, resume + cover DOM-confirmed attached, screenshot before-submit, console clean
+- Package-only (Mistral.ai Arbeitnow 84): `package_only` with tailored resume/cover generated.
+- Greenhouse demo (Democorp 83446 seeded via `tools/seed_demo_job.py`, JOBS_SOURCE=snapshot): `filled_ready`, field_verification verified (first/last/email/phone), screenshot captured. Resume generation fell back from Gemini 503 to Groq; the cover used Gemini directly. No submission was observed; 403 routes were not dynamically probed in that run.
+- Independent playwright-cli cross-check on real Greenhouse form: core fields read back, resume + cover shown as attached, screenshot before-submit; two Greenhouse session-ping 401s, no page errors.
 
 Artifacts: `logs/realtest/TEST_REPORT.md`, `logs/realtest/scraped_today_new_rows.csv` (20 new rows), `logs/realtest/curated_jobs_list.csv` (5 TOP MATCHES), `logs/realtest/screenshot_via_api.png`, `logs/realtest/gh_pwcli_before_submit.png`
 

@@ -120,6 +120,10 @@ def _fake_env(monkeypatch, good=True):
             "error": None,
             "field_verification": "verified",
             "profile_fields_verified": ["first_name", "last_name", "email"],
+            "resume_attached": True,
+            "resume_verify": "files_present",
+            "cover_letter_pasted": True,
+            "cover_letter_verify": "verified",
         },
     )
     monkeypatch.setattr(
@@ -324,6 +328,10 @@ class TestApplyFillOnly:
                 "error": None,
                 "field_verification": "verified",
                 "profile_fields_verified": ["first_name", "email"],
+                "resume_attached": True,
+                "resume_verify": "files_present",
+                "cover_letter_pasted": True,
+                "cover_letter_verify": "verified",
             },
         )
         response = client.post(f"/api/apply/{FP_GOOD}", json={"mode": "review"}, headers=_AUTH_HEADERS)
@@ -435,3 +443,47 @@ class TestGreenhouseIntentAndSubmit:
         finally:
             connection.close()
         assert stored[0] == hashlib.sha256(body["intent_token"].encode()).hexdigest()
+
+
+def test_lever_unverified_material_is_needs_review(client, monkeypatch):
+    _fake_env(monkeypatch)
+    lever_job = {**GOOD_JOB, 'apply_url': 'https://jobs.lever.co/example/role'}
+    monkeypatch.setattr(CACHE, 'get_job', lambda fp: lever_job)
+    monkeypatch.setattr(apply_service, '_fill_ats_form', lambda job, *args: {
+        'status': 'filled_ready', 'screenshot_path': 'screenshots/fake.png',
+        'resume_attached': True, 'resume_verify': 'files_present',
+        'cover_letter_pasted': False, 'cover_letter_verify': 'mismatch',
+    })
+    response = client.post(f'/api/apply/{FP_GOOD}', json={'mode': 'review'}, headers=_AUTH_HEADERS)
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'needs_review'
+    assert 'Cover letter' in body['fill_error']
+    assert body['resume_verify'] == 'files_present'
+    assert body['cover_letter_verify'] == 'mismatch'
+    assert body['submit_enabled'] is False
+
+
+def test_spoofed_ats_host_is_package_only_and_never_launches_playwright(client, monkeypatch):
+    import agents.auto_applier as aa
+
+    real_filler = apply_service._fill_ats_form
+    _fake_env(monkeypatch)
+    spoofed_job = {**GOOD_JOB, 'apply_url': 'https://attacker.invalid/jobs?next=greenhouse.io'}
+    monkeypatch.setattr(CACHE, 'get_job', lambda fp: spoofed_job)
+    monkeypatch.setattr(apply_service, '_fill_ats_form', real_filler)
+    monkeypatch.setattr(aa, '_get_playwright', lambda: pytest.fail('spoofed host launched browser'))
+    response = client.post(f'/api/apply/{FP_GOOD}', json={'mode': 'review'}, headers=_AUTH_HEADERS)
+    assert response.status_code == 200
+    assert response.json()['status'] == 'package_only'
+    assert response.json()['browser_opened'] is False
+
+
+def test_spoofed_greenhouse_host_cannot_create_submit_intent(client, monkeypatch):
+    monkeypatch.setattr('api.safety.SUBMIT_ENABLED', True)
+    spoofed_job = {**GREENHOUSE_SUBMIT_JOB,
+                   'apply_url': 'https://boards.greenhouse.io.attacker.invalid/jobs/1'}
+    monkeypatch.setattr(CACHE, 'get_job', lambda fp: spoofed_job)
+    response = _issue_intent(client)
+    assert response.status_code == 422
+    assert 'not available' in response.text

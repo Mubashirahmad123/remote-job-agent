@@ -247,6 +247,13 @@ jobs:
           print("OK: native architecture, non-root API startup and Chromium launch")
           PY
 
+      # Real browser, synthetic fixture only: exercises React-style file-input
+      # replacement without job-board traffic or a possible submission.
+      - name: Verify offline attachment DOM in Chromium
+        run: |
+          docker run --rm --network none -e RUN_OFFLINE_BROWSER_TESTS=1 \
+            remote-job-agent:ci python -m pytest -q tests/test_attachment_browser.py
+
       # Full tests run in api-tests; source-scanning tests need .github/.git,
       # deliberately excluded from the runtime image. Run behavior suites here
       # without mounting the checkout or any credentials into the container.

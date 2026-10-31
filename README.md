@@ -429,7 +429,7 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `POST /api/auth/login` | `{username, password}` → `200 {ok, username, role, expires_at}` + HttpOnly `rja_session` cookie. Rate-limited per IP and per username *before* any Argon2 work → `429` + `Retry-After` |
 | `POST /api/auth/logout` | Revokes the session server-side and clears the cookie → `{ok, deleted}` |
 | `GET /api/auth/me` | `{authenticated, username, role, expires_at}` for the current cookie |
-| `GET /api/health` | `{status, sheets_configured, curated_jobs_loaded, data_source}` — `data_source` is `sheets` \| `snapshot` \| `empty` |
+| `GET /api/health` | `{status, sheets_configured, curated_jobs_loaded, data_source, submit_mode}` — `data_source` is `sheets` \| `snapshot` \| `empty`; effective `submit_mode` is `disarmed` \| `dry_run` \| `armed` |
 | `GET /api/jobs?tab=&q=&source=&limit=&offset=` | Enriched jobs from `ALL JOBS` / `TOP MATCHES` / `GOOD MATCHES` |
 | `GET /api/jobs/{fingerprint}` | One job by MD5 fingerprint |
 | `GET /api/stats` | `{total_jobs, tabs, by_source, stats_rows, curated_jobs}` |
@@ -439,17 +439,17 @@ venv\Scripts\python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 | `PATCH /api/tracker/{fp}` | Encoded fingerprint or full apply URL; `{status, notes}` (`notes` is append-only; omit for status-only updates) — status whitelist: applied, interviewing, offer, rejected, withdrawn, ghosted. Status changes are **not** attributed: the APPLIED tab keeps no change history |
 | `POST /api/jobs/refresh` | `{tab?}` — invalidate the sheet cache on demand |
 | `POST /api/scrape` | Start a background scrape run → `202 {run_id, status}` (409 if one is active) |
-| `GET /api/scrape` / `GET /api/scrape/{run_id}` | List runs / poll `{status, phase, scraped, curated, error}` |
+| `GET /api/scrape` / `GET /api/scrape/{run_id}` | List runs / poll `{status, phase, scraped, curated, error, boards_total, boards_done}`. Progress counts configured board entries **plus** JobSpy, PlaywrightStealth and Crawl4AI work items, not just distinct boards. |
 | `POST /api/resume/{fp}` | Tailor 1-page resume PDF → `{status, filename, resume_markdown}` (the exact markdown the PDF was rendered from — powers the Studio's live preview) + `GET …/download` |
 | `POST /api/cover-letter/{fp}` | Role-aware cover letter → `{status, filename, cover_letter}` + `GET …/download` |
 | `GET /api/cv/profile` | Cached parsed-CV profile → `CvProfileOut` (501 when no fresh `cache/cv_profile_*.json`; per-request LLM parsing disabled) |
 | `PUT /api/cv/profile` | Persist Resume Studio edits (contact + skills) into the profile cache → `CvProfileOut` (501 when uncached; never triggers LLM parsing) |
 | `GET /api/cv/variants` | CV variants `[{name, tags}]` via `CV_DIR`/`cvs/` discovery (missing dir → `[]`) |
 | `POST /api/cv/upload?filename=` | Store an uploaded CV into the CV library as a tagged variant (raw file body, no multipart; tags come from the filename). Offline validation only — size cap (`CV_UPLOAD_MAX_MB`, default 10), magic bytes, extractability probe; **never** triggers LLM parsing. 413/415/422 on bad input, file deleted when unreadable, default CV untouched → `CvUploadOut` |
-| `POST /api/apply/{fp}` | Phase 2a fill-and-review: `{mode:"review"}` → per-ATS fill status (`filled_ready`, or `needs_review` when Greenhouse required profile fields are missing/unverified), package path, and screenshot path for Greenhouse/Lever; unsupported ATSs return `package_only`. Slow work returns `review_pending` after `APPLY_FILL_TIMEOUT` (default 180s, 1–600); the UI polls for the actual saved result. Other modes → 400, dream tier → 422, unknown → 404. The browser never submits. |
+| `POST /api/apply/{fp}` | Fill-and-review: `{mode:"review"}` returns `filled_ready` or `needs_review` for missing/unverified materials or Greenhouse profile fields, plus package, screenshot and `resume_verify` / `cover_letter_verify` states. Unsupported ATSs return `package_only`. Slow work returns `review_pending` after `APPLY_FILL_TIMEOUT` (default 180s, 1–600); the UI polls the saved result. Other modes → 400, dream tier → 422, unknown → 404. This route never submits. |
 | `GET /api/apply/{fp}/review-status?run_id=` | Authenticated pending/terminal fill-only result; late screenshots/metadata are retained; obsolete attempt ID → 409, unknown → 404. Queue/Regenerate poll this, never resubmit automatically. |
 | `GET /api/apply/{fp}/screenshot` | Serve the exact saved review image; no image guessing. URL is advertised only after artifact persistence. |
-| `POST /api/apply/{fp}/intent` + `POST /api/apply/{fp}/submit` | Greenhouse-only verified submit (kill-switched: 403 while `api/safety.py SUBMIT_ENABLED=False`; dedicated `APPLY_API_TOKEN` **or** an `admin` session required) |
+| `POST /api/apply/{fp}/intent` + `POST /api/apply/{fp}/submit` | Greenhouse-only verified submit (403 while effective submit mode is `disarmed`; dedicated `APPLY_API_TOKEN` **or** an `admin` session required) |
 | `GET /api/activity?limit=N` | Merged, time-ordered audit feed of apply claims, intents, review artifacts and login events, each carrying the actor that produced it. Login events include client IPs, so they are returned to `admin` sessions only (`includes_login_events` says which you got) |
 
 Notes:
@@ -635,7 +635,16 @@ A live-Chrome rerun is still pending. Details/skips: [TESTER.md](TESTER.md).
 
 ## Live submit status
 
-`SUBMIT_ENABLED = False` in git. The switch is three-state —
+`SUBMIT_ENABLED = False` in git, but the `SUBMIT_ENABLED` environment variable
+can arm the separate submit endpoints. Check authenticated `/api/health` and
+startup logs for the effective mode; it can change if environment values change
+or a later lazy `.env` load adds them. Pin both flags to `false` in the process
+and recheck health after a fill when running a disarmed rehearsal. A review's
+`ui_confirmed` attachment means
+only a visible filename/remove chip, **not** native file-input proof; the submit
+refill requires the latter (or verified cover text) and fails closed otherwise.
+
+The switch is three-state —
 `disarmed` / `dry_run` / `armed` (`api.safety.submit_mode()`) — so the submit
 path can be rehearsed end-to-end against a real posting *without clicking*:
 real browser, real fill, real readback, every gate, submit-button lookup,

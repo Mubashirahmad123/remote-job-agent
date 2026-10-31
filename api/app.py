@@ -58,6 +58,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.deps import bearer_from_request, cors_origins, credentials_ok, require_token
+from tools.stdio import harden_stdio
 from api.routers import activity, auth, health, jobs, cv, liveness, materials, runs, skills, stats, system, tracker, apply
 
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
@@ -316,6 +317,12 @@ async def _lifespan(app: FastAPI):
     experience.
     """
     from api.auth import count_users, open_access
+    from api.safety import submit_mode
+
+    mode = submit_mode()
+    print(f"[api] submit mode: {mode}", flush=True)
+    if mode == "armed":
+        warnings.warn("LIVE SUBMISSION IS ARMED: the submit route may send applications.", stacklevel=2)
 
     try:
         is_open = open_access()
@@ -369,6 +376,9 @@ def _warn_multi_worker() -> None:
 
 
 def create_app() -> FastAPI:
+    # Status output must never crash a review/scrape worker on Windows when
+    # uvicorn's stdout/stderr are redirected to a non-UTF-8 console or pipe.
+    harden_stdio()
     _enforce_bind_guard()
     _warn_multi_worker()
 

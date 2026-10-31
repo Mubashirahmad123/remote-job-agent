@@ -92,15 +92,21 @@ venv\Scripts\python.exe -m uvicorn api.app:app --host 127.0.0.1 --port 8000 --wo
 ```
 
 Then fill/review → intent → submit, exactly as a real run would (see §3 for
-the calls). The response comes back `status: "dry_run"`, `would_click: true`
-— nothing is clicked, no intent is consumed, no claim is taken, and no daily
-cap is spent. Form fields and any uploaded resume are still sent to the target
-page before the dry-run stop. Do not repeat without authorization for that
-data transfer.
+the calls). If every gate passes, the response is `status: "dry_run"` with
+`would_click: true`; a failed gate instead reports `would_click: false` and a
+reason. Nothing is clicked, no intent is consumed, no claim is taken, and no
+daily cap is spent. Form fields and any uploaded resume are still sent to the
+target page before the dry-run stop. Do not repeat without authorization for
+that data transfer.
 
 Dry run still enforces every gate a real submit enforces (fingerprint echo,
 typed title, score, field readback, attachment proof, confirmation metadata
-match). A rehearsal that skipped the gates would prove nothing.
+match). A rehearsal that skipped the gates would prove nothing. Review state
+`ui_confirmed` only means a visible, field-scoped attachment chip; it is not
+native file-input proof. The refill intentionally blocks a click on chip-only
+proof, so current Greenhouse forms that remove their inputs may require manual
+application even when the screenshot shows an attachment. Check authenticated
+`/api/health` for the effective submit mode before and after the rehearsal.
 
 ---
 

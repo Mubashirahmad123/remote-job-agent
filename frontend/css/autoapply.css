@@ -241,6 +241,10 @@
   color: var(--accent-rose);
 }
 
+.review-result-status.is-warning {
+  color: var(--accent-amber);
+}
+
 .review-result-link {
   display: inline-block;
   margin-top: 7px;

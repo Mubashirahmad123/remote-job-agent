@@ -82,15 +82,16 @@ changes, independent of the deferred user product.
    review; this route never clicks submit. Unsupported ATSs receive a
    package only. The cockpit processes up to three eligible jobs
    sequentially under an enforced daily cap; its submit toggle remains
-   disabled. Greenhouse `/intent` + `/submit` exist but fail closed with
-   403 while `api/safety.py SUBMIT_ENABLED=False`, require
-   `APPLY_API_TOKEN`, and refuse to click unless the refill verifies the
-   resume + cover letter actually attached, the typed-field readback is
-   `verified`/`repaired` (`mismatch`/`unavailable`/`missing_required`/error
-   never click), and the minimum profile (name + email) was typed and
-   verified. A Greenhouse fill with missing/unverified required fields is
-   stored and reported as `needs_review`, never `filled_ready`. The legacy
-   CLI blind submit is permanently removed. See `README.md` and `PM.md`.
+   disabled. Greenhouse `/intent` + `/submit` fail closed with 403 when
+   the effective mode is `disarmed` (the environment can arm it), require
+   `APPLY_API_TOKEN` or an authorized admin session, and refuse to click
+   unless the refill verifies a matching resume file input, a matching cover
+   file input or full cover-text readback, `verified`/`repaired` profile
+   fields and at least name + email. A field-scoped filename/remove chip is
+   surfaced as `ui_confirmed` for human review but is not sufficient for the
+   separate submit gate. Missing/unverified materials or Greenhouse profile
+   fields are stored and reported as `needs_review`. The legacy CLI blind
+   submit is permanently removed. See `README.md` and `TESTER.md`.
 
 7. **Auth precedence & actor attribution (Scenario A)** — Implemented in
    `api/deps.py` (`resolve_actor` / `require_actor` / `require_submit_actor`).

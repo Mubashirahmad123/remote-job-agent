@@ -7,6 +7,7 @@ FROM python:3.11-slim-bookworm
 # rather than an ARG because Playwright resolves it again when the browser
 # launches, not only during `playwright install`.
 ENV PYTHONUNBUFFERED=1 \
+    PYTHONUTF8=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive \

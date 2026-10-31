@@ -291,7 +291,7 @@ def _fill_review_claimed(
     claimed_at: str | None = None,
 ) -> Dict[str, Any]:
     """Generate, package, and fill — already under this request's own claim."""
-    from agents.auto_applier import detect_ats_platform, generate_apply_package
+    from agents.auto_applier import _review_readback_reasons, detect_ats_platform, generate_apply_package
     from api.apply_state import record_package
 
     # Generate the final submit materials FIRST so the visible review form
@@ -346,24 +346,17 @@ def _fill_review_claimed(
     platform = detect_ats_platform(apply_url) if apply_url else "unknown"
     field_verification = (fill_result or {}).get("field_verification")
     profile_fields_verified = list((fill_result or {}).get("profile_fields_verified") or [])
-    # Honesty mapping (Greenhouse only): a filler "filled_ready" with
-    # unverified/missing required profile fields must not read as ready.
-    # Surface "needs_review" so the dashboard, stored artifact, and intent
-    # gate all agree submit is not yet safe. Lever has no readback fields
-    # and keeps its raw filler status.
+    # A submit button alone does not mean the form contains the generated
+    # materials. Keep the dashboard, stored artifact and intent gate honest:
+    # missing/unverified documents need a human review on both supported ATSs.
+    # Greenhouse additionally requires verified name + email readback.
     effective_status = (fill_result or {}).get("status") if fill_result else "package_only"
     needs_review_reason = None
-    if platform == "greenhouse" and fill_result and fill_result.get("status") == "filled_ready":
-        verified_set = set(profile_fields_verified)
-        name_ok = ("first_name" in verified_set) or ("full_name" in verified_set)
-        email_ok = "email" in verified_set
-        if field_verification not in {"verified", "repaired"} or not (name_ok and email_ok):
+    if platform in {"greenhouse", "lever"} and fill_result and effective_status == "filled_ready":
+        reasons = _review_readback_reasons(platform, fill_result, review_resume, review_cover)
+        if reasons:
             effective_status = "needs_review"
-            needs_review_reason = (
-                "Required applicant fields missing/unverified "
-                f"(field_verification={field_verification!r}, "
-                f"profile_fields_verified={sorted(verified_set)!r})"
-            )
+            needs_review_reason = "; ".join(reasons) + ". Review the form and package manually."
     if platform in {"greenhouse", "lever"} and fill_result and fill_result.get("screenshot_path"):
         from api.apply_state import save_review_artifact
 
@@ -408,6 +401,15 @@ def _fill_review_claimed(
         "fill_error": fill_error,
         "field_verification": field_verification,
         "profile_fields_verified": profile_fields_verified,
+        # Raw, bounded verification states survive both the immediate response
+        # and the durable review-status handoff; no guessed attachment claims.
+        "resume_attached": (fill_result or {}).get("resume_attached"),
+        "resume_verify": (fill_result or {}).get("resume_verify"),
+        "resume_dom_confirmed": (fill_result or {}).get("resume_dom_confirmed"),
+        "cover_letter_attached": (fill_result or {}).get("cover_letter_attached"),
+        "cover_letter_pasted": (fill_result or {}).get("cover_letter_pasted"),
+        "cover_letter_verify": (fill_result or {}).get("cover_letter_verify"),
+        "cover_letter_dom_confirmed": (fill_result or {}).get("cover_letter_dom_confirmed"),
         "materials_note": materials_note,
         "regenerated": bool(regenerate),
         "previous_package_path": (
@@ -773,6 +775,9 @@ def _run_greenhouse_submit(
             result["fill_status"] = fill_result.get("status")
             result["field_verification"] = fill_result.get("field_verification")
             result["profile_fields_verified"] = sorted(fill_result.get("profile_fields_verified") or [])
+            for key in ("resume_attached", "resume_verify", "cover_letter_attached",
+                        "cover_letter_pasted", "cover_letter_verify"):
+                result[key] = fill_result.get(key)
             result["confirmation_path_seen"] = fill_result.get("confirmation_path")
             result["confirmation_message_seen"] = fill_result.get("confirmation_message")
             if fill_result.get("status") != "filled_ready":
@@ -803,18 +808,24 @@ def _run_greenhouse_submit(
                     f"(profile_fields_verified={sorted(verified_fields)!r})"
                 )
                 return result
-            # Attachment gate: the refill must prove the files actually landed
-            # (files.length readback), not merely that set_input_files() did not
-            # throw. Anything unverified fails closed before any submit click.
-            if fill_result.get("resume_attached") is not True:
+            # A visible filename/remove chip is useful for human review, but
+            # does not prove the submit payload. Keep the stricter pre-click
+            # gate: a fresh native file input or a full textarea readback must
+            # prove the material is present. Unknown/partial proof fails closed.
+            if not (
+                fill_result.get("resume_attached") is True
+                and fill_result.get("resume_verify") == "files_present"
+            ):
                 result["error"] = (
                     "Resume attachment unverified in submit refill "
                     f"(verify={fill_result.get('resume_verify')!r})"
                 )
                 return result
             if not (
-                fill_result.get("cover_letter_pasted") is True
-                or fill_result.get("cover_letter_attached") is True
+                (fill_result.get("cover_letter_pasted") is True
+                 and fill_result.get("cover_letter_verify") == "verified")
+                or (fill_result.get("cover_letter_attached") is True
+                    and fill_result.get("cover_letter_verify") == "files_present")
             ):
                 result["error"] = (
                     "Cover letter unverified in submit refill "

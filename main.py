@@ -10,6 +10,9 @@ import sys
 import argparse
 from pathlib import Path
 from dotenv import load_dotenv
+from tools.stdio import harden_stdio
+
+harden_stdio()
 
 # Load .env FIRST before any other imports that might use env vars
 BASE_DIR = Path(__file__).resolve().parent
