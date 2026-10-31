@@ -18,6 +18,14 @@ def _cp1252_python(code, tmp_path):
     )
 
 
+def test_strict_cp1252_negative_control_reproduces_unicode_error(tmp_path):
+    # A green hardening test is meaningful only if the same runner/pipe fails
+    # without the fix; this also proves the Windows CI actually uses cp1252.
+    process = _cp1252_python("print('package 📦')", tmp_path)
+    assert process.returncode != 0
+    assert b"UnicodeEncodeError" in process.stderr
+
+
 def test_api_hardens_stdout_and_stderr_before_review_worker_runs(tmp_path):
     process = _cp1252_python(
         """
@@ -47,6 +55,63 @@ def test_api_hardens_stdout_and_stderr_before_review_worker_runs(tmp_path):
     assert b"\\U0001f4e6" in process.stdout
     assert b"failure " in process.stderr
     assert (next(tmp_path.iterdir()) / "index.html").is_file()
+
+
+def test_cp1252_real_review_worker_creates_package_without_live_services(tmp_path):
+    # Exercise the original route -> worker -> real package boundary. Material
+    # generation and the ATS browser are faked, but the worker, SQLite claims
+    # and package writer are real; no live job or application is contacted.
+    process = _cp1252_python(
+        """
+        import os
+        import sys
+        import threading
+        from pathlib import Path
+
+        root = Path(sys.argv[1])
+        sys.path.insert(0, str(Path.cwd()))  # imports still resolve after chdir
+        os.chdir(root)
+        os.environ.update({
+            'PYTHON_DOTENV_DISABLED': '1',
+            'SUBMIT_ENABLED': 'false', 'SUBMIT_DRY_RUN': 'false',
+            'API_TOKEN': '', 'APPLY_API_TOKEN': '',
+            'AUTH_DB_PATH': str(root / 'auth.db'),
+            'APPLY_STATE_DB_PATH': str(root / 'apply.db'),
+            'APPLY_FILL_TIMEOUT': '20',
+        })
+        from api.app import create_app
+        from api import apply as service, cache
+        from agents import auto_applier
+        from fastapi.testclient import TestClient
+
+        main_thread = threading.get_ident()
+        real_package = auto_applier.generate_apply_package
+        def package(*args, **kwargs):
+            assert threading.get_ident() != main_thread
+            print('review worker 📦', flush=True)
+            return real_package(*args, **kwargs)
+        auto_applier.generate_apply_package = package
+        cache.get_job = lambda fp: {
+            'job_fingerprint': fp, 'job_title': 'Developer 🚀',
+            'company': 'Synthetic', 'apply_url': 'https://example.invalid/job',
+            'match_score': 80,
+        }
+        service._prepare_submit_materials = lambda job: {
+            'resume_path': None, 'cover_letter_text': 'Synthetic cover',
+        }
+        service._fill_ats_form = lambda *args, **kwargs: None
+        with TestClient(create_app()) as client:
+            response = client.post('/api/apply/windows-encoding', json={'mode': 'review'})
+            assert response.status_code == 200, response.text
+            result = response.json()
+            assert result['status'] == 'package_only', result
+            assert result['submit_enabled'] is False
+            assert (Path(result['package_path']) / 'index.html').is_file()
+        """,
+        tmp_path,
+    )
+    assert process.returncode == 0, process.stderr.decode("cp1252", "replace")
+    assert b"review worker \\U0001f4e6" in process.stdout
 
 
 def test_package_success_and_error_handler_do_not_print_unicode(tmp_path):

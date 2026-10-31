@@ -4,15 +4,21 @@
 
 The `feat/fix` report below is historical evidence from the user's Windows
 run. Its `logs/realtest/` files are gitignored and were not available in this
-checkout. The fixes below were tested on Linux with the locked Python packages
-and an **offline synthetic Chromium form**, not on the live Greenhouse demo or
-Windows. No live scrape, Sheets write, ATS request, or application was sent.
+checkout. The fixes were tested on Linux and on a GitHub-hosted **Windows
+Server 2022** runner with the locked Python packages and **offline synthetic
+Chromium forms**. The user's own Windows environment and the live Greenhouse
+demo were not retested. No live scrape, Sheets write, ATS request, or
+application was sent.
 
 Validation on this checkout: **1,249 Python tests passed, 23 skipped** (15 of
 those are the opt-in browser cases); **91 frontend/HTTP tests passed**; and
-**15 offline Chromium tests passed** when opted in. `pip check`, bytecode
-compilation and `git diff --check` also passed. The new Docker Chromium CI
-step was not run locally because Docker is unavailable here.
+**15 offline Chromium tests passed** when opted in on Linux. `pip check`,
+bytecode compilation and `git diff --check` also passed. The
+[Windows regression run](https://github.com/Mubashirahmad123/remote-job-agent/actions/runs/41179467337)
+passed strict cp1252 redirected-output, progress, review/safety, and offline
+Chromium checks. The Docker Chromium CI step also passed on x86-64 and ARM64;
+Docker was unavailable locally. The separate dependency-audit job reported
+new pyasn1 advisories and did not pass.
 
 - **B1:** API, CLI and scheduler harden stdout/stderr independently while
   preserving the parent stream encoding; non-encodable characters are escaped.

@@ -16,8 +16,9 @@
 - Restrict ATS detection to actual hostnames; expose effective submit mode in
   authenticated health/startup logs. Default disarmed behavior is unchanged.
 - Added cp1252 subprocess, orchestration, API/safety and optional offline
-  Chromium fixture regressions. The user's Windows/live-site run has not been
-  repeated; see `TESTER.md` for limitations and a safe follow-up procedure.
+  Chromium fixture regressions. The synthetic checks passed on a GitHub-hosted
+  Windows 2022 runner; the user's own Windows/live-site run has not been
+  repeated. See `TESTER.md` for limitations and a safe follow-up procedure.
 
 ## 2026-10-30 — real E2E validation run fbd2c54f337c (scrape + fill + playwright)
 

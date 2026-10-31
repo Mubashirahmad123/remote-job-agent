@@ -37,7 +37,7 @@ jobs:
       - name: Confirm actual Windows and install locked dependencies
         shell: pwsh
         run: |
-          python -c "import platform,sys; assert sys.platform == 'win32'; print(platform.platform(), sys.version)"
+          python -c "import platform,sys; assert sys.platform == 'win32'; print('::notice title=Windows runner::' + platform.platform() + '; Python ' + platform.python_version())"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pip install --upgrade pip
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -48,7 +48,16 @@ jobs:
         env:
           PYTHONUTF8: "0"
           PYTHONIOENCODING: "cp1252:strict"
-        run: python -m pytest tests/test_stdio_hardening.py -q
+        shell: pwsh
+        run: |
+          python -m pytest tests/test_stdio_hardening.py -q --junitxml=stdio-results.xml
+          $testExit = $LASTEXITCODE
+          if (Test-Path stdio-results.xml) {
+            [xml]$report = Get-Content -Raw -Encoding UTF8 stdio-results.xml
+            $suite = $report.testsuites.testsuite
+            Write-Output ("::notice title=Windows cp1252 tests::{0} tests, {1} failures, {2} errors, {3} skipped" -f $suite.tests, $suite.failures, $suite.errors, $suite.skipped)
+          }
+          exit $testExit
 
       - name: Install Chromium for the offline form fixtures
         run: python -m playwright install chromium
@@ -57,14 +66,12 @@ jobs:
         env:
           RUN_OFFLINE_BROWSER_TESTS: "1"
         shell: pwsh
-        run: >-
-          python -m pytest
-          tests/test_attachment_verification.py
-          tests/test_attachment_browser.py
-          tests/test_api_phase2.py
-          tests/test_api_apply.py
-          tests/test_review_handoff.py
-          tests/test_submit_dryrun.py
-          tests/test_review_readback_cli.py
-          tests/test_auto_applier.py
-          -q
+        run: |
+          python -m pytest tests/test_attachment_verification.py tests/test_attachment_browser.py tests/test_api_phase2.py tests/test_api_apply.py tests/test_review_handoff.py tests/test_submit_dryrun.py tests/test_review_readback_cli.py tests/test_auto_applier.py -q --junitxml=windows-regressions.xml
+          $testExit = $LASTEXITCODE
+          if (Test-Path windows-regressions.xml) {
+            [xml]$report = Get-Content -Raw -Encoding UTF8 windows-regressions.xml
+            $suite = $report.testsuites.testsuite
+            Write-Output ("::notice title=Windows review and browser tests::{0} tests, {1} failures, {2} errors, {3} skipped" -f $suite.tests, $suite.failures, $suite.errors, $suite.skipped)
+          }
+          exit $testExit
