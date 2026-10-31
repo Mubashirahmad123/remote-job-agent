@@ -133,28 +133,40 @@ def _run_simple_pipeline(progress, tracker=None) -> Dict[str, int]:
 
 
 def _summarize_boards(boards: Dict[str, Dict[str, Any]], total: int) -> Dict[str, int]:
-    """Pure per-board rollup: done/failed/empty counts + fetched sum."""
-    done = failed = empty = fetched = 0
+    """Pure per-board rollup over the Phase 1 status taxonomy.
+
+    ok | empty_confirmed | parse_zero | timeout | blocked | fetch_failed |
+    skipped_js | skipped_duplicate | skipped_disabled | skipped_breaker |
+    error. Skipped boards are failures-to-attempt, counted in their own
+    bucket — never as empty and never as ok.
+    """
+    failed_statuses = {"error", "timeout", "blocked", "fetch_failed"}
+    empty_statuses = {"empty_confirmed", "parse_zero"}
+    done = failed = empty = skipped = 0
+    fetched = 0
     for entry in (boards or {}).values():
         if not isinstance(entry, dict):
             continue
         status = (entry.get("status") or "")
-        if status == "error":
-            failed += 1
-        elif status == "empty" or status.startswith("skipped"):
-            empty += 1
-        elif status == "ok":
+        if status == "ok":
             done += 1
+        elif status in failed_statuses:
+            failed += 1
+        elif status in empty_statuses:
+            empty += 1
+        elif status.startswith("skipped"):
+            skipped += 1
         try:
             fetched += int(entry.get("fetched", 0) or 0)
         except (TypeError, ValueError):
             pass
     return {
         "boards_total": total,
-        "boards_done": done + failed + empty,
+        "boards_done": done + failed + empty + skipped,
         "boards_ok": done,
         "boards_failed": failed,
         "boards_empty": empty,
+        "boards_skipped": skipped,
         "fetched": fetched,
     }
 
