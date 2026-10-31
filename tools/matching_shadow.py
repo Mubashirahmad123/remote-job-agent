@@ -65,6 +65,39 @@ def shadow_batch(jobs: list[dict], profile: MatchProfile, store: MatchStore, own
     return results
 
 
+def shadow_config_status() -> dict:
+    """Report shadow configuration without leaking profile content.
+
+    Startup/health logging lives here so a run can never be mistaken for
+    shadow-enabled when the profile is unset, missing, or invalid.
+    """
+    path = os.getenv('MATCHING_SHADOW_PROFILE', '').strip()
+    if not path:
+        return {"configured": False, "reason": "MATCHING_SHADOW_PROFILE unset"}
+    status = {"configured": True, "path": path, "exists": Path(path).is_file(), "version": None}
+    if status["exists"]:
+        try:
+            status["version"] = load_profile(Path(path)).version
+        except Exception as exc:
+            status["error"] = type(exc).__name__
+    return status
+
+
+def log_shadow_config() -> str:
+    """One health line naming profile path and version when enabled."""
+    status = shadow_config_status()
+    if not status["configured"]:
+        line = "Matching shadow: DISABLED (MATCHING_SHADOW_PROFILE unset)"
+    elif not status["exists"]:
+        line = f"Matching shadow: BROKEN (profile missing: {status['path']})"
+    elif status.get("error"):
+        line = f"Matching shadow: BROKEN (profile invalid: {status['error']})"
+    else:
+        line = f"Matching shadow: ENABLED profile={status['path']} version={status['version']}"
+    print(line)
+    return line
+
+
 def run_optional_shadow(jobs: list[dict]):
     path = os.getenv('MATCHING_SHADOW_PROFILE', '').strip()
     if not path:

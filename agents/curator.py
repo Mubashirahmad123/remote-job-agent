@@ -320,6 +320,10 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     if own_tracker:
         tracker = YieldTracker()
     tracker.stage("curated_in", count_by_source(raw_jobs))
+    # One health line so runs can never be mistaken for shadow-enabled
+    # when MATCHING_SHADOW_PROFILE was unset (the 2026-10-30 failure mode).
+    from tools.matching_shadow import log_shadow_config
+    log_shadow_config()
     print(f"\n{'='*60}")
     print(f"🔍 CURATING {len(raw_jobs)} RAW JOBS")
     print(f"{'='*60}")
