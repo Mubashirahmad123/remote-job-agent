@@ -1,0 +1,77 @@
+name: Windows offline regressions
+
+# Exercise redirected cp1252 output and real Chromium DOM readback on Windows.
+# Only synthetic jobs/forms are used; no credentials or live ATS calls.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-regressions-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows cp1252, progress and attachment checks
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      SUBMIT_ENABLED: "false"
+      SUBMIT_DRY_RUN: "false"
+      JOBS_SOURCE: snapshot
+      SNAPSHOT_FILE: tests/e2e/fixtures/jobs.snapshot.json
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.lock.txt
+
+      - name: Confirm actual Windows and install locked dependencies
+        shell: pwsh
+        run: |
+          python -c "import platform,sys; assert sys.platform == 'win32'; print('::notice title=Windows runner::' + platform.platform() + '; Python ' + platform.python_version())"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install --upgrade pip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m pip install -r requirements.lock.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test redirected cp1252 stdout and stderr
+        env:
+          PYTHONUTF8: "0"
+          PYTHONIOENCODING: "cp1252:strict"
+        shell: pwsh
+        run: |
+          python -m pytest tests/test_stdio_hardening.py -q --junitxml=stdio-results.xml
+          $testExit = $LASTEXITCODE
+          if (Test-Path stdio-results.xml) {
+            [xml]$report = Get-Content -Raw -Encoding UTF8 stdio-results.xml
+            $suite = $report.testsuites.testsuite
+            Write-Output ("::notice title=Windows cp1252 tests::{0} tests, {1} failures, {2} errors, {3} skipped" -f $suite.tests, $suite.failures, $suite.errors, $suite.skipped)
+          }
+          exit $testExit
+
+      - name: Install Chromium for the offline form fixtures
+        run: python -m playwright install chromium
+
+      - name: Test progress, review, submit gates and synthetic Chromium forms
+        env:
+          RUN_OFFLINE_BROWSER_TESTS: "1"
+        shell: pwsh
+        run: |
+          python -m pytest tests/test_attachment_verification.py tests/test_attachment_browser.py tests/test_api_phase2.py tests/test_api_apply.py tests/test_review_handoff.py tests/test_submit_dryrun.py tests/test_review_readback_cli.py tests/test_auto_applier.py -q --junitxml=windows-regressions.xml
+          $testExit = $LASTEXITCODE
+          if (Test-Path windows-regressions.xml) {
+            [xml]$report = Get-Content -Raw -Encoding UTF8 windows-regressions.xml
+            $suite = $report.testsuites.testsuite
+            Write-Output ("::notice title=Windows review and browser tests::{0} tests, {1} failures, {2} errors, {3} skipped" -f $suite.tests, $suite.failures, $suite.errors, $suite.skipped)
+          }
+          exit $testExit

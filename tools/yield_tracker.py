@@ -35,6 +35,18 @@ class YieldTracker:
     def _entry(self, board: str) -> dict:
         return self.boards.setdefault(board, {"status": "unknown"})
 
+    def snapshot(self) -> dict:
+        """Copy live rows before the API's monitor thread iterates them.
+
+        Scrape/curation can add source keys while the monitor is polling.
+        Copy the outer mapping first, then each row, so the monitor never
+        iterates a dictionary whose size the worker is changing.
+        """
+        return {
+            name: entry.copy() if isinstance(entry, dict) else entry
+            for name, entry in self.boards.copy().items()
+        }
+
     def scrape(self, board: str, status: str, fetched: int = 0):
         """Record a board fetch: status is ok | empty | error."""
         e = self._entry(board)

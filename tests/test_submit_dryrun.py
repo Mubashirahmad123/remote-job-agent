@@ -224,7 +224,9 @@ def _fake_playwright(monkeypatch, recorder, *, with_recaptcha=False):
             "field_verification": "verified",
             "profile_fields_verified": ["first_name", "last_name", "email"],
             "resume_attached": True,
+            "resume_verify": "files_present",
             "cover_letter_pasted": True,
+            "cover_letter_verify": "verified",
             "confirmation_path": "/confirmation/received",
             "confirmation_message": "Thanks for applying",
         },
@@ -394,3 +396,49 @@ class TestOrderingGuards:
             assert "safety.SUBMIT_ENABLED" not in source.replace("SUBMIT_ENABLED=False", ""), (
                 f"{module.__name__} reads the constant directly instead of submit_enabled()"
             )
+
+
+@pytest.mark.parametrize('overrides,reason', [
+    ({'resume_attached': True, 'resume_verify': 'ui_confirmed'}, 'Resume'),
+    ({'resume_attached': True, 'resume_verify': 'unavailable'}, 'Resume'),
+    ({'resume_attached': True, 'resume_verify': None}, 'Resume'),
+    ({'cover_letter_attached': True, 'cover_letter_pasted': False,
+      'cover_letter_verify': 'ui_confirmed'}, 'Cover letter'),
+    ({'cover_letter_pasted': True, 'cover_letter_verify': 'mismatch'}, 'Cover letter'),
+])
+def test_submit_refill_never_clicks_on_ui_only_or_unverified_materials(monkeypatch, tmp_path, overrides, reason):
+    import agents.auto_applier as aa
+
+    recorder = _ClickRecorder()
+    _fake_playwright(monkeypatch, recorder)
+    original = aa._fill_greenhouse_form
+    monkeypatch.setattr(aa, '_fill_greenhouse_form', lambda *args: {**original(*args), **overrides})
+    monkeypatch.setenv('SUBMIT_ARTIFACT_DIR', str(tmp_path / 'runs'))
+    artifact = {
+        'apply_url': GREENHOUSE_SUBMIT_JOB['apply_url'],
+        'resume_path': str(tmp_path / 'r.pdf'),
+        'cover_letter_text': 'cover',
+        'confirmation_path': '/confirmation/received',
+        'confirmation_message': 'Thanks for applying',
+        'job_fingerprint': FP_SUBMIT,
+    }
+    # Even the armed-path test uses a fake browser; it cannot make a network
+    # request. A UI chip is intentionally insufficient for an actual click.
+    result = apply_service._run_greenhouse_submit(artifact, GREENHOUSE_SUBMIT_JOB, dry_run=False)
+    assert recorder.clicks == 0
+    assert result['clicked'] is False
+    assert reason in result['error']
+
+
+@pytest.mark.parametrize('enabled,dry,expected', [
+    ('false', 'false', 'disarmed'),
+    ('false', 'true', 'disarmed'),
+    ('true', 'true', 'dry_run'),
+    ('true', 'false', 'armed'),
+])
+def test_authenticated_health_exposes_effective_submit_mode(client, monkeypatch, enabled, dry, expected):
+    monkeypatch.setenv('SUBMIT_ENABLED', enabled)
+    monkeypatch.setenv('SUBMIT_DRY_RUN', dry)
+    response = client.get('/api/health')
+    assert response.status_code == 200
+    assert response.json()['submit_mode'] == expected

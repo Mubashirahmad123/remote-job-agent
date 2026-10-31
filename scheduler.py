@@ -7,13 +7,9 @@ import sys
 from datetime import datetime
 
 from tools.artifact_retention import cleanup_artifacts
+from tools.stdio import harden_stdio
 
-# cp1252 consoles (plain Windows cmd/PowerShell) cannot encode the emoji
-# banners this daemon prints; degrade to "?" instead of crashing the 24/7 loop.
-try:
-    sys.stdout.reconfigure(errors="replace")
-except Exception:
-    pass
+harden_stdio()
 
 def signal_handler(sig, frame):
     print('\n👋 Scheduler stopped gracefully!')

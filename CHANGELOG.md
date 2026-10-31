@@ -1,11 +1,41 @@
 # CHANGELOG.md
 
+## 2026-10-31 — fix pyasn1 security findings
+
+- Raise the bounded pyasn1 floor to 0.6.5 and regenerate the universal lock;
+  no other locked package changed. This release fixes CVE-2026-119194 through
+  CVE-2026-119197 and remains compatible with locked pyasn1-modules and rsa.
+- Offline regressions guard the floor, every locked pyasn1 variant and audit
+  baseline, and exercise RSA/Google-auth signing with synthetic keys. The local
+  audit ratchet passes with 8 pre-existing baselined findings; these four CVEs
+  were not suppressed, and the remaining findings are not claimed to be fixed.
+
+## 2026-10-31 — Windows output, scrape progress and review attachment fixes
+
+- Harden redirected stdout/stderr without changing their encoding; move apply
+  package/form diagnostics to logging and explicitly enable Docker UTF-8.
+- Count the three synthetic scrape passes in the progress plan and snapshot
+  live tracker rows before monitoring them.
+- Re-read Greenhouse/Lever attachments against the current DOM, retry transient
+  remounts, check filename/size, reject ambiguous inputs, and distinguish UI
+  chips from native file-input proof. Recheck profile fields after uploads.
+- Expose attachment states in review/status and the dashboard; CLI and API use
+  the same `needs_review` policy for missing or unverified materials. Chip-only
+  evidence never satisfies the
+  separate submit refill's stricter gate. Cover text must match in full.
+- Restrict ATS detection to actual hostnames; expose effective submit mode in
+  authenticated health/startup logs. Default disarmed behavior is unchanged.
+- Added cp1252 subprocess, orchestration, API/safety and optional offline
+  Chromium fixture regressions. The synthetic checks passed on a GitHub-hosted
+  Windows 2022 runner; the user's own Windows/live-site run has not been
+  repeated. See `TESTER.md` for limitations and a safe follow-up procedure.
+
 ## 2026-10-30 — real E2E validation run fbd2c54f337c (scrape + fill + playwright)
 
 Live Windows validation with real server, real scrape, real fill and playwright-cli cross-check.
 - Run fbd2c54f337c: fetched 481, scraped 178, curated 5, boards_ok 26, empty 20, failed 0
 - Sheets delta: ALL JOBS 54 → 74 (+20 new rows). TOP MATCHES 5 curated from this cycle
-- Fill paths validated: package-only (Arbeitnow Mistral.ai) with live LLM fallback Gemini 503 → Groq; Greenhouse demo seed (Democorp 83446) filled_ready with screenshot, submit kill-switch held; playwright-cli independent fill on real Greenhouse form verified with attachments
+- Fill paths validated: package-only (Arbeitnow Mistral.ai); Greenhouse demo seed (Democorp 83446) `filled_ready` with screenshot and Gemini-503 → Groq fallback for the resume only; playwright-cli independent fill on the demo showed attachments. No submission was observed; 403s were not dynamically probed in that run.
 - Defects recorded: B1 UnicodeEncodeError on emoji print in `agents/auto_applier.py:generate_apply_package`, I2 Greenhouse file-attach readback false negative (`files.length=None`), A1 boards_done > boards_total synthetic tracker counting
 - Artifacts: `logs/realtest/TEST_REPORT.md`, `logs/realtest/scraped_today_new_rows.csv`, `logs/realtest/curated_jobs_list.csv`, 5-subagent reviews
 

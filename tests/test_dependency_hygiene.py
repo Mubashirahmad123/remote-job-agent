@@ -26,6 +26,8 @@ import subprocess
 import sys
 
 import pytest
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -179,6 +181,60 @@ def test_the_requests_bump_landed_in_both_files():
     assert _lock()["requests"] == "2.33.0"
 
 
+def test_pyasn1_security_floor_and_every_locked_version():
+    """0.6.5 fixes four CVEs; neither the direct constraint nor any universal
+    lock variant may silently permit a vulnerable older release."""
+    specs = [spec for _, name, spec in _requirements() if name.lower() == "pyasn1"]
+    assert len(specs) == 1, f"expected one pyasn1 constraint, got {specs!r}"
+    specifier = SpecifierSet(specs[0])
+    for vulnerable in ("0.6.0", "0.6.3", "0.6.4"):
+        assert not specifier.contains(vulnerable, prereleases=True)
+    assert specifier.contains("0.6.5"), "the patched release must remain installable"
+
+    versions = []
+    for line in _read(LOCK).splitlines():
+        match = LOCK_LINE.match(line.strip())
+        if match and match.group("name").lower().replace("_", "-") == "pyasn1":
+            versions.append(Version(match.group("version")))
+    assert versions, "pyasn1 is missing from the universal lock"
+    for version in versions:
+        assert version >= Version("0.6.5"), f"vulnerable pyasn1 lock: {version}"
+        assert specifier.contains(version), f"pyasn1 {version} violates {specifier}"
+
+
+def test_pyasn1_rsa_google_auth_compatibility_offline():
+    """Exercise the pure-Python Google auth fallback that uses both pyasn1
+    consumers, with an ephemeral synthetic key and no credentials or network."""
+    from google.auth.crypt import _python_rsa
+    from pyasn1.codec.der import decoder, encoder
+    from pyasn1.type import univ
+    from pyasn1_modules.rfc2437 import RSAPrivateKey
+    from pyasn1_modules.rfc5208 import PrivateKeyInfo
+    import rsa
+
+    public, private = rsa.newkeys(1024)
+    private_der = private.save_pkcs1("DER")
+    decoded, remainder = decoder.decode(private_der, asn1Spec=RSAPrivateKey())
+    assert remainder == b""
+    assert int(decoded["modulus"]) == public.n
+
+    # PKCS#8 is the format commonly used by Google service-account keys.
+    info = PrivateKeyInfo()
+    info["version"] = 0
+    info["privateKeyAlgorithm"]["algorithm"] = univ.ObjectIdentifier("1.2.840.113549.1.1.1")
+    info["privateKeyAlgorithm"]["parameters"] = univ.Null("")
+    info["privateKey"] = private_der
+    private_keys = (private.save_pkcs1(), rsa.pem.save_pem(encoder.encode(info), "PRIVATE KEY"))
+
+    verifier = _python_rsa.RSAVerifier.from_string(public.save_pkcs1())
+    message = b"synthetic offline auth compatibility check"
+    for key in private_keys:
+        signer = _python_rsa.RSASigner.from_string(key)
+        signature = signer.sign(message)
+        assert verifier.verify(message, signature)
+        assert not verifier.verify(b"tampered message", signature)
+
+
 def test_the_lock_still_demands_universal_resolution():
     """Hard-won and easy to lose: without `--universal`, uv resolves for the
     host OS only. The lock was first generated on Windows, which produced an
@@ -225,6 +281,23 @@ def test_requests_is_not_in_the_baseline():
     future change reverts the pin, the advisories come back and the audit fails
     — which is the ratchet working, and the reason pruning matters."""
     assert not [e for e in _baseline_entries() if e.startswith("requests==")]
+
+
+def test_pyasn1_fixed_advisories_are_not_baselined():
+    """Do not turn the four fixed advisories into audit exceptions, including
+    their GHSA aliases if pip-audit ever changes which identifiers it emits."""
+    fixed_ids = {
+        "CVE-2026-119194", "CVE-2026-119195", "CVE-2026-119196", "CVE-2026-119197",
+        "GHSA-fm9c-5rcf-2q5p", "GHSA-9m75-vc3g-4x39",
+        "GHSA-2qm8-x737-gmw5", "GHSA-mm57-4v3p-rchx",
+    }
+    suppressed = []
+    for entry in _baseline_entries():
+        match = BASELINE_LINE.match(entry)
+        if match and match.group("pkg").lower().replace("_", "-") == "pyasn1":
+            if match.group("id") in fixed_ids:
+                suppressed.append(entry)
+    assert not suppressed, f"fixed pyasn1 advisories must not be baselined: {suppressed}"
 
 
 def test_the_baseline_records_when_it_was_taken():

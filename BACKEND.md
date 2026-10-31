@@ -67,8 +67,10 @@ per-route `Depends` alone fails **open** if one is forgotten.
 ## 2. Endpoints
 
 ### `GET /api/health` → `HealthOut`
-`{status, sheets_configured, curated_jobs_loaded, data_source}`.
-Presence-only — asserts in tests that no secret substrings leak.
+`{status, sheets_configured, curated_jobs_loaded, data_source, submit_mode}`.
+`submit_mode` reports the effective `disarmed`, `dry_run`, or `armed` state,
+including environment overrides; startup logs it and warn if armed. Presence-only
+— asserts in tests that no secret substrings leak.
 
 ### `GET /api/jobs` → `JobOut[]`
 | Param | Default | Notes |
@@ -183,7 +185,10 @@ Clears cache (+ enrichment map), re-warms, returns `{status, cleared[], warmed{t
 Starts a background scrape run via `api/runs.py` (single active run; no
 multi-scrape overlap). Writes go through curator → Sheets; callers poll
 `GET /api/scrape/{run_id}` (`{status, phase, scraped, curated, error}`) or
-`GET /api/scrape` (run list), then `POST /api/jobs/refresh`. Each board runs
+`GET /api/scrape` (run list), then `POST /api/jobs/refresh`. `boards_total` and
+`boards_done` count configured board entries plus the three synthetic tracker
+passes (JobSpy, PlaywrightStealth, Crawl4AI-JustRemote), including skipped
+passes; they are work items, not a count of independent providers. Each board runs
 under a time budget (`SCRAPER_TIMEOUT`, default 300s, min 30s — see
 `agents/scrapper.py:_run_optional_scraper`): a hung board is recorded as an
 `error` with a timeout message and the run continues. JobSpy is special:
@@ -240,9 +245,10 @@ for manual review; closing the application tab or a 30-minute timeout closes
 the browser. It captures a pre-submit screenshot. Other ATS platforms return
 `package_only` without launching a browser. No sheet write or submit click occurs.
 Any `mode` other than `"review"` → 400. `AUTO_APPLY_CONFIRM` is ignored
-everywhere (legacy CLI blind submit permanently removed) — env cannot
-re-enable submit over HTTP (`api/safety.py` `SUBMIT_ENABLED=False` fails
-`/intent` + `/submit` closed with 403). Never writes `status:"submitted"`.
+everywhere (legacy CLI blind submit permanently removed). This review route
+never submits; the separate `/intent` + `/submit` routes return 403 when the
+effective submit mode is disarmed. `SUBMIT_ENABLED` in the environment can arm
+them. Review never writes `status:"submitted"`.
 
 ### Foreground wait and late-result handoff (local fix, 2026-10-15)
 
@@ -289,11 +295,26 @@ eligible jobs per trigger (enforced daily cap with per-day persisted count),
 then displays per-job status, in-browser screenshot preview
 (`GET /api/apply/{fp}/screenshot`), local package paths, and a posting link
 for package-only ATSs. The review fill carries the final tailored resume +
-cover letter (same files a later submit would send). A Greenhouse fill whose
-required applicant fields are missing/unverified is stored and returned as
-`needs_review` (with `field_verification` + `profile_fields_verified` exposed)
-instead of `filled_ready`, so intent (409) and submit (410) reject it before
-any browser work. The separate CLI
+cover letter (same files a later submit would send). Greenhouse or Lever fills
+with missing/unverified materials, or Greenhouse fills with unverified required
+profile fields, are stored and returned as `needs_review` rather than
+`filled_ready`. The result and durable status include `resume_attached`,
+`resume_verify`, `resume_dom_confirmed`, `cover_letter_attached`,
+`cover_letter_pasted`, `cover_letter_verify`, `cover_letter_dom_confirmed`,
+`field_verification` and `profile_fields_verified`. Failure states include
+`file_missing`, `file_empty`, `no_input_found`, `ambiguous_input`,
+`file_mismatch`, `empty_after_set`, `mismatch`, `unavailable` and `error`.
+
+`files_present` means the expected name and size were read from the current
+file input, not that its bytes were hashed or accepted remotely. `ui_confirmed`
+means only a visible, field-scoped filename/remove chip was observed; it is
+useful for review but does **not** prove the submit payload or remote server
+acceptance. The submit refill separately requires
+`files_present` for the resume and either `files_present` for the cover file
+or a full matching cover-text readback; chip-only evidence never opens the
+click gate. A `needs_review` artifact fails intent (409) and submit (410)
+before browser work. ATS detection checks real hostnames, not URL substrings.
+The separate CLI
 `agents/auto_applier.py` path is fill-only; its legacy blind submit was
 permanently removed.
 

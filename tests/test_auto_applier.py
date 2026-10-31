@@ -137,6 +137,22 @@ class TestDetectATSPlatform:
     def test_case_insensitive(self):
         assert detect_ats_platform("HTTPS://BOARDS.GREENHOUSE.IO/JOBS/123") == "greenhouse"
 
+    def test_ats_names_in_unrelated_hosts_paths_or_credentials_are_not_trusted(self):
+        for url in (
+            "https://greenhouse.io.attacker.invalid/jobs/1",
+            "https://attacker.invalid/greenhouse.io/jobs/1",
+            "https://attacker.invalid/?redirect=https://boards.greenhouse.io/real/jobs/1",
+            "https://boards.greenhouse.io@attacker.invalid/jobs/1",
+            "https://fakelever.co/jobs/1",
+            "javascript:greenhouse.io",
+            "https://[invalid",
+        ):
+            assert detect_ats_platform(url) == "unknown", url
+
+    def test_valid_subdomains_and_trailing_dns_dot_are_recognized(self):
+        assert detect_ats_platform("https://job-boards.greenhouse.io./example/1") == "greenhouse"
+        assert detect_ats_platform("https://tenant.jobs.lever.co/job") == "lever"
+
 
 class TestGenerateApplyPackage:
     def setup_method(self):

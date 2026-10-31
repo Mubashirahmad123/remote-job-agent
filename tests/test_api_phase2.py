@@ -213,3 +213,97 @@ class TestSummarizeBoards:
 
     def test_empty(self):
         assert runs._summarize_boards({}, 0)["boards_done"] == 0
+
+
+def test_progress_counts_optional_tracker_passes_in_both_plan_and_final(monkeypatch):
+    """A1: configured boards + optional passes are one shared work-item plan."""
+    from types import SimpleNamespace
+    from agents import scrapper
+    from tools.yield_tracker import YieldTracker
+
+    monkeypatch.setattr(scrapper, "MASTER_BOARDS", {"BoardA": {}, "BoardB": {}})
+    assert set(scrapper.SYNTHETIC_TRACKER_BOARDS) == {
+        "JobSpy", "PlaywrightStealth", "Crawl4AI-JustRemote",
+    }
+    assert runs._board_total() == 5
+    statuses = ["ok", "empty", "skipped-disabled", "error", "ok"]
+    names = ["BoardA", "BoardB", *scrapper.SYNTHETIC_TRACKER_BOARDS]
+    tracker = YieldTracker()
+
+    def scrape_all(debug=False, tracker=None):
+        for index, (name, status) in enumerate(zip(names, statuses), start=1):
+            tracker.scrape(name, status, fetched=1 if status == "ok" else 0)
+            summary = runs._summarize_boards(tracker.snapshot(), runs._board_total())
+            assert summary["boards_done"] == index
+            assert summary["boards_done"] <= summary["boards_total"]
+        # A curation-only source must not count as an additional scan.
+        tracker.stage("country", {"unplanned-source": 3})
+        return [{"job_title": "fake"}]
+
+    monkeypatch.setattr(scrapper, "scrape_all", scrape_all)
+    monkeypatch.setitem(sys.modules, "agents.curator", SimpleNamespace(curate=lambda jobs, tracker: {"top_jobs": []}))
+    monkeypatch.setattr(tracker, "save", lambda: None)
+    monkeypatch.setattr(runs, "_write_curated_cache", lambda jobs, top: None)
+    final = runs._run_simple_pipeline(lambda *args: None, tracker)
+    assert final["boards_total"] == final["boards_done"] == 5
+    assert (final["boards_ok"], final["boards_failed"], final["boards_empty"]) == (2, 1, 2)
+    assert final["fetched"] == 2
+
+
+def test_board_plan_union_does_not_double_count_reused_synthetic_name(monkeypatch):
+    from agents import scrapper
+
+    monkeypatch.setattr(scrapper, "MASTER_BOARDS", {"JobSpy": {}, "BoardA": {}})
+    assert runs._board_total() == 4
+
+
+def test_tracker_snapshot_is_independent_during_concurrent_row_additions():
+    from tools.yield_tracker import YieldTracker
+
+    tracker = YieldTracker()
+    tracker.scrape("start", "ok", 1)
+    snapshot = tracker.snapshot()
+    tracker.scrape("start", "error", 0)
+    assert snapshot["start"] == {"status": "ok", "fetched": 1}
+
+    def add_rows():
+        for index in range(4000):
+            tracker.scrape(str(index), "ok", 1)
+
+    writer = threading.Thread(target=add_rows)
+    writer.start()
+    while writer.is_alive():
+        rows = tracker.snapshot()
+        runs._summarize_boards(rows, 5000)
+        runs._board_snapshot(rows)
+    writer.join()
+    assert len(tracker.snapshot()) == 4001
+
+
+def test_real_scrape_orchestrator_emits_only_the_planned_tracker_rows(monkeypatch):
+    """Exercise real scrape_all control flow with every external scraper faked."""
+    from types import SimpleNamespace
+    from agents import scrapper
+    from tools.yield_tracker import YieldTracker
+
+    configured = {'One': {'url': 'https://one.invalid'}, 'Two': {'url': 'https://two.invalid'}}
+    monkeypatch.setattr(scrapper, 'MASTER_BOARDS', configured)
+    monkeypatch.setattr(scrapper, 'JS_RENDERED_BOARDS', set())
+    monkeypatch.setattr(scrapper, 'time', SimpleNamespace(sleep=lambda seconds: None))
+    monkeypatch.setattr(scrapper, '_load_board_health', lambda: {})
+    monkeypatch.setattr(scrapper, '_board_breaker_check', lambda *args: False)
+    monkeypatch.setattr(scrapper, 'fetch_jobs_from_board', lambda *args: [])
+    monkeypatch.setenv('ENABLE_JOBSPY', 'false')
+    monkeypatch.setitem(sys.modules, 'tools.playwright_scraper',
+                        SimpleNamespace(scrape_stealth_boards=lambda debug=False: []))
+    monkeypatch.setitem(sys.modules, 'tools.crawl4ai_scraper',
+                        SimpleNamespace(scrape_justremote_with_crawl4ai=lambda debug=False: []))
+    monkeypatch.setitem(sys.modules, 'agents.gemini_tools', SimpleNamespace(
+        reset_llm_call_stats=lambda: None,
+        get_llm_call_stats=lambda reset=False: {'attempts': 0}))
+    tracker = YieldTracker()
+    assert scrapper.scrape_all(tracker=tracker) == []
+    expected = set(configured) | set(scrapper.SYNTHETIC_TRACKER_BOARDS)
+    assert set(tracker.boards) == expected
+    summary = runs._summarize_boards(tracker.snapshot(), runs._board_total())
+    assert summary['boards_done'] == summary['boards_total'] == len(expected)

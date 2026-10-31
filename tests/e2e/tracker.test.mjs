@@ -50,6 +50,14 @@ async function finishedPatch() {
   await waitFor(() => /Updated .* status to:|update failed|Status saved/i.test(toast())
     && !agent().store.state.loading.tracker, { label: 'tracker update settled' });
 }
+async function settleTracker() {
+  // A card may render before the click handler's finally block finishes.
+  // Closing jsdom at that point destroys document while that handler still
+  // has a pending render, creating an unrelated unhandled rejection.
+  await waitFor(() => agent()?.tracker?._pendingUpdates.size === 0
+    && !agent().tracker._manualSaving && !agent().tracker._syncing
+    && !agent().store.state.loading.tracker, { label: 'tracker handlers settled' });
+}
 async function openManual(values = {}) {
   ctx.window.document.getElementById('btnNewTrackedJob').click();
   await waitFor(() => agent().tracker._manualModalOpen, { label: 'manual modal open' });
@@ -79,8 +87,12 @@ beforeEach(async () => {
   await ready();
 }, { timeout: 30000 });
 afterEach(async () => {
-  await control({ hold_patch: false });
-  ctx?.window.close();
+  try {
+    await control({ hold_patch: false });
+    if (ctx?.window?.document) await settleTracker();
+  } finally {
+    ctx?.window.close();
+  }
 });
 
 describe('tracker — rendering and persisted transitions', () => {
@@ -111,6 +123,7 @@ describe('tracker — rendering and persisted transitions', () => {
     assert.ok(mutations.every((r) => !r.body.notes));
     card(key('applied')).click();
     assert.equal((await serverState()).requests.filter((r) => r.method === 'PATCH').length, 3);
+    await settleTracker();
     ctx.window.close();
     ctx = await loadDashboard(api.base);
     await ready();
@@ -325,6 +338,7 @@ describe('tracker — manual application form', () => {
     assert.ok(created.follow_up_date);
     assert.ok(card(created.apply_url, 'applied'));
     assert.equal((await serverState()).requests.filter((r) => r.method === 'POST').length, 1);
+    await settleTracker();
     ctx.window.close();
     ctx = await loadDashboard(api.base);
     await ready();

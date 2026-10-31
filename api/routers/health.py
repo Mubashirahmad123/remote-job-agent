@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
-from api import cache
+from api import cache, safety
 from api.deps import require_token
 from api.schemas import HealthOut
 
@@ -16,4 +16,5 @@ def health(_: None = Depends(require_token)) -> HealthOut:
         sheets_configured=cache.sheets_configured(),
         curated_jobs_loaded=cache.curated_count(),
         data_source=cache.data_source(),
+        submit_mode=safety.submit_mode(),
     )

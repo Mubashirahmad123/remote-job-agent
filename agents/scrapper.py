@@ -257,6 +257,14 @@ def days_ago(date_str):
 # CONFIGURATION — ALL BOARDS KEPT WITH FIXED URLS
 # =============================================================================
 
+# These are tracker work items in addition to the configured board loop, not
+# three additional job boards. Keep their names shared with the API's progress
+# denominator so skipped/failed/empty optional passes are counted consistently.
+JOBSPY_TRACKER = "JobSpy"
+PLAYWRIGHT_TRACKER = "PlaywrightStealth"
+CRAWL4AI_TRACKER = "Crawl4AI-JustRemote"
+SYNTHETIC_TRACKER_BOARDS = (JOBSPY_TRACKER, PLAYWRIGHT_TRACKER, CRAWL4AI_TRACKER)
+
 MASTER_BOARDS = {
     # --- API Boards ---
     "Remotive": {
@@ -2605,12 +2613,12 @@ def scrape_all(debug=False, tracker=None):
     if os.getenv("ENABLE_JOBSPY", "false").lower() != "true":
         print("\n--- Processing JobSpy ---")
         print("  Skipped (set ENABLE_JOBSPY=true to opt in — native crash risk)")
-        failed_scrapers.append("JobSpy")
-        tracker.scrape("JobSpy", "skipped-disabled", 0)
+        failed_scrapers.append(JOBSPY_TRACKER)
+        tracker.scrape(JOBSPY_TRACKER, "skipped-disabled", 0)
     else:
         print("\n--- Processing JobSpy ---")
         try:
-            tracker.scrape("JobSpy", "running", 0)
+            tracker.scrape(JOBSPY_TRACKER, "running", 0)
         except Exception:
             pass
         try:
@@ -2619,25 +2627,25 @@ def scrape_all(debug=False, tracker=None):
             if scraped:
                 print(f"Parsed {len(scraped)} jobs from JobSpy")
                 jobs.extend(scraped)
-                working_scrapers.append("JobSpy")
-                tracker.scrape("JobSpy", "ok", len(scraped))
+                working_scrapers.append(JOBSPY_TRACKER)
+                tracker.scrape(JOBSPY_TRACKER, "ok", len(scraped))
             else:
                 print("  No jobs found from JobSpy")
-                failed_scrapers.append("JobSpy")
-                tracker.scrape("JobSpy", "empty", 0)
+                failed_scrapers.append(JOBSPY_TRACKER)
+                tracker.scrape(JOBSPY_TRACKER, "empty", 0)
         except Exception as e:
             print(f"JobSpy failed (run continues): {e}")
-            failed_scrapers.append("JobSpy")
+            failed_scrapers.append(JOBSPY_TRACKER)
             try:
-                tracker.scrape("JobSpy", "error", 0)
-                tracker.boards["JobSpy"]["error"] = str(e)[:200]
+                tracker.scrape(JOBSPY_TRACKER, "error", 0)
+                tracker.boards[JOBSPY_TRACKER]["error"] = str(e)[:200]
             except Exception:
                 pass
 
     try:
         from tools.playwright_scraper import scrape_stealth_boards
         _jobs_before_pw = len(jobs)
-        _run_optional_scraper("PlaywrightStealth", scrape_stealth_boards, jobs, working_scrapers, failed_scrapers, debug, tracker)
+        _run_optional_scraper(PLAYWRIGHT_TRACKER, scrape_stealth_boards, jobs, working_scrapers, failed_scrapers, debug, tracker)
         if len(jobs) == _jobs_before_pw:
             # Playwright ran but yielded nothing — JS boards have no fallback,
             # so surface it loudly instead of silently dropping coverage.
@@ -2646,16 +2654,16 @@ def scrape_all(debug=False, tracker=None):
     except Exception as e:
         print(f"Playwright stealth setup failed: {e}")
         print(f"  WARNING: JS boards {sorted(JS_RENDERED_BOARDS)} uncovered this run (Playwright unavailable).")
-        failed_scrapers.append("PlaywrightStealth")
-        tracker.scrape("PlaywrightStealth", "error", 0)
+        failed_scrapers.append(PLAYWRIGHT_TRACKER)
+        tracker.scrape(PLAYWRIGHT_TRACKER, "error", 0)
 
     try:
         from tools.crawl4ai_scraper import scrape_justremote_with_crawl4ai
-        _run_optional_scraper("Crawl4AI-JustRemote", scrape_justremote_with_crawl4ai, jobs, working_scrapers, failed_scrapers, debug, tracker)
+        _run_optional_scraper(CRAWL4AI_TRACKER, scrape_justremote_with_crawl4ai, jobs, working_scrapers, failed_scrapers, debug, tracker)
     except Exception as e:
         print(f"Crawl4AI setup failed: {e}")
-        failed_scrapers.append("Crawl4AI-JustRemote")
-        tracker.scrape("Crawl4AI-JustRemote", "error", 0)
+        failed_scrapers.append(CRAWL4AI_TRACKER)
+        tracker.scrape(CRAWL4AI_TRACKER, "error", 0)
 
     # §6 (AUDIT 2026-10-18): the only LLM-consuming scrape path is
     # Crawl4AI-JustRemote (markdown extraction via the fallback chain).
@@ -2667,9 +2675,9 @@ def scrape_all(debug=False, tracker=None):
         from agents.gemini_tools import get_llm_call_stats
         _llm = get_llm_call_stats(reset=True)
         if _llm["attempts"]:
-            tracker.llm("Crawl4AI-JustRemote", attempts=_llm["attempts"],
+            tracker.llm(CRAWL4AI_TRACKER, attempts=_llm["attempts"],
                         providers=_llm["providers"])
-            _fetched = tracker.boards.get("Crawl4AI-JustRemote", {}).get("fetched", 0)
+            _fetched = tracker.boards.get(CRAWL4AI_TRACKER, {}).get("fetched", 0)
             _prov = ", ".join(
                 f"{p}: {v['ok']}/{v['attempts']} ok" for p, v in _llm["providers"].items())
             print(f"  💡 LLM cost (Crawl4AI-JustRemote): {_llm['attempts']} attempts "

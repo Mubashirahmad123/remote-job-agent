@@ -8,6 +8,9 @@ import os
 import sys
 import subprocess
 import platform
+from tools.stdio import harden_stdio
+
+harden_stdio()
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 class C:

@@ -20,15 +20,12 @@ from datetime import datetime, timedelta
 
 load_dotenv()
 
-# Windows consoles default to cp1252, which cannot encode the ✅/❌/⚠️
-# status emojis used in prints below. Without this, get_sheet() raises
-# UnicodeEncodeError *after* a successful connection (at the print line,
-# before `return sheet`), making every sheet read look like a failure.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-except Exception:
-    pass
+# A direct sheet-writer invocation can run outside the API/CLI entry points.
+# Preserve the caller's encoding while preventing status output from turning
+# a successful Sheet connection into a UnicodeEncodeError on Windows.
+from tools.stdio import harden_stdio
+
+harden_stdio()
 
 SCOPE = [
     "https://spreadsheets.google.com/feeds",
