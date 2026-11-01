@@ -151,6 +151,25 @@ _CARD_DESC_SELECTORS = [
 ]
 
 
+# Cap for stored full descriptions (chars). Full text is kept for the
+# evidence extractor; the Sheet still receives the short summary.
+FULL_DESCRIPTION_CAP = 20000
+
+
+def _full_description(text) -> str:
+    """Cleaned, capped FULL job description for the evidence layer.
+
+    Phase 2 (2026-10-31): boards that ship the whole posting (Arbeitnow
+    verified live: 7.2 KB description, Remotive, RemoteOK, Himalayas,
+    Jobicy, TheMuse, WorkingNomads, Adzuna) had it truncated to 200 chars
+    at ingestion, so no amount of extraction could recover the text. The
+    Sheet keeps the short summary; this full text feeds the extractor.
+    """
+    if not text:
+        return ""
+    return clean_html(str(text))[:FULL_DESCRIPTION_CAP]
+
+
 def _card_description(element, title="", company="", limit=300):
     """Best available description text from a job card.
 
@@ -1057,6 +1076,7 @@ def parse_json_remotive(board, data, debug=False):
             "timezone": j.get("candidate_required_location", "Worldwide"),
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("publication_date")),
             "source": board
         })
@@ -1104,6 +1124,7 @@ def parse_json_remoteok(board, data, debug=False):
             "timezone": j.get("location", "") or "Worldwide",
             "apply_url": j.get("url", "") or j.get("apply_url", "") or "",
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("date") or j.get("epoch"), board),
             "source": board
         })
@@ -1158,6 +1179,7 @@ def parse_json_arbeitnow(board, data, debug=False):
             "timezone": j.get("location", "Worldwide"),
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("created_at")),
             "source": board
         })
@@ -1215,6 +1237,7 @@ def parse_json_himalayas(board, data, debug=False):
             "timezone": loc_text,
             "apply_url": j.get("applicationLink", "") or "",
             "summary": clean_html(description)[:300],
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("pubDate"), board),
             "source": board
         })
@@ -1248,6 +1271,7 @@ def parse_json_jobicy(board, data, debug=False):
             "timezone": j.get("jobGeo", "") or "Remote",
             "apply_url": j.get("url", "") or "",
             "summary": clean_html(description)[:300],
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("pubDate"), board),
             "source": board
         })
@@ -1278,6 +1302,7 @@ def parse_json_themuse(board, data, debug=False):
             "timezone": ", ".join(locations) or "Remote",
             "apply_url": j.get("refs", {}).get("landing_page", "") if isinstance(j.get("refs"), dict) else "",
             "summary": clean_html(contents)[:300],
+            "description": _full_description(contents),
             "posted_date_iso": normalize_date(j.get("publication_date"), board),
             "source": board
         })
@@ -1309,6 +1334,7 @@ def parse_json_adzuna(board, data, debug=False):
             "timezone": j.get("location", {}).get("display_name", "Remote") if isinstance(j.get("location"), dict) else "Remote",
             "apply_url": j.get("redirect_url", "") or "",
             "summary": clean_html(description)[:300],
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("created"), board),
             "source": board
         })
@@ -1347,6 +1373,7 @@ def parse_json_workingnomads(board, data, debug=False):
             "timezone": "Remote",
             "apply_url": j.get("url", "") or "",
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("pub_date"), board),
             "source": board
         })
@@ -2793,6 +2820,12 @@ def scrape_all(debug=False, tracker=None):
 
     total_before_filter = len(jobs)
     ledger.record_jobs(jobs, "raw_fetched")
+    # Stamp every job with the run id: scrape and curate can run in
+    # separate processes (main.py pipes scraped_jobs.json through a file),
+    # so the curator needs the run id ON the job to land its stages in the
+    # same ledger run.
+    for job in jobs:
+        job["ledger_run_id"] = tracker.run_id
 
     # Partition once; the dropped halves are recorded per-job so false
     # rejections upstream of the curator become queryable.

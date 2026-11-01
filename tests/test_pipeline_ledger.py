@@ -123,6 +123,40 @@ class TestReconciliation:
             "legacy_passed",
         }
 
+    def test_same_fingerprint_different_urls_are_two_instances(self, tmp_path):
+        """Live-run defect (2026-10-31): the content fingerprint is NOT
+        unique — 331 raw rows collapsed to 315 distinct fingerprints, so
+        reconciling by fingerprint reported false '2+ terminal rows'.
+        Identity must be per INSTANCE (fingerprint + url + source)."""
+        ledger = PipelineLedger(tmp_path / "ledger.db", run_id="run-uid")
+        job_a = _job(1)
+        job_a["job_fingerprint"] = "shared-fingerprint"
+        job_b = dict(job_a)
+        job_b["apply_url"] = "https://other/1"
+        job_b["source"] = "OtherBoard"
+        ledger.record_jobs([job_a, job_b], "raw_fetched")
+        ledger.record_jobs([job_a], "legacy_passed", reason_code="match")
+        ledger.record_jobs([job_b], "legacy_low_match", reason_code="below_min")
+        report = ledger.reconcile("run-uid")
+        assert report["raw_fetched"] == 2
+        assert report["raw_instances"] == 2
+        assert report["terminal_sum"] == 2
+        assert report["complete"] is True
+        assert report["duplicated_terminal"] == []
+        assert report["missing_terminal"] == []
+
+    def test_duplicate_instance_still_reports_unbalanced_counts(self, tmp_path):
+        """The same posting fetched twice from one board is TWO instances
+        and both need a terminal row; a missing one must be reported."""
+        ledger = PipelineLedger(tmp_path / "ledger.db", run_id="run-uid2")
+        job = _job(9)
+        ledger.record_jobs([job, dict(job)], "raw_fetched")
+        ledger.record_jobs([job], "legacy_passed", reason_code="match")
+        report = ledger.reconcile("run-uid2")
+        assert report["raw_fetched"] == 2
+        assert report["terminal_sum"] == 1
+        assert report["complete"] is False
+
 
 class TestBoardTaxonomy:
     def test_status_outside_taxonomy_rejected(self, tmp_path):

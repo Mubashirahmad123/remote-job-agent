@@ -30,13 +30,34 @@ def load_profile(path: Path) -> MatchProfile:
         _string_set(data['skills'], 'skills'), data['version'], _string_set(data.get('learnable_skills', []), 'learnable_skills'))
 
 
+def ensure_evidence(job: dict) -> dict:
+    """Extract deterministic, quote-verified evidence for a job.
+
+    Phase 2: nothing populated job["matching_evidence"], so every job
+    became REVIEW (gates unknown) and the shortlist stayed empty. The
+    extractor is deterministic and local - no network, no LLM - and job
+    text is treated as untrusted DATA: it is pattern-matched, never
+    obeyed. The caller's job dict is not mutated; the returned evidence
+    dict is used directly by shadow_batch.
+    """
+    existing = job.get('matching_evidence')
+    if isinstance(existing, dict) and existing:
+        return existing
+    try:
+        from tools.matching_extract import extract_matching_evidence
+        return extract_matching_evidence(job)
+    except Exception:
+        # A malformed job carries no evidence, so its gates stay UNKNOWN.
+        return {}
+
+
 def shadow_batch(jobs: list[dict], profile: MatchProfile, store: MatchStore, owner: str):
     results = {}
     for job in jobs:
         job_id = job.get('job_fingerprint')
         if not job_id:
             raise ValueError('Shadow jobs require stable job_fingerprint')
-        evidence = job.get('matching_evidence') or {}
+        evidence = ensure_evidence(job)
         job_fields = {f.name for f in fields(JobEvidence)} - {'title', 'description'}
         kwargs = {k: v for k, v in evidence.items() if k in job_fields}
         if kwargs.get('allowed_work_locations') is not None:

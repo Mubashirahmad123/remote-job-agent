@@ -34,6 +34,7 @@ PIPELINE_LEDGER_DB overrides the location (e2e/CI isolation).
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+import hashlib
 import json
 import sqlite3
 
@@ -74,6 +75,21 @@ def _ledger_fingerprint(job: dict) -> str:
         return ""
 
 
+def _ledger_job_uid(job: dict, fingerprint: str) -> str:
+    """Per-INSTANCE identity for reconciliation.
+
+    The content fingerprint is shared by genuinely different postings (same
+    title/company/description on two boards), so it cannot be the identity
+    key: the 2026-10-31 live run produced 331 raw rows over 315 distinct
+    fingerprints. The instance key adds the URL and source, so every fetched
+    job instance has exactly one terminal row.
+    """
+    url = str(job.get("apply_url") or "").strip()
+    source = str(job.get("source") or "").strip()
+    key = "|".join((fingerprint or "", url, source))
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:32]
+
+
 class PipelineLedger:
     """SQLite seam for the per-job funnel; INSERT-only by construction."""
 
@@ -103,6 +119,17 @@ class PipelineLedger:
                 CREATE INDEX IF NOT EXISTS idx_board_run
                     ON board_runs(run_id);
             ''')
+            # job_uid (2026-10-31): the content fingerprint is NOT unique —
+            # the live run showed 331 raw rows collapsing to 315 distinct
+            # fingerprints (one fingerprint appeared 5 times), because
+            # fingerprint ignores the URL/board. Reconciliation therefore
+            # keys on a per-INSTANCE id (fingerprint + url + source), while
+            # the fingerprint stays a queryable attribute.
+            columns = {row[1] for row in db.execute("PRAGMA table_info(stage_events)")}
+            if "job_uid" not in columns:
+                db.execute("ALTER TABLE stage_events ADD COLUMN job_uid TEXT")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_stage_uid "
+                       "ON stage_events(run_id, job_uid)")
 
     @staticmethod
     def new_run_id() -> str:
@@ -135,9 +162,11 @@ class PipelineLedger:
                 breakdown_json = json.dumps(breakdown, sort_keys=True) if breakdown else None
             except (TypeError, ValueError):
                 breakdown_json = None
+            fingerprint = _ledger_fingerprint(job)
             rows.append((
                 self._run_id(), _utc_now(),
-                _ledger_fingerprint(job),
+                fingerprint,
+                _ledger_job_uid(job, fingerprint),
                 str(job.get("source") or "") or None,
                 str(job.get("job_title") or "") or None,
                 str(job.get("company") or "") or None,
@@ -148,9 +177,9 @@ class PipelineLedger:
         with self._connect() as db:
             db.executemany(
                 '''INSERT INTO stage_events
-                   (run_id, ts, job_fingerprint, source, title, company,
+                   (run_id, ts, job_fingerprint, job_uid, source, title, company,
                     stage, reason_code, score, breakdown)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', rows)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', rows)
         return len(rows)
 
     def record_board(self, board: str, status: str, fetched: int = 0):
@@ -171,36 +200,41 @@ class PipelineLedger:
     def reconcile(self, run_id: str = None) -> dict:
         """Stage counts for one run plus terminal-sum reconciliation.
 
-        A run is complete when exactly one terminal row exists per distinct
-        job fingerprint seen at raw_fetched. Multiple terminal rows for one
-        fingerprint or a terminal-less fingerprint are reported, never
-        hidden.
+        Identity is the per-INSTANCE job_uid (fingerprint alone is not
+        unique across boards). A run is complete when every fetched
+        instance has exactly one terminal row; instances with two terminal
+        rows are reported, never hidden.
         """
         run_id = run_id or self.run_id
         with self._connect() as db:
             stages = dict(db.execute(
                 '''SELECT stage, COUNT(*) FROM stage_events WHERE run_id=?
                    GROUP BY stage''', (run_id,)).fetchall())
-            raw = db.execute(
-                '''SELECT DISTINCT job_fingerprint FROM stage_events
-                   WHERE run_id=? AND stage='raw_fetched' ''',
-                (run_id,)).fetchall()
+            raw_rows, = db.execute(
+                '''SELECT COUNT(*) FROM stage_events
+                   WHERE run_id=? AND stage='raw_fetched' ''', (run_id,)).fetchone()
+            raw_ids = {row[0] for row in db.execute(
+                '''SELECT DISTINCT job_uid FROM stage_events
+                   WHERE run_id=? AND stage='raw_fetched' AND job_uid IS NOT NULL''',
+                (run_id,)).fetchall()}
             terminals = db.execute(
-                '''SELECT job_fingerprint, COUNT(*) c, MIN(stage) s
+                '''SELECT job_uid, COUNT(*) c, MIN(stage) s
                    FROM stage_events WHERE run_id=? AND stage IN
-                   ({marks}) GROUP BY job_fingerprint'''.format(
+                   ({marks}) GROUP BY job_uid'''.format(
                        marks=",".join("?" * len(TERMINAL_STAGES))),
                 (run_id, *TERMINAL_STAGES)).fetchall()
-        raw_ids = {row[0] for row in raw if row[0]}
         terminal_by_id = {row[0]: (row[2], row[1]) for row in terminals if row[0]}
         duplicated = sorted(k for k, v in terminal_by_id.items() if v[1] > 1)
         missing = sorted(raw_ids - set(terminal_by_id))
+        terminal_sum = sum(stages.get(s, 0) for s in TERMINAL_STAGES)
         return {
             "run_id": self.run_id or run_id,
             "stages": stages,
-            "raw_fetched": len(raw_ids),
-            "terminal_sum": sum(stages.get(s, 0) for s in TERMINAL_STAGES),
-            "complete": not missing and not duplicated,
+            "raw_fetched": raw_rows,
+            "raw_instances": len(raw_ids),
+            "terminal_sum": terminal_sum,
+            "complete": (not missing and not duplicated
+                         and raw_rows == terminal_sum),
             "missing_terminal": missing,
             "duplicated_terminal": duplicated,
         }

@@ -329,7 +329,16 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     # funnel reconciles end to end and the 110-style low matches become
     # queryable with their reason.
     from tools.pipeline_ledger import PipelineLedger
-    ledger = PipelineLedger(run_id=getattr(tracker, "run_id", None))
+    # Run id resolution order: shared tracker (same process) -> the id
+    # stamped on the jobs by scrape_all (separate processes, the CLI path)
+    # -> a fresh id (curate called on jobs from somewhere else).
+    _run_id = getattr(tracker, "run_id", None)
+    if not _run_id:
+        for job in raw_jobs:
+            if isinstance(job, dict) and job.get("ledger_run_id"):
+                _run_id = job["ledger_run_id"]
+                break
+    ledger = PipelineLedger(run_id=_run_id)
     print(f"\n{'='*60}")
     print(f"🔍 CURATING {len(raw_jobs)} RAW JOBS")
     print(f"{'='*60}")
