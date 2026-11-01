@@ -532,6 +532,9 @@ SENIORITY_FILTER = re.compile(r"""(?ix)
     \b(
         senior | sr\.? | lead | principal | staff | architect |
         director | manager | vp | head\ of | cto | ceo
+        # German architect / lead equivalents
+        architekt | leiter | gesch\u00e4ftsf\u00fchrer | projektleiter |
+        teamleiter | abteilungsleiter | oberarchitekt | hauptarchitekt
     )\b
 """)
 
@@ -585,9 +588,9 @@ ALLOWED_COUNTRY_TERMS = [
     "australia", "sydney", "melbourne", "brisbane", "perth", "adelaide",
     "new zealand", "nz", "auckland", "wellington", "christchurch",
     "singapore",
-    "usa", "united states", "america", "american",
+    "america", "american",
     "new york", "nyc", "san francisco", "bay area", "silicon valley",
-    "los angeles", "la", "chicago", "seattle", "austin", "boston",
+    "los angeles", "chicago", "seattle", "austin", "boston",
     "denver", "atlanta", "miami", "dallas", "houston", "phoenix",
     "philadelphia", "portland", "san diego", "washington dc",
     "canada", "toronto", "vancouver", "montreal", "ottawa", "calgary",
@@ -778,11 +781,16 @@ def is_allowed_location(job: dict) -> bool:
 
 
 def extract_location_tags(job):
-    """Extract location tags from job text for logging/sorting."""
+    """Extract location tags from job text for logging/sorting.
+
+    Word-boundary matching so short terms (e.g. "la", "uk") do not match
+    inside unrelated words ("lala", "lucky").
+    """
     text = f"{job.get('timezone','')} {job.get('summary','')} {job.get('job_title','')}".lower()
     found = []
     for term in ALLOWED_COUNTRY_TERMS:
-        if term.lower() in text:
+        pattern = r'\b' + re.escape(term.lower()) + r'\b'
+        if re.search(pattern, text):
             found.append(term)
     seen = set()
     unique = []

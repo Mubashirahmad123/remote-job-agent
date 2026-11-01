@@ -38,13 +38,16 @@ class MatchingAdversarialTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_profile(path)
 
-    def test_shadow_location_string_is_rejected(self):
+    def test_shadow_location_string_is_recorded_not_aborted(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = MatchStore(Path(tmp) / 'qa.db')
             job = {'job_fingerprint': 'j1', 'job_title': 'Backend Developer',
                    'matching_evidence': {'allowed_work_locations': 'IN'}}
-            with self.assertRaises(ValueError):
-                shadow_batch([job], self.profile, store, 'qa')
+            # Phase 3 per-job isolation: malformed pre-existing evidence is a
+            # recorded failure, never an abort of the whole batch.
+            results = shadow_batch([job], self.profile, store, 'qa')
+            assert results == {}
+            assert store.decision_count('qa') == 0
 
     def test_missing_description_still_goes_to_review(self):
         requirements = RequirementsEvidence((Requirement(frozenset({'python'}), 'Python required'),), complete=True)

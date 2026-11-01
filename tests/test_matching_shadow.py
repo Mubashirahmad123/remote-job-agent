@@ -101,13 +101,18 @@ class TestShadowConfigStatus:
 
 
 class TestShadowBatchOfflineSmoke:
-    """One bad job must abort (current design); per-job isolation is Phase 3."""
+    """Phase 3: per-job isolation — one bad job is a recorded failure,
+    never an abort of the whole batch."""
 
-    def test_missing_fingerprint_aborts(self, tmp_path):
+    def test_missing_fingerprint_is_recorded_not_aborted(self, tmp_path):
         profile = load_profile(_write_profile(tmp_path))
         store = MatchStore(tmp_path / "shadow.db")
-        with pytest.raises(ValueError):
-            shadow_batch([{"job_title": "Backend Engineer"}], profile, store, "test-owner")
+        # Phase 3 per-job isolation: ValueError is caught inside shadow_batch.
+        results = shadow_batch([{"job_title": "Backend Engineer"}],
+                               profile, store, "test-owner")
+        assert results == {}
+        # No decision recorded (nothing to evaluate), but one failure tracked.
+        assert store.decision_count("test-owner") == 0
 
     def test_decision_row_per_job(self, tmp_path):
         profile = load_profile(_write_profile(tmp_path))

@@ -28,15 +28,25 @@ def normalize_skill(skill: str) -> str:
 
 @dataclass(frozen=True)
 class Requirement:
-    """One requirement; alternatives mean OR, separate requirements mean AND."""
+    """One requirement; alternatives mean OR, separate requirements mean AND.
+
+    Phase 3 adds `type`: only "technology" requirements count towards
+    coverage. Practices ("agile", "scrum") and soft skills are recorded as
+    evidence but never create a coverage gap and never trigger the
+    essential-gap rejection — a missing "git" is not a reason to reject a
+    suitable job.
+    """
     alternatives: frozenset[str]
     evidence: str
     weight: float = 1.0
     essential: bool = False
+    type: Literal["technology", "practice", "soft"] = "technology"
 
     def __post_init__(self):
         if type(self.essential) is not bool:
             raise ValueError("essential must be boolean")
+        if self.type not in {"technology", "practice", "soft"}:
+            raise ValueError("type must be technology, practice or soft")
         normalized = frozenset(normalize_skill(s) for s in self.alternatives)
         if not normalized or "" in normalized or not self.evidence.strip():
             raise ValueError("Requirements need nonempty alternatives and supporting evidence")
@@ -83,13 +93,22 @@ class Coverage:
 
 def requirement_coverage(requirements: tuple[Requirement, ...] | None,
                          skills: frozenset[str]) -> Coverage:
+    """Technology coverage only.
+
+    Practices and soft skills are evidence, not fit: they are excluded from
+    the totals, so they can neither inflate the score nor create a gap that
+    would push a job into review/rejection.
+    """
     normalized_skills = frozenset(normalize_skill(s) for s in skills)
     if not requirements:
+        return Coverage(None, 0, 0, (), ())
+    technology = tuple(r for r in requirements if r.type == "technology")
+    if not technology:
         return Coverage(None, 0, 0, (), ())
     # Duplicate extracted groups cannot inflate coverage; retain the first
     # evidence/weight deterministically. Extractors must resolve disagreements.
     unique = {}
-    for r in requirements:
+    for r in technology:
         previous = unique.get(r.alternatives)
         if previous is None or (r.essential and not previous.essential):
             unique[r.alternatives] = r
