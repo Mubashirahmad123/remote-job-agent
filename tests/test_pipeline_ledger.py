@@ -190,3 +190,88 @@ class TestBoardTaxonomy:
             "FlexJobs": ["timeout", "timeout", "timeout", "timeout", "error"],
         })
         assert "FlexJobs" in flagged
+
+
+class TestLedgerJobTextPersistence:
+    """Job text persistence: every fetched job's raw text is stored with its
+    SHA-256, so a run is re-evaluable offline without re-scraping."""
+    def test_job_text_persisted_for_every_raw_fetched(self, tmp_path):
+        db = tmp_path / "ledger.db"
+        ledger = PipelineLedger(db, run_id="run-text-1")
+        jobs = [
+            {"job_title": "Job A", "company": "Co A", "apply_url": "https://a/1",
+             "source": "Board1", "description": "Full description of job A here"},
+            {"job_title": "Job B", "company": "Co B", "apply_url": "https://b/2",
+             "source": "Board2", "description": "Full description of job B"},
+        ]
+        ledger.record_jobs(jobs, "raw_fetched")
+
+        with sqlite3.connect(db) as conn:
+            count, = conn.execute(
+                "SELECT COUNT(*) FROM job_texts WHERE run_id='run-text-1'").fetchone()
+        assert count == 2
+
+        import hashlib
+        with sqlite3.connect(db) as conn:
+            rows = conn.execute(
+                "SELECT job_uid, description_sha256 FROM job_texts WHERE run_id='run-text-1'"
+            ).fetchall()
+        assert len(rows) == 2
+        for uid, sha in rows:
+            assert len(sha) == 64
+            row = conn.execute(
+                "SELECT description FROM job_texts WHERE job_uid=?", (uid,)).fetchone()
+            expected = hashlib.sha256(row[0].encode("utf-8")).hexdigest()
+            assert sha == expected
+
+    def test_description_capped_at_20000(self, tmp_path):
+        db = tmp_path / "ledger.db"
+        ledger = PipelineLedger(db, run_id="run-text-2")
+        long_desc = "x" * 30000
+        jobs = [{"job_title": "Long Job", "company": "Co", "apply_url": "https://long/1",
+                 "source": "Board", "description": long_desc}]
+        ledger.record_jobs(jobs, "raw_fetched")
+
+        with sqlite3.connect(db) as conn:
+            desc, = conn.execute("SELECT description FROM job_texts").fetchone()
+        assert len(desc) == 20000
+
+    def test_reload_run_jobs_for_reevaluation(self, tmp_path):
+        """Reload run jobs from job_texts and verify they can be re-evaluated."""
+        db = tmp_path / "ledger.db"
+        ledger = PipelineLedger(db, run_id="run-text-3")
+        jobs_in = [
+            {"job_title": "Backend Developer", "company": "Tech Co",
+             "apply_url": "https://example.com/job/1", "source": "TestBoard",
+             "description": "We are hiring a Backend Developer with Python and Django experience."},
+            {"job_title": "Frontend Developer", "company": "Web Co",
+             "apply_url": "https://example.com/job/2", "source": "TestBoard",
+             "description": "Frontend role with React and TypeScript."},
+        ]
+        ledger.record_jobs(jobs_in, "raw_fetched")
+
+        reloaded = ledger.reload_run_jobs("run-text-3")
+        assert len(reloaded) == 2
+
+        by_title = {j["job_title"]: j for j in reloaded}
+        assert "Backend Developer" in by_title
+        assert "Frontend Developer" in by_title
+
+        assert by_title["Backend Developer"]["description"] ==             "We are hiring a Backend Developer with Python and Django experience."
+        assert by_title["Backend Developer"]["source"] == "TestBoard"
+        assert by_title["Backend Developer"]["apply_url"] == "https://example.com/job/1"
+
+        assert by_title["Frontend Developer"]["description"] ==             "Frontend role with React and TypeScript."
+        assert by_title["Frontend Developer"]["job_uid"] is not None
+
+    def test_run_job_text_count(self, tmp_path):
+        db = tmp_path / "ledger.db"
+        ledger = PipelineLedger(db, run_id="run-text-4")
+        jobs = [
+            {"job_title": f"Job {i}", "company": f"Co {i}", "apply_url": f"https://example.com/{i}",
+             "source": "Board", "description": f"Description {i}"}
+            for i in range(5)
+        ]
+        ledger.record_jobs(jobs, "raw_fetched")
+        assert ledger.run_job_text_count("run-text-4") == 5
+

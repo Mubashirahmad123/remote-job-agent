@@ -114,10 +114,25 @@ class PipelineLedger:
                     run_id TEXT NOT NULL, ts TEXT NOT NULL,
                     board TEXT NOT NULL, status TEXT NOT NULL,
                     fetched INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS job_texts (
+                    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    job_uid TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    company TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    description_sha256 TEXT NOT NULL,
+                    fetched_at TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS idx_stage_run
                     ON stage_events(run_id, stage);
                 CREATE INDEX IF NOT EXISTS idx_board_run
                     ON board_runs(run_id);
+                CREATE INDEX IF NOT EXISTS idx_job_texts_run
+                    ON job_texts(run_id);
+                CREATE INDEX IF NOT EXISTS idx_job_texts_uid
+                    ON job_texts(job_uid);
             ''')
             # job_uid (2026-10-31): the content fingerprint is NOT unique —
             # the live run showed 331 raw rows collapsing to 315 distinct
@@ -148,8 +163,12 @@ class PipelineLedger:
         `score_of(job)` -> (score, breakdown_dict | None) for scored stages;
         never a parallel heuristic. Failures are per-job: one bad row does
         not abort its batch (the shadow learned that lesson the hard way).
+
+        Also persists raw job text (title, company, url, source, description)
+        capped at 20000 chars with SHA-256, so a run is re-evaluable offline.
         """
         rows = []
+        text_rows = []
         for job in jobs:
             score = None
             breakdown = None
@@ -163,10 +182,11 @@ class PipelineLedger:
             except (TypeError, ValueError):
                 breakdown_json = None
             fingerprint = _ledger_fingerprint(job)
+            uid = _ledger_job_uid(job, fingerprint)
             rows.append((
                 self._run_id(), _utc_now(),
                 fingerprint,
-                _ledger_job_uid(job, fingerprint),
+                uid,
                 str(job.get("source") or "") or None,
                 str(job.get("job_title") or "") or None,
                 str(job.get("company") or "") or None,
@@ -174,12 +194,31 @@ class PipelineLedger:
                 float(score) if isinstance(score, (int, float)) else None,
                 breakdown_json,
             ))
+            # Persist raw job text for offline re-evaluation
+            description = job.get("description") or job.get("summary") or ""
+            description = description[:20000]
+            desc_sha = hashlib.sha256(description.encode("utf-8")).hexdigest()
+            text_rows.append((
+                self._run_id(), uid,
+                str(job.get("job_title") or "") or "",
+                str(job.get("company") or "") or "",
+                str(job.get("apply_url") or "") or "",
+                str(job.get("source") or "") or "",
+                description,
+                desc_sha,
+                _utc_now(),
+            ))
         with self._connect() as db:
             db.executemany(
                 '''INSERT INTO stage_events
                    (run_id, ts, job_fingerprint, job_uid, source, title, company,
                     stage, reason_code, score, breakdown)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', rows)
+            db.executemany(
+                '''INSERT OR REPLACE INTO job_texts
+                   (run_id, job_uid, title, company, url, source, description,
+                    description_sha256, fetched_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', text_rows)
         return len(rows)
 
     def record_board(self, board: str, status: str, fetched: int = 0):
@@ -256,6 +295,39 @@ class PipelineLedger:
         for board, status in rows:
             history.setdefault(board, []).append(status)
         return history
+
+
+    def reload_run_jobs(self, run_id: str) -> list[dict]:
+        """Reload all jobs for a run from job_texts, for offline re-evaluation.
+
+        Returns a list of job dicts with title, company, url, source,
+        description, and job_uid. Suitable for re-running the matching
+        engine without re-scraping.
+        """
+        with self._connect() as db:
+            rows = db.execute(
+                '''SELECT job_uid, title, company, url, source, description
+                   FROM job_texts WHERE run_id=? ORDER BY seq''', (run_id,)).fetchall()
+        jobs = []
+        for row in rows:
+            jobs.append({
+                "job_uid": row[0],
+                "job_title": row[1],
+                "company": row[2],
+                "apply_url": row[3],
+                "source": row[4],
+                "description": row[5] or "",
+                "job_fingerprint": "",  # not stored; recompute if needed
+            })
+        return jobs
+
+    def run_job_text_count(self, run_id: str) -> int:
+        """Count of job_text rows for a run."""
+        with self._connect() as db:
+            row = db.execute(
+                'SELECT COUNT(*) FROM job_texts WHERE run_id=?', (run_id,)
+            ).fetchone()
+        return row[0] if row else 0
 
 
 def consecutive_bad_boards(board_rows: dict, min_streak: int = 3):
