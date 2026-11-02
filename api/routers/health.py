@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from api import cache, safety
 from api.deps import require_token
 from api.schemas import HealthOut
+from tools.matching_shadow import shadow_config_status
 
 router = APIRouter(tags=["health"])
 
@@ -17,4 +18,5 @@ def health(_: None = Depends(require_token)) -> HealthOut:
         curated_jobs_loaded=cache.curated_count(),
         data_source=cache.data_source(),
         submit_mode=safety.submit_mode(),
+        shadow=shadow_config_status(),
     )

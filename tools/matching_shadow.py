@@ -62,6 +62,9 @@ def load_profile(path: Path) -> MatchProfile:
                                           'remote_work_locations'),
         work_cities=_string_set(policy.get('work_cities', []), 'work_cities'),
         years_experience=_optional_number(policy.get('years_experience'), 'years_experience'),
+        seniority_gap_threshold=_optional_number(policy.get('seniority_gap_threshold'),
+                                                 'seniority_gap_threshold')
+        if policy.get('seniority_gap_threshold') is not None else 2,
         accept_unrestricted_remote=_optional_bool(policy.get('accept_unrestricted_remote'),
                                                   'accept_unrestricted_remote')),
         _string_set(data['skills'], 'skills'), data['version'],
@@ -71,22 +74,15 @@ def load_profile(path: Path) -> MatchProfile:
 def ensure_evidence(job: dict) -> dict:
     """Attach deterministic, quote-verified evidence to a job.
 
-    Phase 2: nothing populated job["matching_evidence"], so every job
-    became REVIEW (gates unknown) and the shortlist stayed empty. The
-    extractor is deterministic and local — no network, no LLM — and job
-    text is treated as untrusted DATA: it is pattern-matched, never
-    obeyed. Pre-existing evidence (e.g. hand-extracted) is respected.
+    Errors are NOT swallowed — they propagate to shadow_batch which records
+    them in run_status. Pre-existing evidence (e.g. hand-extracted) is
+    respected.
     """
     existing = job.get('matching_evidence')
     if isinstance(existing, dict) and existing:
         return existing
-    try:
-        from tools.matching_extract import extract_matching_evidence
-        evidence = extract_matching_evidence(job)
-    except Exception:
-        # A malformed job must not abort the batch (Phase 3 rule); it
-        # simply carries no evidence, so its gates stay UNKNOWN.
-        evidence = {}
+    from tools.matching_extract import extract_matching_evidence
+    evidence = extract_matching_evidence(job)
     job['matching_evidence'] = evidence
     return evidence
 
@@ -143,7 +139,8 @@ def shadow_batch(jobs: list[dict], profile: MatchProfile, store: MatchStore, own
     Per-job isolation (Phase 3): one malformed job must not abort the batch.
     Failed jobs are counted and listed in the run-status record
     (processed/failed/reasons) instead of silently disappearing, and no
-    decision is invented for them.
+    decision is invented for them. Extractor errors are recorded as
+    extractor_error and the job is marked failed-extraction.
     """
     run_id = run_id or uuid4().hex[:12]
     store.start_run(owner, run_id, profile.version)
@@ -157,8 +154,9 @@ def shadow_batch(jobs: list[dict], profile: MatchProfile, store: MatchStore, own
         try:
             result = _evaluate_job(job, profile, store, owner)
         except Exception as exc:
+            error_type = "extractor_error" if "extract" in type(exc).__name__.lower() else "evaluation_error"
             failures.append({"job_id": job_id,
-                             "error": f"{type(exc).__name__}: {exc}"[:300]})
+                             "error": f"{error_type}: {type(exc).__name__}: {exc}"[:300]})
             continue
         results[job_id] = result
     store.finish_run(owner, run_id, profile.version, len(results), len(failures), failures)
@@ -177,17 +175,30 @@ def shadow_config_status() -> dict:
     path = os.getenv('MATCHING_SHADOW_PROFILE', '').strip()
     if not path:
         return {"configured": False, "reason": "MATCHING_SHADOW_PROFILE unset"}
-    status = {"configured": True, "path": path, "exists": Path(path).is_file(), "version": None}
+    status = {"configured": True, "path": path, "exists": Path(path).is_file(), "version": None,
+              "unconfirmed": []}
     if status["exists"]:
         try:
-            status["version"] = load_profile(Path(path)).version
+            prof = load_profile(Path(path))
+            status["version"] = prof.version
+            # Collect unconfirmed preferences from _meta
+            try:
+                raw = json.loads(Path(path).read_text(encoding='utf-8'))
+                meta = raw.get('_meta', {})
+                status["unconfirmed"] = meta.get('unconfirmed_fields', [])
+            except Exception:
+                pass
         except Exception as exc:
             status["error"] = type(exc).__name__
     return status
 
 
 def log_shadow_config() -> str:
-    """One health line naming profile path and version when enabled."""
+    """One health line naming profile path and version when enabled.
+
+    Includes unconfirmed fields so operators see which preferences are
+    not personally confirmed.
+    """
     status = shadow_config_status()
     if not status["configured"]:
         line = "Matching shadow: DISABLED (MATCHING_SHADOW_PROFILE unset)"
@@ -196,7 +207,9 @@ def log_shadow_config() -> str:
     elif status.get("error"):
         line = f"Matching shadow: BROKEN (profile invalid: {status['error']})"
     else:
-        line = f"Matching shadow: ENABLED profile={status['path']} version={status['version']}"
+        unconfirmed = status.get("unconfirmed", [])
+        uc = f" unconfirmed={unconfirmed}" if unconfirmed else ""
+        line = f"Matching shadow: ENABLED profile={status['path']} version={status['version']}{uc}"
     print(line)
     return line
 

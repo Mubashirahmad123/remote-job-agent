@@ -265,6 +265,7 @@ class HealthOut(BaseModel):
     curated_jobs_loaded: int = 0
     data_source: str = "empty"  # sheets|snapshot|empty (see api.cache.data_source)
     submit_mode: str = "disarmed"  # disarmed|dry_run|armed; presence-only safety state
+    shadow: dict = {}  # matching shadow configuration (enabled/disabled, version, unconfirmed)
 
 
 _CV_TEXT_FIELDS = (
