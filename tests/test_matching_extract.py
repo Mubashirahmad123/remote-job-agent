@@ -410,3 +410,20 @@ class TestExtractorContract:
         # Quote must re-find in the combined source text
         combined = "Backend Developer\nBangalore\nWe are hiring in Bangalore, India."
         assert verify(jc_fact, combined)
+
+    def test_jobicy_jobgeo_structured_worker_permission(self):
+        """Jobicy jobGeo is a structured worker-permission fact with source=jobicy_geo."""
+        e = extract_matching_evidence({
+            "job_title": "Developer",
+            "timezone": "LATAM,  Canada,  USA",
+            "summary": "About the company.",
+            "jobGeo": "LATAM,  Canada,  USA",
+        })
+        assert e.get("allowed_work_locations") == ["canada", "latam", "us"]
+        wp = e["facts"]["worker_permission"]
+        assert "canada" in wp
+        assert "latam" in wp
+        assert "us" in wp
+        for canonical, fact in wp.items():
+            assert fact["quote"] == "LATAM,  Canada,  USA"
+            assert fact["field"] == "jobicy_geo"

@@ -23,6 +23,7 @@ import re
 
 from tools.matching_locations import (
     CANONICAL_COUNTRIES,
+    _normalize_region,
     drop_unverified,
     eligibility_phrases,
     fact,
@@ -431,6 +432,47 @@ def extract_matching_evidence(job: dict) -> dict:
         else:
             evidence["worldwide"] = False
             evidence["allowed_work_locations"] = sorted(verified_perms)
+
+    # ── Jobicy jobGeo: structured worker-permission fact ─────────────
+    # Jobicy API returns jobGeo as comma-separated region names (e.g. "Canada, USA",
+    # "USA", "France, Netherlands, Spain"). This is a structured worker-permission
+    # field from the board's own docs, not a bare country mention.
+    jobgeo_raw = str(job.get("jobGeo") or "").strip()
+    if jobgeo_raw:
+        jobgeo_regions = {}
+        for part in jobgeo_raw.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            canonicals = _normalize_region(part)
+            if canonicals:
+                for canonical in canonicals:
+                    if canonical not in jobgeo_regions:
+                        jobgeo_regions[canonical] = {
+                            "value": canonical,
+                            "quote": jobgeo_raw,
+                            "span": None,
+                            "field": "jobicy_geo",
+                        }
+        # Verify quotes: span covers the raw value within the combined text
+        for canonical, one_fact in jobgeo_regions.items():
+            m = re.search(re.escape(jobgeo_raw), combined, re.I)
+            if m:
+                one_fact["span"] = [m.start(), m.end()]
+            if _verify(one_fact, combined):
+                if canonical not in verified_perms:
+                    verified_perms[canonical] = one_fact
+
+        # Update evidence with merged permissions
+        if jobgeo_regions:
+            facts["worker_permission"] = verified_perms
+            non_worldwide = {k for k in verified_perms if k != "worldwide"}
+            if "worldwide" in verified_perms and not non_worldwide:
+                evidence["worldwide"] = True
+                evidence["allowed_work_locations"] = []
+            else:
+                evidence["worldwide"] = False
+                evidence["allowed_work_locations"] = sorted(verified_perms)
 
     # ── job country from gazetteer (never from worker-permission list) ─
     location_tags_text = " ".join(job.get("location_tags") or [])
