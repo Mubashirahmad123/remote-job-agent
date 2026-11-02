@@ -228,13 +228,13 @@ def _location_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
 
     0. Unconfigured profile (empty remote_bases) -> REVIEW.
     1. Conflict: worldwide AND explicit permission list -> REVIEW.
-    2. Explicit worker-permission list present, not worldwide, no overlap
-       with candidate's remote bases -> FAIL (regardless of work_mode).
+    2. For NON-flexible modes: explicit worker-permission list present,
+       not worldwide, no overlap with remote bases -> FAIL.
     3. Verified worldwide -> PASS for remote/flexible.
     4. Work-mode logic:
        - onsite/hybrid abroad -> FAIL; in India -> PASS.
-       - "flexible" (Remote or Hybrid): remote part by (2)/(3), hybrid part
-         by location.
+       - "flexible": remote part by (2)/(3), hybrid part by location.
+         PASS if EITHER option works.
     5. Bare "Remote" with no permission wording -> REVIEW.
     """
     # 0. Unconfigured profile never grants permission.
@@ -244,19 +244,6 @@ def _location_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
     # 1. Conflict: worldwide AND explicit permission list -> REVIEW
     if job.worldwide and job.allowed_work_locations:
         return GateResult("location", "unknown", "location_evidence_conflict")
-
-    # 2. Explicit worker-permission list present (not worldwide)
-    if job.allowed_work_locations and not job.worldwide:
-        permitted = bool(policy.remote_bases & job.allowed_work_locations)
-        if not permitted:
-            return GateResult(
-                "location", "fail", "work_location_not_allowed",
-                ", ".join(sorted(job.allowed_work_locations)))
-        # Overlap exists — remote location is allowed.
-        if job.work_mode == "remote":
-            return GateResult("location", "pass", "work_location_allowed",
-                              ", ".join(sorted(job.allowed_work_locations)))
-        # For onsite/hybrid/flexible, fall through to work-mode logic below.
 
     # 3. Verified worldwide -> PASS for remote/flexible
     if job.worldwide and job.work_mode in {"remote", "flexible"}:
@@ -295,22 +282,66 @@ def _location_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
                           job.job_country)
 
     if job.work_mode == "flexible":
-        # Flexible: remote part checked in steps 2/3 above. Hybrid part:
-        # in India -> PASS, abroad -> FAIL.
+        # Flexible: try remote part first, then hybrid part. PASS if either works.
+        remote_ok = False
+        hybrid_ok = False
+
+        # Remote part: check worker-permission list
+        if job.allowed_work_locations and not job.worldwide:
+            if bool(policy.remote_bases & job.allowed_work_locations):
+                remote_ok = True
+        # If no explicit permission list and worldwide is False, remote part fails
+        # (no permission to work remotely from candidate's bases)
+
+        # Hybrid part: check physical location
         if job.job_country:
             if job.job_country in policy.work_locations:
+                hybrid_ok = True
+            elif job.job_country in policy.relocation_destinations:
+                # Relocation allowed (sponsorship checked below)
+                if not policy.sponsorship_required or job.visa_sponsorship:
+                    hybrid_ok = True
+                elif job.visa_sponsorship is None:
+                    # Sponsorship unknown -> hybrid part is UNKNOWN, not FAIL
+                    pass
+                else:
+                    # Sponsorship explicitly unavailable
+                    pass
+
+        if remote_ok or hybrid_ok:
+            if remote_ok and hybrid_ok:
+                return GateResult("location", "pass", "work_location_allowed",
+                                  ", ".join(sorted(job.allowed_work_locations or set())))
+            if remote_ok:
+                return GateResult("location", "pass", "work_location_allowed",
+                                  ", ".join(sorted(job.allowed_work_locations or set())))
+            if hybrid_ok:
+                if job.job_city and job.job_city in policy.work_cities:
+                    return GateResult("location", "pass", "existing_work_rights",
+                                      job.job_country)
                 return GateResult("location", "pass", "existing_work_rights",
                                   job.job_country)
-            elif job.job_country not in policy.relocation_destinations:
-                return GateResult("location", "fail",
-                                  "relocation_destination_not_allowed",
-                                  job.job_country)
+
+        # Both remote and hybrid failed
+        if job.job_country and job.job_country not in policy.relocation_destinations:
+            return GateResult("location", "fail",
+                              "relocation_destination_not_allowed",
+                              job.job_country)
+        if job.allowed_work_locations and not job.worldwide:
+            return GateResult(
+                "location", "fail", "work_location_not_allowed",
+                ", ".join(sorted(job.allowed_work_locations)))
         return GateResult("location", "unknown",
                           "flexible_location_undetermined")
 
     # work_mode == "remote" at this point
-    # Already handled allowed_work_locations overlap in step 2.
-    if job.allowed_work_locations:
+    # Explicit worker-permission list present (not worldwide)
+    if job.allowed_work_locations and not job.worldwide:
+        permitted = bool(policy.remote_bases & job.allowed_work_locations)
+        if not permitted:
+            return GateResult(
+                "location", "fail", "work_location_not_allowed",
+                ", ".join(sorted(job.allowed_work_locations)))
         return GateResult("location", "pass", "work_location_allowed",
                           ", ".join(sorted(job.allowed_work_locations)))
 

@@ -432,6 +432,56 @@ class Phase3RoleHintTests(unittest.TestCase):
             self.assertIn("role_hint_requires_review",
                           [g.reason for g in result.gates])
 
+    def test_flexible_worldwide_or_hybrid_berlin_passes(self):
+        """'Remote (worldwide) or hybrid in Berlin' -> location PASS."""
+        policy = CandidatePolicy(frozenset({"backend"}), frozenset({"india"}),
+                                 frozenset({"junior", "mid"}),
+                                 remote_work_locations=frozenset({"india"}),
+                                 years_experience=3, seniority_gap_threshold=2)
+        job = JobEvidence("Backend Developer", "Remote (worldwide) or hybrid in Berlin.",
+                          role_family="backend", work_mode="flexible",
+                          worldwide=True, allowed_work_locations=None,
+                          job_country="germany", job_city="berlin",
+                          seniority="mid")
+        result = evaluate_eligibility(job, policy)
+        location_gate = [g for g in result.gates if g.name == "location"][0]
+        self.assertEqual(location_gate.outcome, "pass")
+        self.assertEqual(location_gate.reason, "verified_worldwide")
+
+    def test_flexible_eea_only_or_hybrid_bangalore_passes(self):
+        """'Remote (EEA only) or hybrid in Bangalore' -> PASS via hybrid (India)."""
+        policy = CandidatePolicy(frozenset({"backend"}), frozenset({"india"}),
+                                 frozenset({"junior", "mid"}),
+                                 remote_work_locations=frozenset({"india"}),
+                                 relocation_destinations=frozenset({"india"}),
+                                 years_experience=3, seniority_gap_threshold=2)
+        job = JobEvidence("Backend Developer", "Remote (EEA only) or hybrid in Bangalore.",
+                          role_family="backend", work_mode="flexible",
+                          allowed_work_locations=frozenset({"eea"}),
+                          job_country="india", job_city="bangalore",
+                          seniority="mid")
+        result = evaluate_eligibility(job, policy)
+        location_gate = [g for g in result.gates if g.name == "location"][0]
+        self.assertEqual(location_gate.outcome, "pass")
+        self.assertEqual(location_gate.reason, "existing_work_rights")
+
+    def test_flexible_eea_only_or_hybrid_london_fails(self):
+        """'Remote (EEA only) or hybrid in London' -> FAIL (hybrid abroad)."""
+        policy = CandidatePolicy(frozenset({"backend"}), frozenset({"india"}),
+                                 frozenset({"junior", "mid"}),
+                                 remote_work_locations=frozenset({"india"}),
+                                 relocation_destinations=frozenset({"india"}),
+                                 years_experience=3, seniority_gap_threshold=2)
+        job = JobEvidence("Backend Developer", "Remote (EEA only) or hybrid in London.",
+                          role_family="backend", work_mode="flexible",
+                          allowed_work_locations=frozenset({"eea"}),
+                          job_country="united_kingdom", job_city="london",
+                          seniority="mid")
+        result = evaluate_eligibility(job, policy)
+        location_gate = [g for g in result.gates if g.name == "location"][0]
+        self.assertEqual(location_gate.outcome, "fail")
+        self.assertEqual(location_gate.reason, "relocation_destination_not_allowed")
+
 
 if __name__ == "__main__":
     unittest.main()
