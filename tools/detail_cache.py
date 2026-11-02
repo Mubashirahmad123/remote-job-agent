@@ -25,7 +25,7 @@ from urllib.parse import urlparse
 import requests
 
 DEFAULT_MAX_BYTES = 50_000
-DEFAULT_RATE_LIMIT = 2.0  # seconds between requests to same domain
+DEFAULT_RATE_LIMIT = 2.0  # seconds between requests to the same domain
 DEFAULT_DB_PATH = Path('data/detail_cache.db')
 
 
@@ -39,15 +39,25 @@ def _domain(url: str) -> str:
     return urlparse(url).netloc.lower()
 
 
+def _default_fetch(url: str) -> tuple[int, str, dict]:
+    """Default fetch function using requests.get."""
+    resp = requests.get(url, timeout=15, headers={
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) remote-job-agent/1.0'
+    })
+    return resp.status_code, resp.text, dict(resp.headers)
+
+
 class DetailCache:
     """Hash-keyed, rate-limited, size-capped detail page cache."""
 
     def __init__(self, db_path: Path = DEFAULT_DB_PATH, max_bytes: int = DEFAULT_MAX_BYTES,
-                 rate_limit: float = DEFAULT_RATE_LIMIT):
+                 rate_limit: float = DEFAULT_RATE_LIMIT,
+                 fetch_func=None):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.max_bytes = max_bytes
         self.rate_limit = rate_limit
+        self.fetch_func = fetch_func or _default_fetch
         self._last_fetch: dict[str, float] = {}  # domain -> last fetch time
         self._init_db()
 
@@ -77,11 +87,9 @@ class DetailCache:
         if elapsed < self.rate_limit:
             time.sleep(self.rate_limit - elapsed)
         try:
-            resp = requests.get(url, timeout=15, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) remote-job-agent/1.0'
-            })
+            status, content, headers = self.fetch_func(url)
             self._last_fetch[domain] = time.time()
-            return resp.status_code, resp.text, dict(resp.headers)
+            return status, content, headers
         except Exception as exc:
             self._last_fetch[domain] = time.time()
             return 0, '', {'error': str(exc)}

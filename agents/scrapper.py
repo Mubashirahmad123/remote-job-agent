@@ -24,6 +24,36 @@ try:
 except ImportError:
     feedparser = None
 
+# ---- Detail page cache for truncated summaries ----
+try:
+    from tools.detail_cache import DetailCache
+    _detail_cache = DetailCache()
+    print("detail cache is available")
+except ImportError:
+    _detail_cache = None
+
+
+def _enrich_with_detail_cache(jobs, board_name):
+    """For jobs with a short summary (< 300 chars), fetch the detail page
+    through the cache and set job['description'] to the full text."""
+    if _detail_cache is None:
+        return jobs
+    enriched = 0
+    for job in jobs:
+        summary = job.get("summary") or ""
+        apply_url = job.get("apply_url") or ""
+        if not summary or len(summary) >= 300:
+            continue
+        if not apply_url:
+            continue
+        result = _detail_cache.get(apply_url)
+        if result and result.get("status") == 200 and result.get("content"):
+            job["description"] = result["content"][:20000]
+            enriched += 1
+    if enriched:
+        print(f"  {board_name}: enriched {enriched} jobs with detail cache")
+    return jobs
+
 
 # =============================================================================
 # RSS PARSER
@@ -2404,7 +2434,9 @@ def fetch_jobs_from_board(name, info, debug=False, status_out=None):
             elif name == "YCombinator":
                 return _finish(parse_html_ycombinator(html, base_url, name))
             else:
-                return _finish(parse_html_generic(html, name, base_url))
+                jobs = parse_html_generic(html, name, base_url)
+                jobs = _enrich_with_detail_cache(jobs, name)
+                return _finish(jobs)
         else:
             print(f"  Unknown type for {name}")
             _status("skipped_disabled")
