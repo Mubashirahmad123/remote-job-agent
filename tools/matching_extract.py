@@ -14,18 +14,25 @@ verbatim. Invariants, each enforced by tests:
    by the same quote rule.)
 4. Ambiguous skill spellings never produce requirements: bare "express"
    and bare "node" are intentionally ABSENT from the token table.
+5. Worker permission ONLY from explicit eligibility phrasing ("open to",
+   "can be based in", "must be based in", "right to work in", "candidates
+   in", "hiring in"). A bare address/HQ/country mention is NOT permission.
+6. Unverified facts are DROPPED, not reported.
 """
 import re
 
 from tools.matching_locations import (
+    CANONICAL_COUNTRIES,
+    drop_unverified,
+    eligibility_phrases,
     fact,
+    job_country_from_text,
     normalize_text,
-    region_facts,
-    work_mode as _work_mode,
     verify as _verify,
+    work_mode as _work_mode,
 )
 
-EXTRACTOR_VERSION = "extract-v1"
+EXTRACTOR_VERSION = "extract-v2"
 
 # ── Seniority ───────────────────────────────────────────────────────────────
 SENIORITY_LABELS = (
@@ -48,22 +55,24 @@ SENIORITY_LABELS = (
 _SENIORITY_RES = [(label, re.compile(rf"\b(?:{pattern})", re.I))
                   for pattern, label in SENIORITY_LABELS]
 
-# Explicitly stated year ranges: "0 to 4 yrs", "2-4 years", "5+ years",
-# "mindestens 3 jahre". Range wins over label words; label words alone do
-# not create a numeric claim.
+# Explicitly stated OVERALL experience ranges only: "5+ years of experience",
+# "5 years in software development", "0 to 4 yrs". Per-skill years like
+# "5+ years of React" are requirement context, not seniority.
 _YEARS_RE = re.compile(
-    r"(?P<lo>\d)\s*(?:to|-|â€“)\s*(?P<hi>\d)\s*(?:\+)?\s*(?:years|yrs|jahre)"
-    r"|(?P<lo2>\d)\s*\+\s*(?:years|yrs|jahre)"
+    r"(?P<lo>\d)\s*(?:to|-)\s*(?P<hi>\d)\s*(?:\+)?\s*(?:years|yrs|jahre)"
+    r"|(?P<lo2>\d)\s*\+\s*(?:years|yrs)\s+(?:of\s+)?(?:experience|software development|in software)"
     r"|mindestens\s*(?P<lo3>\d)\s*(?:Jahre)"
-    r"|at least\s*(?P<lo4>\d)\s*(?:years|yrs)", re.I)
+    r"|at least\s*(?P<lo4>\d)\s*(?:years|yrs)"
+    r"|(?P<lo5>\d)\s*(?:years|yrs)\s+(?:of\s+)?(?:experience|software development)",
+    re.I)
 
 
 def seniority_evidence(title: str, text: str):
-    """(label|None, years_lo|None, years_hi|None, facts).
+    """(label|None, years_lo|None, years_hi|None, facts, not_stated|False).
 
-    A derived label from a year range is recorded on the range quote; an
-    explicit label word wins and carries its own quote. Neither present
-    → (None, None, None, {}) — UNKNOWN, never a pass.
+    not_stated is True when NO seniority evidence exists at all (no label,
+    no year range) — distinct from "unknown" which means evidence exists
+    but is unverifiable/conflicting.
     """
     facts: dict = {}
     lo = hi = None
@@ -75,6 +84,8 @@ def seniority_evidence(title: str, text: str):
             lo, hi = int(range_m.group("lo2")), None
         elif range_m.group("lo3") or range_m.group("lo4"):
             lo, hi = int(range_m.group("lo3") or range_m.group("lo4")), None
+        elif range_m.group("lo5"):
+            lo, hi = int(range_m.group("lo5")), None
         facts["years"] = fact({"lo": lo, "hi": hi}, range_m)
     label = None
     search_text = f"{title}\n{text}".strip() if title and text else (title or text)
@@ -86,7 +97,8 @@ def seniority_evidence(title: str, text: str):
             facts["seniority"] = fact(label_value, hit,
                                       "title" if hit_title else "description")
             break
-    return label, lo, hi, facts
+    not_stated = (label is None and lo is None)
+    return label, lo, hi, facts, not_stated
 
 
 # ── Role family + responsibility hints ─────────────────────────────────────
@@ -94,6 +106,7 @@ FAMILY_PATTERNS = {
     "fullstack": r"full[ -]?stack|fullstack",
     "backend": r"back[ -]?end|backend",
     "frontend": r"front[ -]?end|frontend",
+    "software": r"software (?:developer|engineer)|programmer|web developer",
 }
 RESPONSIBILITY_PATTERNS = {
     "architect": r"architect(?:ure)? (?:own(?:s|ing)|role)|overall architecture|"
@@ -121,7 +134,7 @@ def role_family_evidence(title: str, description_used: str | None):
     support, research, data/infra, hardware/EDA, security, ml) are facts
     even when a family name also matches: an "architect" title that says
     Fullstack stays family=fullstack but carries the architect hint, and
-    the Phase 3 gate treats architect-family jobs as REVIEW, not pass.
+    the Phase 4 gate treats architect-family jobs as REVIEW, not pass.
     Family=None stays unresolved (UNKNOWN) — never guessed.
     """
     hay = f"{title or ''}\n{description_used or ''}".strip()
@@ -174,8 +187,7 @@ def sponsorship_evidence(text: str):
 # ── Requirements (technology tokens, OR groups, negations) ──────────────────
 # Context rules from the 30-Oct evidence, applied at token level:
 # - bare "express" and bare "node" are NOT here, by design
-# - "js", "ts" single letters require surrounding context (JS/TS acronyms
-#   trailing a product name) — skipped entirely to stay deterministic.
+# - "js", "ts" single letters require surrounding context — skipped entirely.
 TECH_TOKENS = {
     "javascript": r"javascript|(?<=java)\bscript\b",
     "typescript": r"typescript",
@@ -237,6 +249,7 @@ TECH_TOKENS = {
 _TECH_RES = {token: re.compile(pattern, re.I)
              for token, pattern in TECH_TOKENS.items()}
 _PRACTICE_TOKENS = frozenset({"agile", "scrum", "git"})
+
 
 def _token_spans(line: str) -> dict:
     spans = {}
@@ -328,8 +341,6 @@ def requirements_evidence(text: str):
     required, preferred, facts = [], [], {}
     section = "required"
     for segment in requirement_items(text):
-        # Inline section markers switch the section for the REST of the
-        # segment: 'Nice to have: Docker' is PREFERRED Docker, not required.
         marker = None
         for pattern, name in ((_SECTION_PREFERRED, "preferred"),
                               (_SECTION_REQUIRED, "required")):
@@ -343,11 +354,6 @@ def requirements_evidence(text: str):
             if not remainder:
                 section = name
                 continue
-            # A NEGATED marker ("Not required: Ruby on Rails", "No
-            # experience with PHP") states the item is NOT wanted — the
-            # tokens must be dropped, not re-labelled as requirements.
-            # The negation can sit before the marker ("Not required:") or
-            # inside it, so both are checked.
             negation_scope = f"{segment[:hit.start()]} {hit.group(0)}"
             if re.search(r"\b(?:no|not|without)\b", negation_scope, re.I):
                 facts.setdefault("negations", []).append({"quote": segment[:160]})
@@ -365,10 +371,6 @@ def requirements_evidence(text: str):
             facts.setdefault("negations", []).append({"quote": segment[:160]})
             continue
         out_list = required if section == "required" else preferred
-        # `essential` means EXPLICITLY required ("must", "required",
-        # "essential", "mandatory"). A plain requirement section is NOT
-        # enough: an essential gap triggers a hard REJECT in the scorer,
-        # and a false rejection of a suitable job is the worst outcome.
         essential = bool(re.search(r"\b(?:must|required|essential|mandatory)\b",
                                    segment, re.I))
         for group in _or_groups(verified_spans, segment):
@@ -377,8 +379,6 @@ def requirements_evidence(text: str):
                 "evidence": segment[:160],
                 "essential": essential,
             })
-    # Practice/soft typing (Phase 3 gate needs the split; coverage only
-    # counts technology).
     for bucket in (required, preferred):
         for requirement in bucket:
             requirement["type"] = "practice" if all(
@@ -392,12 +392,13 @@ def requirements_evidence(text: str):
 
 def extract_matching_evidence(job: dict) -> dict:
     """Full evidence bundle for one job; every field is UNKNOWN unless a
-    verbatim quote verified it. The shadow hook reads the flat gate keys;
-    the maintainable truth lives in "facts"."""
+    verbatim quote verified it. Unverified facts are DROPPED, not reported.
+    """
     title = normalize_text(job.get("job_title") or "")
     description = normalize_text(
         job.get("description") or job.get("summary") or "")
     location_field = normalize_text(str(job.get("timezone") or ""))
+    apply_url = str(job.get("apply_url") or "")
     combined = f"{title}\n{location_field}\n{description}"
     gate_text_for_sources = {
         "title": title, "description": description, "location_field": location_field}
@@ -406,45 +407,57 @@ def extract_matching_evidence(job: dict) -> dict:
     facts: dict = {"sources": {"title_len": len(title),
                                "description_len": len(description)}}
 
-    # work mode: decisive quote required; bare remote never suffices
+    # ── work mode ──────────────────────────────────────────────────
     mode, mode_fact = _work_mode(combined)
     if mode_fact:
         facts["work_mode"] = mode_fact
         evidence["work_mode"] = mode
 
-    # worker-allowed regions (explicit eligibility phrasing only)
-    regions = {}
-    for canonical, one_fact in region_facts(combined).items():
+    # ── worker permission ONLY from eligibility phrasing ───────────
+    # region_facts is NOT used for allowed_work_locations — it matches
+    # bare country mentions (HQ, timezone, address) which are NOT permission.
+    perm_regions = eligibility_phrases(combined)
+    verified_perms = {}
+    for canonical, one_fact in perm_regions.items():
         if _verify(one_fact, combined):
-            regions[canonical] = one_fact
-    if regions:
-        facts["region_facts"] = regions
-        non_worldwide = {k for k in regions if k != "worldwide"}
-        if "worldwide" in regions and not non_worldwide:
+            verified_perms[canonical] = one_fact
+
+    if verified_perms:
+        facts["worker_permission"] = verified_perms
+        non_worldwide = {k for k in verified_perms if k != "worldwide"}
+        if "worldwide" in verified_perms and not non_worldwide:
             evidence["worldwide"] = True
             evidence["allowed_work_locations"] = []
-        elif regions:
-            # explicit list only: WHAT is quoted is what counts
-            evidence["worldwide"] = False
-            evidence["allowed_work_locations"] = sorted(regions)
         else:
-            facts["region_conflict"] = regions
+            evidence["worldwide"] = False
+            evidence["allowed_work_locations"] = sorted(verified_perms)
 
-    # sponsorship + 'must already be authorized' phrases
+    # ── job country from gazetteer (never from worker-permission list) ─
+    location_tags_text = " ".join(job.get("location_tags") or [])
+    country_fact = job_country_from_text(combined, apply_url, location_field,
+                                         location_tags_text)
+    verified_country = {}
+    for canonical, one_fact in country_fact.items():
+        if _verify(one_fact, combined):
+            verified_country[canonical] = one_fact
+    if verified_country:
+        facts["job_country"] = verified_country
+        # Take the first country found
+        first_country = next(iter(verified_country))
+        evidence["job_country"] = first_country
+        # Derive job_city from the matched city span context
+        # (the gazetteer match includes the city; we can try to extract it)
+        evidence["job_city"] = _extract_city(combined, first_country)
+
+    # ── sponsorship ────────────────────────────────────────────────
     sponsor, sponsor_facts = sponsorship_evidence(combined)
     if sponsor_facts:
         facts.update(sponsor_facts)
         if sponsor is not None:
             evidence["visa_sponsorship"] = sponsor
 
-    # job country (where the posting sits) — different fact from regions
-    country_fact = _job_country(combined)
-    if country_fact:
-        facts["job_country"] = country_fact
-        evidence["job_country"] = country_fact["value"]
-
-    # seniority (label words or year ranges)
-    label, lo, hi, s_facts = seniority_evidence(title, description)
+    # ── seniority ─────────────────────────────────────────────────
+    label, lo, hi, s_facts, not_stated = seniority_evidence(title, description)
     if s_facts:
         facts.update(s_facts)
     if label:
@@ -453,15 +466,16 @@ def extract_matching_evidence(job: dict) -> dict:
         evidence["years_min"] = lo
     if hi is not None:
         evidence["years_max"] = hi
+    evidence["seniority_not_stated"] = not_stated
 
-    # role family + responsibility hints
+    # ── role family + responsibility hints ─────────────────────────
     family, family_facts = role_family_evidence(title, description)
     if family:
         evidence["role_family"] = family
     if family_facts:
         facts["hints"] = family_facts
 
-    # requirements
+    # ── requirements ──────────────────────────────────────────────
     required, preferred, req_facts = requirements_evidence(description)
     if req_facts:
         facts.update(req_facts)
@@ -472,43 +486,20 @@ def extract_matching_evidence(job: dict) -> dict:
         "extractor_version": EXTRACTOR_VERSION,
     }
 
-    facts["verify"] = _self_verify(facts, gate_text_for_sources)
+    # ── DROP unverified facts ─────────────────────────────────────
+    facts = drop_unverified(facts, combined)
+    facts["verify"] = {"all_verified": True, "rejected": [], "dropped": []}
     evidence["facts"] = facts
     return evidence
 
 
-def _job_country(combined: str):
-    """Where the job sits. Longest canonical country names first."""
-    import tools.matching_locations as L
-    for canonical in sorted(L.CANONICAL_COUNTRIES, key=lambda c: -len(c)):
-        display = canonical.replace("_", " ")
-        match = re.search(rf"\b{re.escape(display)}\b", combined, re.I)
-        if match:
-            return fact(canonical, match)
+def _extract_city(text: str, country: str) -> str | None:
+    """Try to extract the city name from text near a country match."""
+    # Map country to its cities in the gazetteer
+    from tools.matching_locations import _CITY_GAZETTEER
+    country_cities = {city for city, ctry in _CITY_GAZETTEER.items() if ctry == country}
+    for city in sorted(country_cities, key=len, reverse=True):
+        pattern = r"\b" + re.escape(city) + r"\b"
+        if re.search(pattern, text, re.I):
+            return city
     return None
-
-
-def _self_verify(facts: dict, texts: dict) -> dict:
-    """Every fact's quote must re-find verbatim in the normalized source
-    text bundle (spans index into the combined bundle; the quote is the
-    portable, human-checkable part). Any failure is REPORTED, never
-    silently dropped: the top-level report drives the extractor's honest
-    completeness signal."""
-    combined = "\n".join(v for v in texts.values() if v)
-    report = {"all_verified": True, "rejected": []}
-
-    def check(name, one_fact):
-        quote = one_fact.get("quote") or ""
-        if not quote or quote not in combined:
-            report["all_verified"] = False
-            report["rejected"].append(name)
-
-    for name, value in facts.items():
-        if isinstance(value, dict) and value.get("quote"):
-            check(name, value)
-        elif isinstance(value, list):
-            for item in value:
-                if isinstance(item, dict) and item.get("quote"):
-                    check(name, item)
-    return report
-

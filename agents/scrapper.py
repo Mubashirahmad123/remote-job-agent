@@ -246,11 +246,15 @@ def top_techs(text, limit=5):
 
 
 def clean_text(element):
-    """Clean text from HTML element or string"""
+    """Clean text from HTML element or string.
+
+    Uses a space separator so adjacent HTML elements don't concatenate
+    (e.g. "DisclosedBangaloreRequired" -> "Disclosed Bangalore Required").
+    """
     if element is None:
         return ""
     if hasattr(element, "get_text"):
-        return element.get_text(strip=True)
+        return element.get_text(" ", strip=True)
     return str(element).strip()
 
 
