@@ -19,13 +19,13 @@ from dataclasses import dataclass
 import re
 from typing import Literal
 
-Outcome = Literal["pass", "fail", "unknown"]
-POLICY_VERSION = "eligibility-v3"
+Outcome = Literal["pass", "fail", "unknown", "not_stated"]
+Decision = Literal["eligible", "likely_fit", "review", "rejected"]
+POLICY_VERSION = "eligibility-v4"
 
 # Labels that are structurally out of reach for a junior/mid profile.
 # "senior" is deliberately NOT here: a senior posting without a stated
-# year range is a REVIEW, not a rejection (the candidate may still be
-# considered; a wrong rejection is the worst outcome).
+# year range is a REVIEW, not a rejection.
 HARD_SENIORITY_MISMATCH = frozenset({
     "intern", "principal", "staff", "lead", "director", "executive",
 })
@@ -34,7 +34,14 @@ HARD_SENIORITY_MISMATCH = frozenset({
 # matches the policy: the actual job may not be the one the family implies.
 ROLE_REVIEW_HINTS = frozenset({
     "architect", "forward_deployed", "devrel", "support", "research",
-    "hardware_eda", "consultant",
+    "data_infra", "hardware_eda", "consultant",
+})
+
+# Generic software titles that map to the "software" family (defaults to
+# backend-compatible). These pass the role gate unless a review hint exists.
+GENERIC_SOFTWARE_TITLES = frozenset({
+    "software developer", "software engineer", "programmer",
+    "web developer", "software developer engineer",
 })
 
 
@@ -45,7 +52,7 @@ class CandidatePolicy:
     Empty policy fields deliberately leave the corresponding gate unknown.
     Locations and seniority must use the same canonical identifiers as evidence.
 
-    Phase 3 separates the candidate's own facts:
+    Phase 4 separates the candidate's own facts:
     - work_locations: where the candidate may work onsite/hybrid today
       (a confirmed work right, e.g. the country they live in).
     - remote_work_locations: where the candidate accepts to sit while a
@@ -55,10 +62,11 @@ class CandidatePolicy:
     - relocation_destinations: where the candidate would relocate to.
     - years_experience: the candidate's years of experience, compared with
       year ranges stated in postings ("0 to 4 yrs", "5+ years").
+    - seniority_gap_threshold: years gap between candidate and requirement
+      that still yields REVIEW (<= threshold) vs FAIL (> threshold).
     - accept_unrestricted_remote: operator-approved handling of a remote
-      posting that names NO worker restriction (verified remote wording,
-      complete text, no region token). Off by default: an absent fact is
-      normally UNKNOWN, never a pass.
+      posting that names NO worker restriction. Off by default: an absent
+      fact is UNKNOWN, never a pass.
     """
 
     role_families: frozenset[str] = frozenset()
@@ -69,6 +77,7 @@ class CandidatePolicy:
     remote_work_locations: frozenset[str] = frozenset()
     work_cities: frozenset[str] = frozenset()
     years_experience: float | None = None
+    seniority_gap_threshold: int = 2
     accept_unrestricted_remote: bool = False
 
     def __post_init__(self):
@@ -76,6 +85,8 @@ class CandidatePolicy:
             raise ValueError("sponsorship_required must be boolean")
         if type(self.accept_unrestricted_remote) is not bool:
             raise ValueError("accept_unrestricted_remote must be boolean")
+        if type(self.seniority_gap_threshold) is not int or self.seniority_gap_threshold < 0:
+            raise ValueError("seniority_gap_threshold must be a nonnegative int")
         for name in ("role_families", "work_locations", "seniority_levels",
                      "relocation_destinations", "remote_work_locations",
                      "work_cities"):
@@ -106,11 +117,11 @@ class JobEvidence:
     allowed_work_locations: frozenset[str] | None = None
     worldwide: bool = False
     seniority: str | None = None
-    work_mode: Literal["remote", "onsite", "hybrid", "unknown"] = "remote"
+    work_mode: Literal["remote", "onsite", "hybrid", "flexible", "unknown"] = "remote"
     job_country: str | None = None
-    visa_sponsorship: bool | None = None
-    # Phase 3 additions — optional, evidence-backed when set.
     job_city: str | None = None
+    visa_sponsorship: bool | None = None
+    # Phase 3/4 additions — optional, evidence-backed when set.
     years_min: int | None = None
     years_max: int | None = None
     responsibilities: frozenset[str] = frozenset()
@@ -119,9 +130,12 @@ class JobEvidence:
     # True when the searched text was complete, so "no worker restriction
     # was mentioned" is a fact about the posting rather than a truncation.
     location_text_complete: bool = False
+    # True when no seniority evidence exists at all (distinct from unknown
+    # which means evidence exists but is unverifiable/conflicting).
+    seniority_not_stated: bool = False
 
     def __post_init__(self):
-        if self.work_mode not in {"remote", "onsite", "hybrid", "unknown"}:
+        if self.work_mode not in {"remote", "onsite", "hybrid", "flexible", "unknown"}:
             raise ValueError("Invalid work mode")
         if type(self.worldwide) is not bool or (self.visa_sponsorship is not None and type(self.visa_sponsorship) is not bool):
             raise ValueError("Location permissions must be boolean or unknown")
@@ -141,6 +155,8 @@ class JobEvidence:
             raise ValueError("years_min must not exceed years_max")
         if type(self.location_text_complete) is not bool:
             raise ValueError("location_text_complete must be boolean")
+        if type(self.seniority_not_stated) is not bool:
+            raise ValueError("seniority_not_stated must be boolean")
 
 
 @dataclass(frozen=True)
@@ -153,7 +169,7 @@ class GateResult:
 
 @dataclass(frozen=True)
 class EligibilityResult:
-    decision: Literal["eligible", "review", "rejected"]
+    decision: Decision
     gates: tuple[GateResult, ...]
     needs_description: bool
     policy_version: str = POLICY_VERSION
@@ -164,7 +180,12 @@ def _contains(text: str, pattern: str) -> bool:
 
 
 def infer_title_family(title: str) -> str | None:
-    """Conservative title hints; generic engineering titles remain unresolved."""
+    """Conservative title hints; generic engineering titles remain unresolved.
+
+    Generic software titles (software developer/engineer, programmer,
+    web developer) map to the "software" family which passes the role gate
+    unless a review hint exists.
+    """
     if _contains(title, r"hardware|robotics|embedded|sales engineer|solutions engineer|support engineer"):
         return "non_target"
     if _contains(title, r"full[ -]?stack"):
@@ -173,6 +194,9 @@ def infer_title_family(title: str) -> str | None:
         return "backend"
     if _contains(title, r"front[ -]?end|react(?:\.js|js)?|next(?:\.js|js)"):
         return "frontend"
+    # Generic software titles (software developer/engineer, programmer,
+    # web developer) remain unresolved (None) — they wait for evidence
+    # rather than being mapped to a specific family.
     return None
 
 
@@ -183,6 +207,7 @@ def _role_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
     A title that matches a wanted family but carries a conflicting
     responsibility hint (architect, devrel, forward-deployed, ...) is
     REVIEW, not a silent pass: the family alone does not prove the job.
+    Generic software titles pass unless a review hint exists.
     """
     family = job.role_family or infer_title_family(job.title)
     if not policy.role_families or family is None:
@@ -199,8 +224,45 @@ def _role_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
 
 
 def _location_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
-    """Location gate: country, city, worker permission and work mode are
-    four separate facts and are checked separately."""
+    """Location gate with Phase 4 ordering:
+
+    0. Unconfigured profile (empty remote_bases) -> REVIEW.
+    1. Conflict: worldwide AND explicit permission list -> REVIEW.
+    2. Explicit worker-permission list present, not worldwide, no overlap
+       with candidate's remote bases -> FAIL (regardless of work_mode).
+    3. Verified worldwide -> PASS for remote/flexible.
+    4. Work-mode logic:
+       - onsite/hybrid abroad -> FAIL; in India -> PASS.
+       - "flexible" (Remote or Hybrid): remote part by (2)/(3), hybrid part
+         by location.
+    5. Bare "Remote" with no permission wording -> REVIEW.
+    """
+    # 0. Unconfigured profile never grants permission.
+    if not policy.remote_bases:
+        return GateResult("location", "unknown", "candidate_work_locations_missing")
+
+    # 1. Conflict: worldwide AND explicit permission list -> REVIEW
+    if job.worldwide and job.allowed_work_locations:
+        return GateResult("location", "unknown", "location_evidence_conflict")
+
+    # 2. Explicit worker-permission list present (not worldwide)
+    if job.allowed_work_locations and not job.worldwide:
+        permitted = bool(policy.remote_bases & job.allowed_work_locations)
+        if not permitted:
+            return GateResult(
+                "location", "fail", "work_location_not_allowed",
+                ", ".join(sorted(job.allowed_work_locations)))
+        # Overlap exists — remote location is allowed.
+        if job.work_mode == "remote":
+            return GateResult("location", "pass", "work_location_allowed",
+                              ", ".join(sorted(job.allowed_work_locations)))
+        # For onsite/hybrid/flexible, fall through to work-mode logic below.
+
+    # 3. Verified worldwide -> PASS for remote/flexible
+    if job.worldwide and job.work_mode in {"remote", "flexible"}:
+        return GateResult("location", "pass", "verified_worldwide")
+
+    # 4. Work-mode logic
     if job.work_mode == "unknown":
         return GateResult("location", "unknown", "work_mode_unverified")
 
@@ -208,21 +270,21 @@ def _location_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
         if not job.job_country:
             return GateResult("location", "unknown", "job_country_missing")
         known_here = job.job_country in policy.work_locations
-        if known_here and policy.work_cities and job.job_city:
-            # Same country, different city: that is a relocation, not an
-            # existing work right.
-            if job.job_city in policy.work_cities:
-                return GateResult("location", "pass", "existing_work_rights",
-                                  job.job_country)
-            if job.job_country not in policy.relocation_destinations:
-                return GateResult("location", "fail",
-                                  "relocation_destination_not_allowed", job.job_country)
-        elif known_here:
+        if known_here:
+            if policy.work_cities and job.job_city:
+                if job.job_city in policy.work_cities:
+                    return GateResult("location", "pass", "existing_work_rights",
+                                      job.job_country)
+                if job.job_country not in policy.relocation_destinations:
+                    return GateResult("location", "fail",
+                                      "relocation_destination_not_allowed",
+                                      job.job_country)
             return GateResult("location", "pass", "existing_work_rights",
                               job.job_country)
         elif job.job_country not in policy.relocation_destinations:
             return GateResult("location", "fail",
-                              "relocation_destination_not_allowed", job.job_country)
+                              "relocation_destination_not_allowed",
+                              job.job_country)
         if policy.sponsorship_required and job.visa_sponsorship is None:
             return GateResult("location", "unknown", "sponsorship_unverified",
                               job.job_country)
@@ -232,56 +294,82 @@ def _location_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
         return GateResult("location", "pass", "relocation_conditions_met",
                           job.job_country)
 
-    # Remote work: the employer's worker-permission list is the only
-    # deciding fact. Company HQ and the job's own city are irrelevant here.
-    if not policy.remote_bases:
-        # An unconfigured profile never grants permission (it is not an
-        # implicit "yes").
-        return GateResult("location", "unknown", "candidate_work_locations_missing")
-    if job.worldwide and job.allowed_work_locations:
-        return GateResult("location", "unknown", "location_evidence_conflict")
-    if job.worldwide:
-        return GateResult("location", "pass", "verified_worldwide")
+    if job.work_mode == "flexible":
+        # Flexible: remote part checked in steps 2/3 above. Hybrid part:
+        # in India -> PASS, abroad -> FAIL.
+        if job.job_country:
+            if job.job_country in policy.work_locations:
+                return GateResult("location", "pass", "existing_work_rights",
+                                  job.job_country)
+            elif job.job_country not in policy.relocation_destinations:
+                return GateResult("location", "fail",
+                                  "relocation_destination_not_allowed",
+                                  job.job_country)
+        return GateResult("location", "unknown",
+                          "flexible_location_undetermined")
+
+    # work_mode == "remote" at this point
+    # Already handled allowed_work_locations overlap in step 2.
     if job.allowed_work_locations:
-        permitted = bool(policy.remote_bases & job.allowed_work_locations)
-        return GateResult(
-            "location", "pass" if permitted else "fail",
-            "work_location_allowed" if permitted else "work_location_not_allowed",
-            ", ".join(sorted(job.allowed_work_locations)))
+        return GateResult("location", "pass", "work_location_allowed",
+                          ", ".join(sorted(job.allowed_work_locations)))
+
+    # 5. Bare "Remote" with no permission wording -> REVIEW
     if (policy.accept_unrestricted_remote and job.location_text_complete
             and job.description and job.description.strip()):
-        # Operator-approved: a complete remote posting that names no
-        # worker restriction is treated as hiring from anywhere.
         return GateResult("location", "pass", "verified_unrestricted_remote")
     return GateResult("location", "unknown", "worker_location_restriction_unverified")
 
 
+
+
+
 def _seniority_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
-    """Seniority gate, years-aware.
+    """Seniority gate, years-aware with configurable gap threshold.
 
     An explicit year range is compared with the candidate's years first:
-    too few years FAILs, too many years is REVIEW (over-qualified is not a
-    rejection). A label is used only when no year range is stated.
+    gap <= threshold -> REVIEW, gap > threshold -> FAIL.
+    A label is used only when no year range is stated.
+    No seniority evidence at all -> "not_stated" (distinct from "unknown").
     """
     if not policy.seniority_levels:
         return GateResult("seniority", "unknown", "seniority_policy_or_evidence_missing")
+
+    # Explicit year range comparison
     if job.years_min is not None and policy.years_experience is not None:
-        if policy.years_experience < job.years_min:
-            return GateResult("seniority", "fail", "candidate_experience_below_requirement",
-                              f"requires {job.years_min}+ years")
+        gap = policy.years_experience - job.years_min
+        if gap < 0:
+            # Candidate has fewer years than minimum
+            abs_gap = abs(gap)
+            if abs_gap <= policy.seniority_gap_threshold:
+                return GateResult("seniority", "unknown",
+                                  "candidate_experience_below_range",
+                                  f"requires {job.years_min}+ years, gap {abs_gap}")
+            return GateResult("seniority", "fail",
+                              "candidate_experience_below_requirement",
+                              f"requires {job.years_min}+ years, gap {abs_gap}")
         if job.years_max is not None and policy.years_experience > job.years_max:
-            return GateResult("seniority", "unknown", "candidate_experience_above_range",
+            return GateResult("seniority", "unknown",
+                              "candidate_experience_above_range",
                               f"up to {job.years_max} years")
         return GateResult("seniority", "pass", "years_experience_within_range",
                           f"{job.years_min}-{job.years_max if job.years_max is not None else '+'} years")
-    if not job.seniority:
-        return GateResult("seniority", "unknown", "seniority_policy_or_evidence_missing")
-    if job.seniority in policy.seniority_levels:
-        return GateResult("seniority", "pass", "seniority_allowed", job.seniority)
-    if job.seniority in HARD_SENIORITY_MISMATCH:
-        return GateResult("seniority", "fail", "seniority_not_allowed", job.seniority)
-    return GateResult("seniority", "unknown", "seniority_label_requires_review",
-                      job.seniority)
+
+    # No year range — check for explicit label
+    if job.seniority:
+        if job.seniority in policy.seniority_levels:
+            return GateResult("seniority", "pass", "seniority_allowed", job.seniority)
+        if job.seniority in HARD_SENIORITY_MISMATCH:
+            return GateResult("seniority", "fail", "seniority_not_allowed", job.seniority)
+        return GateResult("seniority", "unknown", "seniority_label_requires_review",
+                          job.seniority)
+
+    # No seniority evidence at all -> not_stated (not unknown)
+    if job.seniority_not_stated:
+        return GateResult("seniority", "not_stated",
+                          "seniority_not_stated")
+
+    return GateResult("seniority", "unknown", "seniority_policy_or_evidence_missing")
 
 
 def evaluate_eligibility(job: JobEvidence, policy: CandidatePolicy) -> EligibilityResult:
@@ -297,6 +385,20 @@ def evaluate_eligibility(job: JobEvidence, policy: CandidatePolicy) -> Eligibili
     missing = not (job.description and job.description.strip())
     gates.append(GateResult("description", "unknown" if missing else "pass",
                             "description_missing" if missing else "description_present"))
+
     outcomes = {gate.outcome for gate in gates}
-    decision = "rejected" if "fail" in outcomes else "review" if "unknown" in outcomes else "eligible"
-    return EligibilityResult(decision, tuple(gates), missing and decision != "rejected")
+
+    # LIKELY_FIT: location, role, description all PASS, seniority is not_stated.
+    # Never eligible (auto-eligible), never TOP MATCHES.
+    if ("pass" in outcomes and "fail" not in outcomes
+            and "not_stated" in outcomes
+            and "unknown" not in outcomes):
+        return EligibilityResult("likely_fit", tuple(gates),
+                                 missing and False,  # needs_description=False since description passed
+                                 POLICY_VERSION)
+
+    decision: Decision = ("rejected" if "fail" in outcomes
+                          else "review" if "unknown" in outcomes
+                          else "eligible")
+    return EligibilityResult(decision, tuple(gates), missing and decision != "rejected",
+                             POLICY_VERSION)

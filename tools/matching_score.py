@@ -9,9 +9,10 @@ import math
 import re
 from typing import Literal
 
-from tools.matching_policy import CandidatePolicy, JobEvidence, EligibilityResult, evaluate_eligibility
+from tools.matching_policy import (CandidatePolicy, Decision, EligibilityResult,
+                                   JobEvidence, evaluate_eligibility)
 
-SCORER_VERSION = "requirements-v2"
+SCORER_VERSION = "requirements-v3"
 ALIASES = {
     "nodejs": "node", "node.js": "node", "reactjs": "react", "react.js": "react",
     "nextjs": "next", "next.js": "next", "postgres": "postgresql",
@@ -122,7 +123,7 @@ def requirement_coverage(requirements: tuple[Requirement, ...] | None,
 
 @dataclass(frozen=True)
 class MatchResult:
-    decision: Literal["eligible", "review", "rejected"]
+    decision: Decision
     eligibility: EligibilityResult
     required: Coverage
     preferred: Coverage
@@ -154,7 +155,21 @@ def score_match(job: JobEvidence, profile: MatchProfile,
         reasons.append("essential_skill_mismatch" if requirements.complete else "essential_requirements_unverified")
     if not rejected and required.score == 0:
         reasons.append("no_required_skill_overlap")
-    decision = "rejected" if rejected else "review" if reasons else "eligible"
+
+    # LIKELY_FIT: eligibility says likely_fit AND requirements pass
+    # (all essential met, coverage > 0). Never eligible/auto-eligible.
+    if eligibility.decision == "likely_fit":
+        reqs_pass = (requirements.required is not None
+                     and required.score is not None
+                     and required.score > 0
+                     and not essential_gaps)
+        if reqs_pass:
+            decision: Decision = "likely_fit"
+        else:
+            decision = "review"
+    else:
+        decision = ("rejected" if rejected else "review" if reasons else "eligible")
+
     return MatchResult(decision, eligibility, required, preferred, completeness,
                        profile.version, requirements.extractor_version,
                        review_reasons=tuple(reasons))
