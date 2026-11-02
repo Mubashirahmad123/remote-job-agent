@@ -235,15 +235,15 @@ class Phase3SeniorityTests(unittest.TestCase):
                           years_min=0, years_max=2, seniority="mid")
         self.assertEqual(evaluate_eligibility(job, self.policy).decision, "review")
 
-    def test_explicit_senior_label_requires_review_not_fail(self):
+    def test_explicit_senior_label_requires_fail_not_review(self):
         job = JobEvidence("Senior Backend Developer", "Lead the team.",
                           role_family="backend", work_mode="remote",
                           allowed_work_locations=frozenset({"india"}),
                           seniority="senior")
-        self.assertEqual(evaluate_eligibility(job, self.policy).decision, "review")
+        self.assertEqual(evaluate_eligibility(job, self.policy).decision, "rejected")
 
     def test_hard_mismatch_labels_fail(self):
-        for label in ("intern", "principal", "staff", "lead"):
+        for label in ("principal", "staff", "lead", "director", "executive"):
             job = JobEvidence(f"{label.title()} Engineer", "x", role_family="backend",
                               work_mode="remote",
                               allowed_work_locations=frozenset({"india"}),

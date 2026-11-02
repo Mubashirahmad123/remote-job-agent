@@ -504,6 +504,11 @@ def extract_matching_evidence(job: dict) -> dict:
         facts.update(s_facts)
     if label:
         evidence["seniority"] = label
+        # Carry the quote and span at the top level so they flow into JobEvidence
+        s_fact = s_facts.get("seniority")
+        if s_fact:
+            evidence["seniority_quote"] = s_fact.get("quote", "")
+            evidence["seniority_span"] = s_fact.get("span", [])
     if lo is not None:
         evidence["years_min"] = lo
     if hi is not None:

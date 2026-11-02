@@ -27,7 +27,13 @@ POLICY_VERSION = "eligibility-v4"
 # "senior" is deliberately NOT here: a senior posting without a stated
 # year range is a REVIEW, not a rejection.
 HARD_SENIORITY_MISMATCH = frozenset({
-    "intern", "principal", "staff", "lead", "director", "executive",
+    "senior", "principal", "staff", "lead", "director", "executive",
+})
+
+# Labels that are NOT seniority levels and should never cause a seniority
+# fail — they stay UNKNOWN/review.
+SENIORITY_NOT_A_LEVEL = frozenset({
+    "intern", "assistant", "coordinator", "founding",
 })
 
 # Responsibility hints that make a role REVIEW even when the title family
@@ -133,6 +139,9 @@ class JobEvidence:
     # True when no seniority evidence exists at all (distinct from unknown
     # which means evidence exists but is unverifiable/conflicting).
     seniority_not_stated: bool = False
+    # Quote and span for seniority evidence, used for fail messages.
+    seniority_quote: str = ""
+    seniority_span: tuple[int, int] | None = None
 
     def __post_init__(self):
         if self.work_mode not in {"remote", "onsite", "hybrid", "flexible", "unknown"}:
@@ -157,6 +166,10 @@ class JobEvidence:
             raise ValueError("location_text_complete must be boolean")
         if type(self.seniority_not_stated) is not bool:
             raise ValueError("seniority_not_stated must be boolean")
+        if self.seniority_quote is not None and not isinstance(self.seniority_quote, str):
+            raise ValueError("seniority_quote must be a string or None")
+        if self.seniority_span is not None and not isinstance(self.seniority_span, (tuple, list)):
+            raise ValueError("seniority_span must be a tuple/list or None")
 
 
 @dataclass(frozen=True)
@@ -180,23 +193,33 @@ def _contains(text: str, pattern: str) -> bool:
 
 
 def infer_title_family(title: str) -> str | None:
-    """Conservative title hints; generic engineering titles remain unresolved.
+    """Conservative title hints.
 
     Generic software titles (software developer/engineer, programmer,
-    web developer) map to the "software" family which passes the role gate
-    unless a review hint exists.
+    full stack, backend, frontend, software, web, Golang/Python/Node/
+    React/DevOps etc.) map to the "software" family which passes the role
+    gate unless a review hint exists.
+
+    Explicit non-target titles (assistant, coordinator, account executive,
+    sales, marketing, recruiter, customer success, office, operations
+    specialist) map to "non_target" which fails the role gate.
     """
-    if _contains(title, r"hardware|robotics|embedded|sales engineer|solutions engineer|support engineer"):
-        return "non_target"
+    # Generic software titles → "software" family (passes role gate unless hint)
     if _contains(title, r"full[ -]?stack"):
         return "fullstack"
+    if _contains(title, r"software developer|programmer|web developer"):
+        return "software"
     if _contains(title, r"back[ -]?end|node(?:\.js|js)?|python"):
         return "backend"
     if _contains(title, r"front[ -]?end|react(?:\.js|js)?|next(?:\.js|js)"):
         return "frontend"
-    # Generic software titles (software developer/engineer, programmer,
-    # web developer) remain unresolved (None) — they wait for evidence
-    # rather than being mapped to a specific family.
+    if _contains(title, r"golang|\bgo (?:developer|lang)|python|node\.?js|react(?:\.js)?|devops?|devops engineer"):
+        return "software"
+    # Explicit non-target titles
+    if _contains(title, r"assistant|coordinator|account executive|sales|marketing|recruiter|customer success|office|operations specialist"):
+        return "non_target"
+    if _contains(title, r"hardware|robotics|embedded|sales engineer|solutions engineer|support engineer"):
+        return "non_target"
     return None
 
 
@@ -388,12 +411,20 @@ def _seniority_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
 
     # No year range — check for explicit label
     if job.seniority:
-        if job.seniority in policy.seniority_levels:
-            return GateResult("seniority", "pass", "seniority_allowed", job.seniority)
+        # Labels that are NOT seniority levels — stay unknown, not fail
+        if job.seniority in SENIORITY_NOT_A_LEVEL:
+            return GateResult("seniority", "unknown",
+                              "seniority_not_a_level", job.seniority_quote)
+        # Explicit seniority labels that are structurally out of reach
         if job.seniority in HARD_SENIORITY_MISMATCH:
-            return GateResult("seniority", "fail", "seniority_not_allowed", job.seniority)
-        return GateResult("seniority", "unknown", "seniority_label_requires_review",
-                          job.seniority)
+            return GateResult("seniority", "fail", "seniority_not_allowed",
+                              job.seniority_quote)
+        if job.seniority in policy.seniority_levels:
+            return GateResult("seniority", "pass", "seniority_allowed",
+                              job.seniority_quote)
+        return GateResult("seniority", "unknown",
+                          "seniority_label_requires_review",
+                          job.seniority_quote)
 
     # No seniority evidence at all -> not_stated (not unknown)
     if job.seniority_not_stated:

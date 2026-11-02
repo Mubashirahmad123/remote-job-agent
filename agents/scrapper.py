@@ -1393,7 +1393,11 @@ def parse_json_workingnomads(board, data, debug=False):
         return results
 
     for j in data:
-        title = j.get("position", "") or ""
+        # WorkingNomads API may return title in different fields depending on
+        # the API version. Try multiple field names to avoid empty titles.
+        title = (j.get("position") or j.get("job_title") or j.get("title") or
+                 j.get("position_title") or j.get("name") or j.get("role") or
+                 j.get("jobTitle") or j.get("jobTitleRaw") or j.get("headline") or "")
         description = j.get("description", "") or ""
         tags = j.get("tags") or []
         if isinstance(tags, str):

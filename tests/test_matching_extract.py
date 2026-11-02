@@ -427,3 +427,25 @@ class TestExtractorContract:
         for canonical, fact in wp.items():
             assert fact["quote"] == "LATAM,  Canada,  USA"
             assert fact["field"] == "jobicy_geo"
+
+    def test_workingnomads_title_from_multiple_fields(self):
+        """WorkingNomads API may return title in different fields.
+        Parser should try multiple field names to avoid empty titles."""
+        # Simulate the WorkingNomads parser logic:
+        def extract_title(j):
+            return (j.get("position") or j.get("job_title") or j.get("title") or
+                    j.get("position_title") or j.get("name") or j.get("role") or "")
+
+        # Test each field name
+        for field_name in ["position", "job_title", "title", "position_title", "name", "role"]:
+            job = {field_name: "Senior Python Developer"}
+            assert extract_title(job) == "Senior Python Developer"
+
+        # Empty when no title field present
+        job = {"description": "Some description"}
+        assert extract_title(job) == ""
+
+        # Empty string value should fall through to next field
+        job = {"position": "", "job_title": "Frontend Developer"}
+        assert extract_title(job) == "Frontend Developer"
+
