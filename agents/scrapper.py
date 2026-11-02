@@ -2940,7 +2940,7 @@ def scrape_all(debug=False, tracker=None):
             print(f"  {status}: {len(_by_status[status])} ({names})")
         flagged = consecutive_bad_boards(ledger.board_history())
         if flagged:
-            print("  ⚠️ HEALTH: zero-or-failure on >=3 consecutive runs — "
+            print("  WARNING: zero-or-failure on >=3 consecutive runs - "
                   + ", ".join(f"{b} (x{s})" for b, s in sorted(flagged.items())))
 
     if own_tracker:
