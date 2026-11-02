@@ -181,7 +181,7 @@ class TestFixtureInvariants:
         evidence = _evidence(title, tz, body)
         if evidence.get("worldwide"):
             # worldwide requires an explicit phrase, never the word alone
-            regions = evidence.get("facts", {}).get("region_facts", {})
+            regions = evidence.get("facts", {}).get("worker_permission", {})
             assert "worldwide" in regions
             assert regions["worldwide"]["quote"].lower() != "remote"
 
@@ -239,30 +239,35 @@ class TestLocationRules:
 
 class TestSeniority:
     def test_explicit_years_range(self):
-        label, lo, hi, facts = seniority_evidence(
+        label, lo, hi, facts, not_stated = seniority_evidence(
             "Senior Backend Engineer", "0 to 4 yrs of experience.")
         assert lo == 0 and hi == 4
         assert "years" in facts
+        assert not not_stated
 
     def test_five_plus_years(self):
-        label, lo, hi, facts = seniority_evidence(
+        label, lo, hi, facts, not_stated = seniority_evidence(
             "Backend Engineer", "5+ years experience")
         assert lo == 5 and hi is None
+        assert not not_stated
 
     def test_senior_label_from_title(self):
-        label, lo, hi, facts = seniority_evidence(
+        label, lo, hi, facts, not_stated = seniority_evidence(
             "Senior Backend Engineer", "You will lead a small team.")
         assert label == "senior"
+        assert not not_stated
 
     def test_german_architekt_title(self):
-        label, lo, hi, facts = seniority_evidence(
+        label, lo, hi, facts, not_stated = seniority_evidence(
             "Softwarearchitekt (m/w/d)", "Anforderungen: Java.")
         assert label == "senior"
+        assert not not_stated
 
-    def test_no_seniority_signal_stays_unknown(self):
-        label, lo, hi, facts = seniority_evidence(
+    def test_no_seniority_signal_stays_not_stated(self):
+        label, lo, hi, facts, not_stated = seniority_evidence(
             "Backend Engineer", "Build great software.")
         assert label is None and lo is None and hi is None
+        assert not_stated is True
 
 
 class TestRoleFamilyAndHints:
@@ -375,3 +380,33 @@ class TestExtractorContract:
                       "This is a fully remote position.")
         assert e["work_mode"] == "remote"
         assert e["facts"]["work_mode"]["quote"]
+
+    def test_work_from_anywhere_sets_remote_mode(self):
+        e = _evidence("Backend Engineer", "Remote",
+                      "You may work from anywhere in the world.")
+        assert e["work_mode"] == "remote"
+        assert e["work_mode"] == "remote"
+        assert e.get("worldwide") is True
+
+    def test_remote_or_hybrid_sets_flexible_mode(self):
+        e = _evidence("Backend Engineer", "Remote",
+                      "Remote or Hybrid position.")
+        assert e["work_mode"] == "flexible"
+
+    def test_five_plus_years_of_react_no_seniority_effect(self):
+        e = _evidence("Backend Developer", "Remote",
+                      "Requires 5+ years of React. Requirements: Python.")
+        # Per-skill years should NOT set seniority years_min
+        assert e.get("years_min") is None
+        assert e.get("seniority_not_stated") is True
+
+    def test_bangalore_job_country_is_india_with_quote(self):
+        e = _evidence("Backend Developer", "Bangalore",
+                      "We are hiring in Bangalore, India.")
+        assert e.get("job_country") == "india"
+        # job_country must carry a verbatim quote
+        jc_fact = e["facts"]["job_country"]["india"]
+        assert jc_fact["quote"] == "Bangalore"
+        # Quote must re-find in the combined source text
+        combined = "Backend Developer\nBangalore\nWe are hiring in Bangalore, India."
+        assert verify(jc_fact, combined)

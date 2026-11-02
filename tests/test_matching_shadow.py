@@ -131,3 +131,26 @@ class TestShadowBatchOfflineSmoke:
         assert {r[0] for r in rows} == {"fp-1", "fp-2"}
         # No evidence: gates unknown -> review, never eligible.
         assert all(r[1] == "review" for r in rows)
+
+    def test_extractor_error_recorded_in_run_status(self, tmp_path, monkeypatch):
+        """Extractor errors are recorded in run_status, not silently swallowed."""
+        from tools.matching_shadow import ensure_evidence
+
+        def boom(job):
+            raise RuntimeError("extractor crashed")
+
+        monkeypatch.setattr("tools.matching_shadow.ensure_evidence", boom)
+
+        profile = load_profile(_write_profile(tmp_path))
+        store = MatchStore(tmp_path / "shadow.db")
+        run_id = "test-run-001"
+        jobs = [{"job_fingerprint": "fp-bad", "job_title": "Backend Engineer",
+                 "summary": "Build APIs"}]
+        results = shadow_batch(jobs, profile, store, "test-owner", run_id=run_id)
+        assert results == {}
+        # Run status should record the failure
+        status = store.run_status("test-owner", run_id)
+        assert status is not None
+        assert status["failed"] == 1
+        assert status["processed"] == 0
+        assert any("extractor crashed" in str(f["error"]) for f in status["reasons"])

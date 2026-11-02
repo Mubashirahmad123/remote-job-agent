@@ -225,7 +225,8 @@ class Phase3SeniorityTests(unittest.TestCase):
                           role_family="backend", work_mode="remote",
                           allowed_work_locations=frozenset({"india"}),
                           years_min=5, years_max=None, seniority="mid")
-        self.assertEqual(evaluate_eligibility(job, self.policy).decision, "rejected")
+        # Gap = 2, threshold = 2 -> REVIEW (not FAIL per gap<=threshold rule)
+        self.assertEqual(evaluate_eligibility(job, self.policy).decision, "review")
 
     def test_candidate_above_max_years_is_review_not_reject(self):
         job = JobEvidence("Backend Developer", "0 to 2 yrs of experience.",
@@ -290,6 +291,146 @@ class Phase3RoleHintTests(unittest.TestCase):
                           allowed_work_locations=frozenset({"india"}),
                           seniority="mid", role_hints=frozenset({"devrel"}))
         self.assertEqual(evaluate_eligibility(job, self.policy).decision, "review")
+
+    def test_bare_remote_is_review(self):
+        """Bare 'Remote' with no permission wording -> REVIEW."""
+        job = JobEvidence("Backend Developer", "Remote position.",
+                          role_family="backend", work_mode="remote",
+                          allowed_work_locations=None, worldwide=False,
+                          seniority="mid", location_text_complete=True)
+        result = evaluate_eligibility(job, self.policy)
+        self.assertEqual(result.decision, "review")
+        self.assertIn("worker_location_restriction_unverified",
+                      [g.reason for g in result.gates])
+
+    def test_remote_eu_only_is_rejected_via_worker_permission(self):
+        """'Remote, EU only' -> REJECTED via work_location_not_allowed."""
+        job = JobEvidence("Backend Developer", "Remote, open to candidates in EU.",
+                          role_family="backend", work_mode="remote",
+                          allowed_work_locations=frozenset({"eu"}), worldwide=False,
+                          seniority="mid")
+        result = evaluate_eligibility(job, self.policy)
+        self.assertEqual(result.decision, "rejected")
+        self.assertIn("work_location_not_allowed",
+                      [g.reason for g in result.gates])
+
+    def test_work_from_anywhere_location_passes(self):
+        """'work from anywhere' -> location PASS (verified_worldwide)."""
+        job = JobEvidence("Backend Developer", "Remote, work from anywhere.",
+                          role_family="backend", work_mode="remote",
+                          worldwide=True, allowed_work_locations=None,
+                          seniority="mid")
+        result = evaluate_eligibility(job, self.policy)
+        location_gate = [g for g in result.gates if g.name == "location"][0]
+        self.assertEqual(location_gate.outcome, "pass")
+        self.assertEqual(location_gate.reason, "verified_worldwide")
+
+    def test_hybrid_outside_india_is_rejected(self):
+        """Hybrid in Berlin -> REJECTED (relocation destination not allowed)."""
+        job = JobEvidence("Backend Developer", "Hybrid in Berlin.",
+                          role_family="backend", work_mode="hybrid",
+                          job_country="germany", job_city="berlin",
+                          seniority="mid")
+        result = evaluate_eligibility(job, self.policy)
+        self.assertEqual(result.decision, "rejected")
+        self.assertIn("relocation_destination_not_allowed",
+                      [g.reason for g in result.gates])
+
+    def test_four_plus_years_vs_three_is_review(self):
+        """'4+ years' for 3-year candidate -> REVIEW (gap <= threshold)."""
+        policy = CandidatePolicy(frozenset({"backend"}), frozenset({"india"}),
+                                 frozenset({"junior", "mid"}),
+                                 years_experience=3, seniority_gap_threshold=2)
+        job = JobEvidence("Backend Developer", "4+ years of experience.",
+                          role_family="backend", work_mode="remote",
+                          allowed_work_locations=frozenset({"india"}),
+                          years_min=4, years_max=None, seniority="mid")
+        result = evaluate_eligibility(job, policy)
+        self.assertEqual(result.decision, "review")
+        self.assertIn("candidate_experience_below_range",
+                      [g.reason for g in result.gates])
+
+    def test_eight_plus_years_vs_three_is_rejected(self):
+        """'8+ years' for 3-year candidate -> REJECTED (gap > threshold)."""
+        policy = CandidatePolicy(frozenset({"backend"}), frozenset({"india"}),
+                                 frozenset({"junior", "mid"}),
+                                 years_experience=3, seniority_gap_threshold=2)
+        job = JobEvidence("Backend Developer", "8+ years of experience.",
+                          role_family="backend", work_mode="remote",
+                          allowed_work_locations=frozenset({"india"}),
+                          years_min=8, years_max=None, seniority="mid")
+        result = evaluate_eligibility(job, policy)
+        self.assertEqual(result.decision, "rejected")
+        self.assertIn("candidate_experience_below_requirement",
+                      [g.reason for g in result.gates])
+
+    def test_five_plus_years_of_react_no_seniority_effect(self):
+        """'5+ years of React' is requirement context, not seniority."""
+        job = JobEvidence("Backend Developer", "Requires 5+ years of React. "
+                          "Requirements: Python.",
+                          role_family="backend", work_mode="remote",
+                          allowed_work_locations=frozenset({"india"}),
+                          seniority="mid")
+        result = evaluate_eligibility(job, self.policy)
+        # seniority gate should pass (explicit mid label), not fail on React years
+        seniority_gate = [g for g in result.gates if g.name == "seniority"][0]
+        self.assertEqual(seniority_gate.outcome, "pass")
+
+    def test_likely_fit_path(self):
+        """Location + role + description PASS + seniority not_stated -> LIKELY_FIT."""
+        policy = CandidatePolicy(frozenset({"backend"}), frozenset({"india"}),
+                                 frozenset({"junior", "mid"}),
+                                 years_experience=3, seniority_gap_threshold=2,
+                                 remote_work_locations=frozenset({"india"}),
+                                 accept_unrestricted_remote=False)
+        job = JobEvidence("Backend Developer", "Remote position, work from anywhere.",
+                          role_family="backend", work_mode="remote",
+                          worldwide=True, allowed_work_locations=None,
+                          seniority=None, seniority_not_stated=True,
+                          location_text_complete=True)
+        result = evaluate_eligibility(job, policy)
+        self.assertEqual(result.decision, "likely_fit")
+
+    def test_generic_software_title_passes_without_hint(self):
+        """Generic software titles resolve to 'software' family and PASS."""
+        policy = CandidatePolicy(frozenset({"backend", "frontend", "fullstack", "software"}),
+                                 frozenset({"india"}), frozenset({"junior", "mid"}),
+                                 remote_work_locations=frozenset({"india"}),
+                                 years_experience=3, seniority_gap_threshold=2)
+        for title in ("Software Developer", "Software Engineer", "Programmer", "Web Developer"):
+            job = JobEvidence(title, "Build APIs.", role_family="software",
+                              work_mode="remote", allowed_work_locations=frozenset({"india"}),
+                              seniority="mid")
+            result = evaluate_eligibility(job, policy)
+            self.assertEqual(result.decision, "eligible",
+                             f"{title} should be eligible")
+
+    def test_role_gate_review_hints(self):
+        """Review hints printed for support, forward-deployed, research, data/infra,
+        hardware/EDA, devrel, architect titles."""
+        policy = CandidatePolicy(frozenset({"backend"}), frozenset({"india"}),
+                                 frozenset({"junior", "mid"}),
+                                 remote_work_locations=frozenset({"india"}),
+                                 years_experience=3, seniority_gap_threshold=2)
+        hint_titles = {
+            "Support Engineer": "support",
+            "Forward Deployed Engineer": "forward_deployed",
+            "Research Engineer": "research",
+            "Data Infrastructure Engineer": "data_infra",
+            "Hardware EDA Engineer": "hardware_eda",
+            "Developer Relations Engineer": "devrel",
+            "Softwarearchitekt": "architect",
+        }
+        for title, expected_hint in hint_titles.items():
+            job = JobEvidence(title, "Build systems.",
+                              role_family="backend", work_mode="remote",
+                              allowed_work_locations=frozenset({"india"}),
+                              seniority="mid", role_hints=frozenset({expected_hint}))
+            result = evaluate_eligibility(job, policy)
+            self.assertEqual(result.decision, "review",
+                             f"{title} should be review due to {expected_hint} hint")
+            self.assertIn("role_hint_requires_review",
+                          [g.reason for g in result.gates])
 
 
 if __name__ == "__main__":
