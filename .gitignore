@@ -73,3 +73,6 @@ build/
 # Live-submit evidence (traces, video, HAR, post-click DOM) — never commit
 data/submit_runs/
 recon-*.json
+
+# Playwright CLI snapshots & session data
+.playwright-cli/
