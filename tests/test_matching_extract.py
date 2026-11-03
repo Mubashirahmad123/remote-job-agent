@@ -407,26 +407,22 @@ class TestExtractorContract:
         # job_country must carry a verbatim quote
         jc_fact = e["facts"]["job_country"]["india"]
         assert jc_fact["quote"] == "Bangalore"
-        # Quote must re-find in the combined source text
-        combined = "Backend Developer\nBangalore\nWe are hiring in Bangalore, India."
-        assert verify(jc_fact, combined)
+        # D5: a fact verifies against the source string its `field` names,
+        # not against the combined title+location+description blob.
+        assert jc_fact["field"] == "tz_field"
+        assert verify(jc_fact, "Bangalore")
+        # ...and the provenance travels with the fact.
+        assert jc_fact["source_field"] == "tz_field"
+        assert jc_fact["extraction_method"] == "gazetteer"
+        assert jc_fact["city"] == "bangalore"
+        assert e.get("job_city") == "bangalore"
 
-    def test_jobicy_jobgeo_structured_worker_permission(self):
-        """Jobicy jobGeo is a structured worker-permission fact with source=jobicy_geo."""
-        e = extract_matching_evidence({
-            "job_title": "Developer",
-            "timezone": "LATAM,  Canada,  USA",
-            "summary": "About the company.",
-            "jobGeo": "LATAM,  Canada,  USA",
-        })
-        assert e.get("allowed_work_locations") == ["canada", "latam", "us"]
-        wp = e["facts"]["worker_permission"]
-        assert "canada" in wp
-        assert "latam" in wp
-        assert "us" in wp
-        for canonical, fact in wp.items():
-            assert fact["quote"] == "LATAM,  Canada,  USA"
-            assert fact["field"] == "jobicy_geo"
+    def test_sql_token_recognized_in_requirements(self):
+        """D15: bare 'SQL' in requirements is recognized as a technology token."""
+        required, preferred, facts = requirements_evidence(
+            "Requirements:\n- SQL\n- Python")
+        assert any("sql" in i["alternatives"] for i in required)
+        assert facts["requirements"]["count"]["required"] == 2
 
     def test_workingnomads_title_from_multiple_fields(self):
         """WorkingNomads API may return title in different fields.

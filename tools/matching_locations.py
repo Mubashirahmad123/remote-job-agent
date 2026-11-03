@@ -45,7 +45,6 @@ _CITY_GAZETTEER = {
     "srinagar": "india",
     "berlin": "germany", "munich": "germany", "hamburg": "germany",
     "cologne": "germany", "frankfurt": "germany", "stuttgart": "germany",
-    "bern": "germany",  # note: Bern is Switzerland; kept here only if text says Germany context
     # Switzerland
     "bern": "switzerland", "zurich": "switzerland", "geneva": "switzerland",
     "basel": "switzerland", "lausanne": "switzerland",
@@ -60,8 +59,25 @@ _CITY_GAZETTEER = {
     # etc.
 }
 
-# Longest-city-first matching so "San Francisco" wins over "Francisco".
-_CITY_PATTERNS = sorted(_CITY_GAZETTEER.keys(), key=len, reverse=True)
+# City names are matched by position, not by name length: see _city_matches.
+
+
+def with_provenance(one_fact: dict, extraction_method: str) -> dict:
+    """Attach the provenance the file has always implied.
+
+    `field` already named the source, but nothing carried the source value or
+    the method. D5 requires every location fact to say where it came from so a
+    reviewer can re-check the quote without guessing which string to search.
+    """
+    if not one_fact:
+        return one_fact
+    enriched = dict(one_fact)
+    enriched["source_field"] = one_fact.get("field")
+    enriched["source_value"] = one_fact.get("value")
+    enriched["supporting_quote"] = one_fact.get("quote")
+    enriched["extraction_method"] = extraction_method
+    return enriched
+
 
 
 def fact(value, match: re.Match | None, field: str = "description") -> dict:
@@ -277,25 +293,92 @@ def eligibility_phrases(text: str) -> dict:
 
 
 # ── Job country from gazetteer ────────────────────────────────────────────
+# A city name on its own does not say where the JOB is. "Our team meets twice a
+# year in Berlin, and our HQ is in Austin" is a travel/HQ sentence, not a work
+# location. Structured board fields are therefore read first, and prose only
+# counts inside a sentence that talks about where the work happens and does not
+# talk about headquarters, offices, meetings, visits or travel (D4).
+_CITY_BOUNDARY = r"(?<![A-Za-z]){}(?![A-Za-z])"
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
+_HQ_OR_INCIDENTAL = re.compile(
+    r"\b(?:HQ|headquarter(?:s|ed)?|head office|our offices?|offices? (?:in|at)|"
+    r"meet(?:s|ing)?|visit(?:s|ing)?|travel(?:s|ling)?|conference|offsite|"
+    r"retreat|team dinner|partner(?:s|ed)? with)\b", re.I)
+_WORK_LOCATION_WORDING = re.compile(
+    r"\b(?:based in|located in|location|hiring in|work(?:ing)? (?:from|in)|"
+    r"onsite|on-site|hybrid|in[- ]person|commute|relocat|"
+    r"role is in|position is in|standort)\b", re.I)
+_LOCATION_LABEL = re.compile(
+    r"^\s*(?:location|office location|work location|standort|based in)\b"
+    r"\s*[:\-–]", re.I)
+
+
+def _city_matches(text: str) -> list[tuple[int, int, str, re.Match]]:
+    """Every gazetteer city in ``text`` as (start, -len, city, match), sorted.
+
+    Earliest position wins, not longest name: a posting whose location line
+    says "Berlin" and whose customer list mentions "San Francisco" is a Berlin
+    job. Length only breaks ties at the same position ("San Francisco" over
+    "Francisco").
+    """
+    found = []
+    for city in _CITY_GAZETTEER:
+        pattern = _CITY_BOUNDARY.format(re.escape(city))
+        for match in re.finditer(pattern, text or "", re.I):
+            found.append((match.start(), -len(city), city, match))
+    found.sort(key=lambda item: (item[0], item[1]))
+    return found
+
+
+def _prose_city(text: str):
+    """First city in a sentence that is about where the work happens."""
+    for sentence in _SENTENCE_SPLIT.split(text or ""):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        hits = _city_matches(sentence)
+        if not hits:
+            continue
+        if _LOCATION_LABEL.match(sentence):
+            return hits[0]
+        if _HQ_OR_INCIDENTAL.search(sentence):
+            continue
+        if _WORK_LOCATION_WORDING.search(sentence):
+            return hits[0]
+    return None
+
+
 def job_country_from_text(text: str, url_slug: str = "", tz_field: str = "",
-                          location_tags: str = "") -> dict:
-    """Extract job_country (where the posting sits) from text, URL slug,
-    timezone field, or location_tags using the gazetteer. Never derived
-    from worker-permission lists. Returns {canonical_country: fact} or
-    empty dict."""
-    sources = [
-        ("text", text),
-        ("url_slug", url_slug),
-        ("tz_field", tz_field),
-        ("location_tags", location_tags),
-    ]
-    for source_name, source_text in sources:
+                          location_tags: str = "", title: str = "") -> dict:
+    """Extract job_country (where the posting sits) and job_city.
+
+    Order of evidence, strongest first:
+    ``location_tags`` -> ``title`` -> ``tz_field`` -> ``url_slug`` -> prose.
+    The first four are fields the board filled in FOR the job; prose is only
+    accepted under the sentence rules above. Never derived from
+    worker-permission lists. Returns {canonical_country: fact} or {}.
+
+    The returned fact also carries ``city`` so callers never have to re-scan
+    the whole document for an unrelated city (the old `_extract_city` did).
+    """
+    for source_name, source_text in (
+            ("location_tags", location_tags),
+            ("title", title),
+            ("tz_field", tz_field),
+            ("url_slug", url_slug)):
         if not source_text:
             continue
-        for city in _CITY_PATTERNS:
-            pattern = r"\b" + re.escape(city) + r"\b"
-            m = re.search(pattern, source_text, re.I)
-            if m:
-                country = _CITY_GAZETTEER[city]
-                return {country: fact(country, m, source_name)}
+        hits = _city_matches(source_text)
+        if hits:
+            _start, _neg, city, match = hits[0]
+            one_fact = fact(_CITY_GAZETTEER[city], match, source_name)
+            one_fact["city"] = city
+            return {_CITY_GAZETTEER[city]: one_fact}
+
+    prose = _prose_city(text)
+    if prose:
+        _start, _neg, city, match = prose
+        one_fact = fact(_CITY_GAZETTEER[city], match, "text")
+        one_fact["city"] = city
+        return {_CITY_GAZETTEER[city]: one_fact}
     return {}

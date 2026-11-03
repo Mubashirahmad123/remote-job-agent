@@ -37,6 +37,7 @@ from pathlib import Path
 import hashlib
 import json
 import sqlite3
+from contextlib import contextmanager
 
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "data" / "pipeline_ledger.db"
 
@@ -101,6 +102,8 @@ class PipelineLedger:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.run_id = run_id
+        self.job_text_unique = False
+        self.job_text_unique_error = ""
         with self._connect() as db:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS stage_events (
@@ -145,16 +148,45 @@ class PipelineLedger:
                 db.execute("ALTER TABLE stage_events ADD COLUMN job_uid TEXT")
             db.execute("CREATE INDEX IF NOT EXISTS idx_stage_uid "
                        "ON stage_events(run_id, job_uid)")
+            # D6: INSERT OR REPLACE only replaces on a key/PK conflict. Without
+            # a key it always inserts, which is how one live run produced 502
+            # job_texts rows for 312 instances (312 raw + 190 terminal).
+            # Create the key where the data allows it. Existing ledgers whose
+            # duplicates predate this change need a de-duplicating migration,
+            # which DELETES rows and is therefore gated separately; this code
+            # never silently removes history — record_jobs() skips a repeat
+            # insert instead.
+            try:
+                db.execute("CREATE UNIQUE INDEX IF NOT EXISTS "
+                           "idx_job_texts_run_uid "
+                           "ON job_texts(run_id, job_uid)")
+            except sqlite3.IntegrityError as exc:
+                self.job_text_unique_error = str(exc)
+            else:
+                self.job_text_unique = True
 
     @staticmethod
     def new_run_id() -> str:
         import uuid
         return uuid.uuid4().hex[:12]
 
+    @contextmanager
     def _connect(self):
-        # isolation is per-statement; the ledger is append-only so no
-        # read-modify-write exists that could need a transaction.
-        return sqlite3.connect(self.path)
+        """Connection that COMMITS on success and ALWAYS CLOSES.
+
+        `with sqlite3.connect(...)` commits but never closes (D16): every
+        record_board/record_jobs/reconcile call leaked one file descriptor,
+        which matters in the 24/7 scheduler.
+        """
+        conn = sqlite3.connect(self.path)
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def record_jobs(self, jobs, stage: str, reason_code: str = None,
                     score_of=None) -> int:
@@ -169,6 +201,7 @@ class PipelineLedger:
         """
         rows = []
         text_rows = []
+        run_id = self._run_id()
         for job in jobs:
             score = None
             breakdown = None
@@ -184,7 +217,7 @@ class PipelineLedger:
             fingerprint = _ledger_fingerprint(job)
             uid = _ledger_job_uid(job, fingerprint)
             rows.append((
-                self._run_id(), _utc_now(),
+                run_id, _utc_now(),
                 fingerprint,
                 uid,
                 str(job.get("source") or "") or None,
@@ -199,7 +232,7 @@ class PipelineLedger:
             description = description[:20000]
             desc_sha = hashlib.sha256(description.encode("utf-8")).hexdigest()
             text_rows.append((
-                self._run_id(), uid,
+                run_id, uid,
                 str(job.get("job_title") or "") or "",
                 str(job.get("company") or "") or "",
                 str(job.get("apply_url") or "") or "",
@@ -214,11 +247,23 @@ class PipelineLedger:
                    (run_id, ts, job_fingerprint, job_uid, source, title, company,
                     stage, reason_code, score, breakdown)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', rows)
-            db.executemany(
-                '''INSERT OR REPLACE INTO job_texts
-                   (run_id, job_uid, title, company, url, source, description,
-                    description_sha256, fetched_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', text_rows)
+            # One text row per (run, instance). The first recorded stage wins:
+            # a description does not change inside a run, and a repeat INSERT
+            # would otherwise double every job that later hits a terminal stage.
+            known = {row[0] for row in db.execute(
+                "SELECT job_uid FROM job_texts WHERE run_id=?", (run_id,))}
+            fresh = []
+            for text_row in text_rows:
+                if text_row[1] in known:
+                    continue
+                known.add(text_row[1])
+                fresh.append(text_row)
+            if fresh:
+                db.executemany(
+                    '''INSERT OR REPLACE INTO job_texts
+                       (run_id, job_uid, title, company, url, source, description,
+                        description_sha256, fetched_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', fresh)
         return len(rows)
 
     def record_board(self, board: str, status: str, fetched: int = 0):

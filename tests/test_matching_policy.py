@@ -235,12 +235,13 @@ class Phase3SeniorityTests(unittest.TestCase):
                           years_min=0, years_max=2, seniority="mid")
         self.assertEqual(evaluate_eligibility(job, self.policy).decision, "review")
 
-    def test_explicit_senior_label_requires_fail_not_review(self):
+    def test_explicit_senior_label_is_review_not_fail(self):
+        """ADR-0004: a senior label without a stated year range is REVIEW."""
         job = JobEvidence("Senior Backend Developer", "Lead the team.",
                           role_family="backend", work_mode="remote",
                           allowed_work_locations=frozenset({"india"}),
                           seniority="senior")
-        self.assertEqual(evaluate_eligibility(job, self.policy).decision, "rejected")
+        self.assertEqual(evaluate_eligibility(job, self.policy).decision, "review")
 
     def test_hard_mismatch_labels_fail(self):
         for label in ("principal", "staff", "lead", "director", "executive"):

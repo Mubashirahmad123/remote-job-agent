@@ -149,20 +149,29 @@ def score_match(job: JobEvidence, profile: MatchProfile,
     essential_gaps = tuple(r for r in required.gaps if r.essential)
     if essential_gaps and requirements.complete:
         rejected = True
-    elif not rejected and any(not (r.alternatives & profile.learnable_skills) for r in required.gaps):
-        reasons.append("required_skill_gaps")
+    elif not rejected and required.gaps:
+        # Any required gap (learnable or not) prevents eligible/likely_fit.
+        # Learnable gaps are a separate signal; non-learnable are harder.
+        learnable_gap_count = sum(1 for r in required.gaps
+                                  if r.alternatives & profile.learnable_skills)
+        non_learnable_gap_count = len(required.gaps) - learnable_gap_count
+        if non_learnable_gap_count:
+            reasons.append("required_skill_gaps")
+        else:
+            reasons.append("partial_required_coverage")
     if essential_gaps:
         reasons.append("essential_skill_mismatch" if requirements.complete else "essential_requirements_unverified")
     if not rejected and required.score == 0:
         reasons.append("no_required_skill_overlap")
 
     # LIKELY_FIT: eligibility says likely_fit AND requirements pass
-    # (all essential met, coverage > 0). Never eligible/auto-eligible.
+    # (all essential met, coverage > 0, no required gaps). Never eligible/auto-eligible.
     if eligibility.decision == "likely_fit":
         reqs_pass = (requirements.required is not None
                      and required.score is not None
                      and required.score > 0
-                     and not essential_gaps)
+                     and not essential_gaps
+                     and not required.gaps)
         if reqs_pass:
             decision: Decision = "likely_fit"
         else:

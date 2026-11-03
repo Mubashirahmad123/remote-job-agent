@@ -275,3 +275,132 @@ class TestLedgerJobTextPersistence:
         ledger.record_jobs(jobs, "raw_fetched")
         assert ledger.run_job_text_count("run-text-4") == 5
 
+
+class TestJobTextIdentity:
+    """D6: one job_texts row per (run_id, job_uid).
+
+    The measured live defect: run 16556b5baffc stored 502 job_texts rows for
+    312 instances — 312 raw + 190 terminal = one extra row per job that reached
+    a terminal stage. `INSERT OR REPLACE` did nothing because there was no
+    unique key to conflict with.
+    """
+
+    def test_same_job_at_two_stages_stores_one_text_row(self, tmp_path):
+        db = tmp_path / "ledger.db"
+        ledger = PipelineLedger(db, run_id="run-d6-a")
+        job = _job(1, description="Full description")
+        ledger.record_jobs([job], "raw_fetched")
+        ledger.record_jobs([job], "legacy_passed")
+
+        with sqlite3.connect(db) as conn:
+            text_rows, = conn.execute(
+                "SELECT COUNT(*) FROM job_texts WHERE run_id='run-d6-a'"
+            ).fetchone()
+            stage_rows, = conn.execute(
+                "SELECT COUNT(*) FROM stage_events WHERE run_id='run-d6-a'"
+            ).fetchone()
+        assert text_rows == 1, "one instance, one text row"
+        assert stage_rows == 2, "the event log stays append-only"
+
+    def test_two_runs_store_two_text_rows(self, tmp_path):
+        db = tmp_path / "ledger.db"
+        job = _job(1)
+        PipelineLedger(db, run_id="run-d6-b1").record_jobs([job], "raw_fetched")
+        PipelineLedger(db, run_id="run-d6-b2").record_jobs([job], "raw_fetched")
+
+        with sqlite3.connect(db) as conn:
+            count, = conn.execute("SELECT COUNT(*) FROM job_texts").fetchone()
+        assert count == 2
+
+    def test_two_boards_with_same_content_are_two_instances(self, tmp_path):
+        db = tmp_path / "ledger.db"
+        ledger = PipelineLedger(db, run_id="run-d6-c")
+        job_a = _job(1, source="BoardA")
+        job_b = dict(job_a, source="BoardB", apply_url="https://x/other")
+        job_a["job_fingerprint"] = "shared"
+        job_b["job_fingerprint"] = "shared"
+        ledger.record_jobs([job_a, job_b], "raw_fetched")
+
+        with sqlite3.connect(db) as conn:
+            count, = conn.execute("SELECT COUNT(*) FROM job_texts").fetchone()
+        assert count == 2
+
+    def test_unique_index_exists_on_a_clean_ledger(self, tmp_path):
+        ledger = PipelineLedger(tmp_path / "ledger.db", run_id="run-d6-d")
+        assert ledger.job_text_unique is True
+        with sqlite3.connect(tmp_path / "ledger.db") as conn:
+            names = {row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'")}
+        assert "idx_job_texts_run_uid" in names
+
+    def test_legacy_duplicates_do_not_break_opening_the_ledger(self, tmp_path):
+        """Existing duplicate rows must not make the ledger unusable.
+
+        The de-duplicating migration needs Gate 2 (it deletes rows), so opening
+        a legacy ledger reports the missing key and keeps working; new writes
+        still produce one row per instance.
+        """
+        db = tmp_path / "ledger.db"
+        # Build the pre-fix schema by hand and insert duplicates.
+        with sqlite3.connect(db) as conn:
+            conn.execute("""CREATE TABLE job_texts (
+                seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
+                job_uid TEXT NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL,
+                url TEXT NOT NULL, source TEXT NOT NULL, description TEXT NOT NULL,
+                description_sha256 TEXT NOT NULL, fetched_at TEXT NOT NULL)""")
+            conn.execute("""INSERT INTO job_texts
+                (run_id, job_uid, title, company, url, source, description,
+                 description_sha256, fetched_at)
+                VALUES ('old','same','t','c','u','s','d','h','now')""")
+            conn.execute("""INSERT INTO job_texts
+                (run_id, job_uid, title, company, url, source, description,
+                 description_sha256, fetched_at)
+                VALUES ('old','same','t','c','u','s','d','h','now')""")
+
+        ledger = PipelineLedger(db, run_id="run-d6-e")
+        assert ledger.job_text_unique is False
+        assert "UNIQUE" in ledger.job_text_unique_error.upper()
+
+        ledger.record_jobs([_job(2)], "raw_fetched")
+        ledger.record_jobs([_job(2)], "legacy_passed")
+        with sqlite3.connect(db) as conn:
+            new_count, = conn.execute(
+                "SELECT COUNT(*) FROM job_texts WHERE run_id='run-d6-e'"
+            ).fetchone()
+        assert new_count == 1
+
+
+class TestConnectionLifecycle:
+    """D16: every helper must close its SQLite connection.
+
+    `with sqlite3.connect(...) as db:` commits on exit but never closes, so the
+    24/7 scheduler leaked one file descriptor per record_board/record_jobs/
+    reconcile call. Connections here are closed by the seam itself; the
+    assertions below prove the handle is unusable after the block.
+    """
+
+    def test_connect_closes_on_success(self, tmp_path):
+        ledger = PipelineLedger(tmp_path / "ledger.db", run_id="run-d16")
+        with ledger._connect() as conn:  # noqa: SLF001 - testing the seam
+            conn.execute("SELECT 1")
+        with pytest.raises(sqlite3.ProgrammingError):
+            conn.execute("SELECT 1")  # closed -> ProgrammingError
+
+    def test_connect_closes_on_error(self, tmp_path):
+        ledger = PipelineLedger(tmp_path / "ledger.db", run_id="run-d16b")
+        with pytest.raises(ValueError):
+            with ledger._connect() as conn:  # noqa: SLF001 - testing the seam
+                conn.execute("CREATE TABLE probe (x INTEGER)")
+                raise ValueError("boom")
+        with pytest.raises(sqlite3.ProgrammingError):
+            conn.execute("SELECT 1")
+
+    def test_many_records_stay_usable(self, tmp_path):
+        """400 open/close cycles must not exhaust the process's handles."""
+        ledger = PipelineLedger(tmp_path / "ledger.db", run_id="run-d16c")
+        for n in range(400):
+            ledger.record_board(f"Board{n % 7}", "ok" if n % 2 else "timeout", n)
+        statuses = ledger.board_status_for_run("run-d16c")
+        assert len(statuses) == 7
+        assert ledger.reconcile("run-d16c")["raw_fetched"] == 0
+

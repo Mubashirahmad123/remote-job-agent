@@ -19,15 +19,18 @@ from dataclasses import dataclass
 import re
 from typing import Literal
 
+from tools.matching_extract import FAMILY_PATTERNS, FAMILY_RES
+
 Outcome = Literal["pass", "fail", "unknown", "not_stated"]
 Decision = Literal["eligible", "likely_fit", "review", "rejected"]
-POLICY_VERSION = "eligibility-v4"
+POLICY_VERSION = "eligibility-v5"
 
 # Labels that are structurally out of reach for a junior/mid profile.
-# "senior" is deliberately NOT here: a senior posting without a stated
-# year range is a REVIEW, not a rejection.
+# "senior" is deliberately NOT here (ADR-0004): a senior posting without a
+# stated year range is a REVIEW, not a rejection. Only an explicit year
+# range whose gap exceeds seniority_gap_threshold can fail a senior role.
 HARD_SENIORITY_MISMATCH = frozenset({
-    "senior", "principal", "staff", "lead", "director", "executive",
+    "principal", "staff", "lead", "director", "executive",
 })
 
 # Labels that are NOT seniority levels and should never cause a seniority
@@ -193,33 +196,30 @@ def _contains(text: str, pattern: str) -> bool:
 
 
 def infer_title_family(title: str) -> str | None:
-    """Conservative title hints.
+    """Conservative title hints using shared FAMILY_PATTERNS (one source of truth).
 
-    Generic software titles (software developer/engineer, programmer,
-    full stack, backend, frontend, software, web, Golang/Python/Node/
-    React/DevOps etc.) map to the "software" family which passes the role
-    gate unless a review hint exists.
-
-    Explicit non-target titles (assistant, coordinator, account executive,
-    sales, marketing, recruiter, customer success, office, operations
-    specialist) map to "non_target" which fails the role gate.
+    Families from FAMILY_PATTERNS (fullstack, backend, frontend, software) are
+    matched first — this includes tech-stack aliases (React → frontend, Node →
+    backend, Go/DevOps → software). GENERIC_SOFTWARE_TITLES are NOT used here;
+    they apply only when the extractor has already determined a family from
+    the description. Explicit non-target titles (assistant, coordinator, hardware,
+    robotics, sales, support engineer, etc.) map to "non_target" which fails
+    the role gate.
     """
-    # Generic software titles → "software" family (passes role gate unless hint)
-    if _contains(title, r"full[ -]?stack"):
-        return "fullstack"
-    if _contains(title, r"software developer|programmer|web developer"):
-        return "software"
-    if _contains(title, r"back[ -]?end|node(?:\.js|js)?|python"):
-        return "backend"
-    if _contains(title, r"front[ -]?end|react(?:\.js|js)?|next(?:\.js|js)"):
-        return "frontend"
-    if _contains(title, r"golang|\bgo (?:developer|lang)|python|node\.?js|react(?:\.js)?|devops?|devops engineer"):
-        return "software"
-    # Explicit non-target titles
+    if not title:
+        return None
+
+    # 1. FAMILY_PATTERNS (shared with extractor): fullstack, backend, frontend, software
+    for name, pattern in FAMILY_RES:
+        if pattern.search(title):
+            return name
+
+    # 2. Explicit non-target titles
     if _contains(title, r"assistant|coordinator|account executive|sales|marketing|recruiter|customer success|office|operations specialist"):
         return "non_target"
     if _contains(title, r"hardware|robotics|embedded|sales engineer|solutions engineer|support engineer"):
         return "non_target"
+
     return None
 
 
@@ -384,6 +384,14 @@ def _seniority_gate(job: JobEvidence, policy: CandidatePolicy) -> GateResult:
     An explicit year range is compared with the candidate's years first:
     gap <= threshold -> REVIEW, gap > threshold -> FAIL.
     A label is used only when no year range is stated.
+
+    A stated year range is the ONLY seniority fact that can fail a role
+    outright. Labels split three ways (ADR-0004):
+    - `principal`/`staff`/`lead`/`director`/`executive`: FAIL, they name a
+      structural level a junior/mid profile does not reach;
+    - `senior`: REVIEW, because the posting gave no requirement to measure;
+    - `intern`/`assistant`/`coordinator`/`founding`: not levels at all.
+
     No seniority evidence at all -> "not_stated" (distinct from "unknown").
     """
     if not policy.seniority_levels:

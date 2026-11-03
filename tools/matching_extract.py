@@ -30,10 +30,11 @@ from tools.matching_locations import (
     job_country_from_text,
     normalize_text,
     verify as _verify,
+    with_provenance,
     work_mode as _work_mode,
 )
 
-EXTRACTOR_VERSION = "extract-v2"
+EXTRACTOR_VERSION = "extract-v3"
 
 # ── Seniority ───────────────────────────────────────────────────────────────
 SENIORITY_LABELS = (
@@ -53,8 +54,35 @@ SENIORITY_LABELS = (
     # boundary must not sit in front of "architekt".
     ("softwarearchitekt(?:in)?|\\barchitekt(?:in)?\\b", "senior"),
 )
-_SENIORITY_RES = [(label, re.compile(rf"\b(?:{pattern})", re.I))
+# Trailing boundary is load-bearing (D8): without it "internal" matches
+# "intern" and "leading"/"leadership" match "lead". The 2026-11 live run
+# labelled 89/312 jobs "intern" from the word "internal" alone.
+_SENIORITY_RES = [(label, re.compile(rf"\b(?:{pattern})\b", re.I))
                   for pattern, label in SENIORITY_LABELS]
+
+# Level words that may appear in an explicit level statement. Prose verbs are
+# deliberately absent: "you will lead code reviews" is not a level.
+_LEVEL_WORD_LABELS = {
+    "intern": "intern", "junior": "junior", "entry level": "junior",
+    "graduate": "junior", "medior": "mid",
+    "mid level": "mid", "senior": "senior", "lead": "lead",
+    "principal": "principal", "staff": "staff", "head of": "lead",
+}
+_LEVEL_WORD_RE = "|".join(re.escape(word) for word in
+                          sorted(_LEVEL_WORD_LABELS, key=len, reverse=True))
+
+# A level word in description PROSE is not evidence unless the sentence
+# states the level: "we are looking for a Senior Backend Engineer",
+# "Seniority: senior", "this is a lead role". Anything else stays not_stated.
+_EXPLICIT_LEVEL_RE = re.compile(
+    r"(?:this is|this role is|the role is|the position is|"
+    r"we are hiring(?: for)?|we're hiring(?: for)?|"
+    r"we are looking for|we're looking for|looking for)\s+"
+    r"(?:a|an)?\s*(?P<prefix>" + _LEVEL_WORD_RE + r")\b"
+    r"|(?:seniority|level)\s*[:\-]\s*(?P<labelled>" + _LEVEL_WORD_RE + r")\b"
+    r"|(?P<suffix>" + _LEVEL_WORD_RE + r")\s+(?:level|role|position)\b",
+    re.I)
+
 
 # Explicitly stated OVERALL experience ranges only: "5+ years of experience",
 # "5 years in software development", "0 to 4 yrs". Per-skill years like
@@ -68,16 +96,65 @@ _YEARS_RE = re.compile(
     re.I)
 
 
-def seniority_evidence(title: str, text: str):
+def _locate_fact(value, needle: str, haystack: str, field: str) -> dict:
+    """Fact whose span is relative to ``haystack`` (always the combined text).
+
+    The module verifies every fact against the combined source text, so a fact
+    found in the description must be re-located there instead of keeping a
+    description-relative span (which would never verify). Returns {} rather
+    than an unverifiable fact.
+    """
+    if not needle:
+        return {}
+    hit = re.search(re.escape(needle), haystack, re.I)
+    return fact(value, hit, field) if hit else {}
+
+
+def _seniority_label_from_title(title: str):
+    for label_value, pattern in _SENIORITY_RES:
+        hit = pattern.search(title or "")
+        if hit:
+            return label_value, hit
+    return None, None
+
+
+def _seniority_label_from_explicit_statement(text: str):
+    if not text:
+        return None, None
+    match = _EXPLICIT_LEVEL_RE.search(text)
+    if not match:
+        return None, None
+    word = next((group for group in (match.group("prefix"),
+                                     match.group("labelled"),
+                                     match.group("suffix")) if group), None)
+    if not word:
+        return None, None
+    return _LEVEL_WORD_LABELS.get(" ".join(word.lower().split())), match
+
+
+def seniority_evidence(title: str, text: str, combined: str | None = None):
     """(label|None, years_lo|None, years_hi|None, facts, not_stated|False).
 
-    not_stated is True when NO seniority evidence exists at all (no label,
-    no year range) — distinct from "unknown" which means evidence exists
-    but is unverifiable/conflicting.
+    Evidence sources, in order:
+    1. a seniority label in the TITLE (the only place a level is a fact about
+       the role rather than a word in a sentence),
+    2. an explicit level statement in the description ("we are looking for a
+       Senior Backend Engineer", "Seniority: lead", "this is a lead role"),
+    3. an explicit overall-experience range ("5+ years of experience").
+
+    Ordinary prose never produces a label (D8): "you will lead code reviews"
+    and "our internal platform" are not seniority evidence.
+
+    not_stated is True when NO seniority evidence exists at all — distinct
+    from "unknown", which means evidence exists but is unverifiable.
     """
+    title = title or ""
+    text = text or ""
+    haystack = combined if combined is not None else f"{title}\n{text}"
     facts: dict = {}
     lo = hi = None
-    range_m = _YEARS_RE.search(text) or _YEARS_RE.search(title or "")
+
+    range_m = _YEARS_RE.search(text) or _YEARS_RE.search(title)
     if range_m:
         if range_m.group("lo") and range_m.group("hi"):
             lo, hi = int(range_m.group("lo")), int(range_m.group("hi"))
@@ -87,27 +164,44 @@ def seniority_evidence(title: str, text: str):
             lo, hi = int(range_m.group("lo3") or range_m.group("lo4")), None
         elif range_m.group("lo5"):
             lo, hi = int(range_m.group("lo5")), None
-        facts["years"] = fact({"lo": lo, "hi": hi}, range_m)
+        years_fact = _locate_fact({"lo": lo, "hi": hi}, range_m.group(0),
+                                  haystack, "description")
+        if years_fact:
+            facts["years"] = years_fact
+
     label = None
-    search_text = f"{title}\n{text}".strip() if title and text else (title or text)
-    for label_value, pattern in _SENIORITY_RES:
-        hit_title = pattern.search(title or "")
-        hit = hit_title or pattern.search(text)
-        if hit:
-            label = label_value
-            facts["seniority"] = fact(label_value, hit,
-                                      "title" if hit_title else "description")
-            break
+    hit = None
+    field = "title"
+    title_label, title_hit = _seniority_label_from_title(title)
+    if title_label:
+        label, hit = title_label, title_hit
+    else:
+        desc_label, desc_hit = _seniority_label_from_explicit_statement(text)
+        if desc_label:
+            label, hit, field = desc_label, desc_hit, "explicit_level_statement"
+
+    if label and hit is not None:
+        located = _locate_fact(label, hit.group(0), haystack, field)
+        if located:
+            facts["seniority"] = located
+        else:
+            # Label decided the gate but cannot be quoted verbatim: do not
+            # ship a decision that claims evidence it cannot show.
+            label = None
+
     not_stated = (label is None and lo is None)
     return label, lo, hi, facts, not_stated
 
 
 # ── Role family + responsibility hints ─────────────────────────────────────
+# Single source of truth for title -> family mapping. Used by both the
+# extractor (role_family_evidence) and the policy gate (infer_title_family).
+# Order matters: first match wins. Specific role types before generic "software".
 FAMILY_PATTERNS = {
     "fullstack": r"full[ -]?stack|fullstack",
-    "backend": r"back[ -]?end|backend",
-    "frontend": r"front[ -]?end|frontend",
-    "software": r"software (?:developer|engineer)|programmer|web developer",
+    "backend": r"back[ -]?end|backend|node(?:\.js|js)?|\bpython\b",
+    "frontend": r"front[ -]?end|frontend|react(?:\.js|js)?|next(?:\.js|js)?",
+    "software": r"software developer|programmer|web developer|golang|\bgo (?:developer|lang)|devops?|devops engineer",
 }
 RESPONSIBILITY_PATTERNS = {
     "architect": r"architect(?:ure)? (?:own(?:s|ing)|role)|overall architecture|"
@@ -208,6 +302,7 @@ TECH_TOKENS = {
     "mysql": r"\bmysql\b",
     "mongodb": r"mongo(?:db)?",
     "redis": r"\bredis\b",
+    "sql": r"\bsql\b(?!(ite|server))",
     "graphql": r"\bgraphql\b",
     "rest": r"rest(?:ful)? ?api|restful",
     "golang": r"\bgolang\b|\bgo (?:developer|lang|runtime|scheduler)\b",
@@ -253,6 +348,7 @@ _PRACTICE_TOKENS = frozenset({"agile", "scrum", "git"})
 
 
 def _token_spans(line: str) -> dict:
+    """Token -> list of (start, end) spans in this line."""
     spans = {}
     for token, pattern in _TECH_RES.items():
         hits = [m.span() for m in pattern.finditer(line)]
@@ -294,13 +390,67 @@ def _or_groups(spans: dict, line: str) -> list[list[str]]:
             current = [this]
     groups.append(current)
     return [sorted({token for token, _s, _e in group}) for group in groups]
-_SECTION_PREFERRED = re.compile(
-    r"nice[- ]to[- ]have|preferred|desirable|bonus (?:points|skills)?|"
-    r"good to have|plus(?:es)?\b", re.I)
-_SECTION_REQUIRED = re.compile(
-    r"required|must[- ]have|requirements|we (?:expect|need)|"
-    r"you(?:')?(?:ll| will)? (?:have|need|bring)|qualifications", re.I)
+
+
+# ── Requirement sections and modality (D1) ─────────────────────────────────
+# What a mention means depends on the block it sits in. The previous code had
+# ONE mutable `section` that started at "required" and persisted forever, so
+# "Responsibilities: maintain JavaScript services" and "Our tech stack: ..."
+# both became required technologies, and one "Nice to have:" sentence turned
+# every later paragraph into a preference.
+#
+# Rules here:
+# - a HEADING is a segment that is only the marker ("Requirements:", "Nice to
+#   have:") and it changes the section for the segments that follow;
+# - an INLINE marker ("Nice to have: Docker") applies to that segment only;
+# - a new heading replaces the old one, so a section never leaks past it;
+# - with no section at all, text is a `mention` unless it carries requirement
+#   modality ("must", "proficiency in", "experience with"), because a bare
+#   technology name is not an ask.
+REQUIREMENT_CLASSES = ("required", "preferred", "optional", "mention",
+                       "responsibility")
+
+_SECTION_PATTERNS = (
+    ("preferred", re.compile(
+        r"^(?:nice[- ]to[- ]have|preferred(?: qualifications| skills)?|"
+        r"bonus(?: points)?|good to have|desirable|pluses?)\b\s*[:\-–]?\s*", re.I)),
+    ("responsibility", re.compile(
+        r"^(?:responsibilities|what you(?:'|’)ll do|what you will do|"
+        r"the role|about the role|day[- ]to[- ]day|your (?:tasks|"
+        r"responsibilities)|tasks|aufgaben|deine aufgaben)\b\s*[:\-–]?\s*", re.I)),
+    ("mention", re.compile(
+        r"^(?:(?:our|the|your)\s+)?(?:tech(?:nology)? stack|stack|"
+        r"technologies(?: we use)?|tools we use|technologien|"
+        r"about (?:us|the company|the team)|benefits|perks|we offer|"
+        r"why join(?: us)?)\b\s*[:\-–]?\s*", re.I)),
+    ("optional", re.compile(
+        r"^(?:optional|not required|nicht erforderlich)\b\s*[:\-–]?\s*", re.I)),
+    ("required", re.compile(
+        r"^(?:requirements?|required|must[- ]haves?|qualifications|"
+        r"what you(?:'|’)ll need|what we(?:'|’)re looking for|"
+        r"you(?:'|’)ll have|you have|your profile|dein profil|"
+        r"skills|anforderungen|voraussetzungen)\b\s*[:\-–]?\s*", re.I)),
+)
+_MODALITY_REQUIRED = re.compile(
+    r"\b(?:must|required|requirement|essential|mandatory|"
+    r"proficien(?:t|cy) (?:in|with)|experience (?:in|with)|"
+    r"strong (?:knowledge|experience|understanding)|"
+    r"solid (?:knowledge|experience|understanding)|"
+    r"expertise (?:in|with)|knowledge of|familiarity with|"
+    r"hands[- ]on experience)\b", re.I)
+_MODALITY_OPTIONAL = re.compile(
+    r"\b(?:optional|not required|nice to have but|wünschenswert)\b", re.I)
 _BULLET = re.compile(r"^[\s>\-*•·‣–]*([0-9]+[.)]\s*)?", re.I)
+
+
+def _match_section(segment: str):
+    """(section, remainder, is_heading) for a segment starting with a marker."""
+    for name, pattern in _SECTION_PATTERNS:
+        hit = pattern.match(segment)
+        if hit:
+            remainder = segment[hit.end():].lstrip(" :;-–—•*").strip()
+            return name, remainder, not remainder
+    return None, segment, False
 
 
 def requirement_items(text: str) -> list[str]:
@@ -324,45 +474,62 @@ def requirement_items(text: str) -> list[str]:
     return items
 
 
-def _token_spans(line: str) -> dict:
-    """Token -> list of (start, end) spans in this line."""
-    spans = {}
-    for token, pattern in _TECH_RES.items():
-        hits = [m.span() for m in pattern.finditer(line)]
-        if hits:
-            spans.setdefault(token, []).extend(hits)
-    return spans
-
-
 def requirements_evidence(text: str):
-    """(required, preferred, facts dict):
-    each requirement {alternatives, evidence, type, essential}.
-    Negations are dropped with a recorded quote; practices/soft skills
-    carry type practice/soft and never enter coverage."""
-    required, preferred, facts = [], [], {}
-    section = "required"
+    """(required, preferred, facts dict), each requirement
+    {alternatives, evidence, type, class, essential}.
+
+    `required` is the only bucket that can create a coverage gap. `preferred`
+    and `optional` mentions are recorded for the reviewer but never gate.
+    `mention` and `responsibility` are recorded as evidence only: a technology
+    named in "Our stack:" or "Responsibilities:" is not an ask.
+
+    `facts["requirements"]` carries the completeness tuple needed to tell "this
+    posting has no requirements section" from "we extracted nothing", which is
+    the difference between an honest REVIEW and a false rejection (D2).
+    """
+    buckets = {name: [] for name in REQUIREMENT_CLASSES}
+    facts: dict = {}
+    section = None
+    sections_seen: set[str] = set()
+
     for segment in requirement_items(text):
-        marker = None
-        for pattern, name in ((_SECTION_PREFERRED, "preferred"),
-                              (_SECTION_REQUIRED, "required")):
-            hit = pattern.search(segment)
-            if hit:
-                marker = (hit, name)
-                break
-        if marker:
-            hit, name = marker
-            remainder = segment[hit.end():].lstrip(" :;-•*").strip()
-            if not remainder:
-                section = name
+        section_name, remainder, is_heading = _match_section(segment)
+        if section_name:
+            sections_seen.add(section_name)
+            # Demoting sections ("Responsibilities:", "Our stack:") apply at
+            # once, even with content on the same line: the safe direction is
+            # fewer false requirements. Promoting sections only persist as a
+            # bare heading, so one "Nice to have: Docker" sentence cannot
+            # reclassify the rest of the paragraph.
+            if section_name in {"mention", "responsibility"} or is_heading:
+                section = section_name
+            if is_heading:
                 continue
-            negation_scope = f"{segment[:hit.start()]} {hit.group(0)}"
-            if re.search(r"\b(?:no|not|without)\b", negation_scope, re.I):
-                facts.setdefault("negations", []).append({"quote": segment[:160]})
-                continue
-            section = name
+            removed = segment[:len(segment) - len(remainder)]
             segment = remainder
+            if not segment:
+                continue
+            requirement_class = section_name
+            negation_scope = removed
+        else:
+            requirement_class = section
+            if requirement_class is None:
+                requirement_class = ("required" if _MODALITY_REQUIRED.search(segment)
+                                     else "mention")
+            elif (requirement_class in {"mention", "responsibility"}
+                  and _MODALITY_REQUIRED.search(segment)):
+                # "Our stack: Python" is a mention; "You must know Python" is not.
+                requirement_class = "required"
+            negation_scope = ""
+
+        if _MODALITY_OPTIONAL.search(segment) or requirement_class == "optional":
+            requirement_class = "optional"
+
         spans = _token_spans(segment)
         if not spans:
+            continue
+        if re.search(r"\b(?:no|not|without)\b", negation_scope, re.I):
+            facts.setdefault("negations", []).append({"quote": segment[:160]})
             continue
         verified_spans = {t: [(s, e) for (s, e) in hit_list
                               if not _is_negated(segment, s)]
@@ -371,24 +538,51 @@ def requirements_evidence(text: str):
         if not verified_spans:
             facts.setdefault("negations", []).append({"quote": segment[:160]})
             continue
-        out_list = required if section == "required" else preferred
         essential = bool(re.search(r"\b(?:must|required|essential|mandatory)\b",
                                    segment, re.I))
+        bucket = "required" if requirement_class == "required" else "preferred"
         for group in _or_groups(verified_spans, segment):
-            out_list.append({
+            item = {
                 "alternatives": sorted(set(group)),
                 "evidence": segment[:160],
                 "essential": essential,
-            })
-    for bucket in (required, preferred):
-        for requirement in bucket:
-            requirement["type"] = "practice" if all(
-                t in _PRACTICE_TOKENS for t in requirement["alternatives"]) else "technology"
+                "class": requirement_class,
+            }
+            item["type"] = "practice" if all(
+                t in _PRACTICE_TOKENS for t in item["alternatives"]) else "technology"
+            buckets[bucket].append(item)
+
+    required, preferred = buckets["required"], buckets["preferred"]
+    # Non-gating mentions share the `preferred` bucket (they are recorded, not
+    # asked for), so they must be counted by class — reading buckets["mention"]
+    # reported zero forever.
+    mention_items = [i for i in preferred if i["class"] == "mention"]
+    responsibility_items = [i for i in preferred
+                            if i["class"] == "responsibility"]
+    # Only a genuine requirements/qualifications heading counts. A page that
+    # only ever says "Nice to have:" has told us what is *not* mandatory, which
+    # is not the same as telling us what is.
+    required_section_found = "required" in sections_seen
+    count = {
+        "required": len(required),
+        "preferred": len([i for i in preferred if i["class"] == "preferred"]),
+        "optional": len([i for i in preferred if i["class"] == "optional"]),
+        "mention": len(mention_items),
+        "responsibility": len(responsibility_items),
+    }
     facts["requirements"] = {
-        "complete": bool(required),
-        "count": {"required": len(required), "preferred": len(preferred)},
+        # D2: complete means "a requirements/qualifications section was located
+        # AND produced at least one required technology". Before this, complete
+        # was bool(required), so a bare tech-stack paragraph unlocked the
+        # essential-gap auto-rejection on the weakest possible evidence.
+        "complete": bool(required) and required_section_found,
+        "section_found": required_section_found,
+        "count": count,
+        "mention": mention_items,
+        "responsibility": responsibility_items,
     }
     return required, preferred, facts
+
 
 
 def extract_matching_evidence(job: dict) -> dict:
@@ -433,63 +627,31 @@ def extract_matching_evidence(job: dict) -> dict:
             evidence["worldwide"] = False
             evidence["allowed_work_locations"] = sorted(verified_perms)
 
-    # ── Jobicy jobGeo: structured worker-permission fact ─────────────
-    # Jobicy API returns jobGeo as comma-separated region names (e.g. "Canada, USA",
-    # "USA", "France, Netherlands, Spain"). This is a structured worker-permission
-    # field from the board's own docs, not a bare country mention.
-    jobgeo_raw = str(job.get("jobGeo") or "").strip()
-    if jobgeo_raw:
-        jobgeo_regions = {}
-        for part in jobgeo_raw.split(","):
-            part = part.strip()
-            if not part:
-                continue
-            canonicals = _normalize_region(part)
-            if canonicals:
-                for canonical in canonicals:
-                    if canonical not in jobgeo_regions:
-                        jobgeo_regions[canonical] = {
-                            "value": canonical,
-                            "quote": jobgeo_raw,
-                            "span": None,
-                            "field": "jobicy_geo",
-                        }
-        # Verify quotes: span covers the raw value within the combined text
-        for canonical, one_fact in jobgeo_regions.items():
-            m = re.search(re.escape(jobgeo_raw), combined, re.I)
-            if m:
-                one_fact["span"] = [m.start(), m.end()]
-            if _verify(one_fact, combined):
-                if canonical not in verified_perms:
-                    verified_perms[canonical] = one_fact
-
-        # Update evidence with merged permissions
-        if jobgeo_regions:
-            facts["worker_permission"] = verified_perms
-            non_worldwide = {k for k in verified_perms if k != "worldwide"}
-            if "worldwide" in verified_perms and not non_worldwide:
-                evidence["worldwide"] = True
-                evidence["allowed_work_locations"] = []
-            else:
-                evidence["worldwide"] = False
-                evidence["allowed_work_locations"] = sorted(verified_perms)
-
     # ── job country from gazetteer (never from worker-permission list) ─
     location_tags_text = " ".join(job.get("location_tags") or [])
     country_fact = job_country_from_text(combined, apply_url, location_field,
-                                         location_tags_text)
+                                         location_tags_text, title)
+    # D5: each fact's span is relative to the string it was extracted from, so
+    # verify against THAT string. Verifying everything against `combined` used
+    # to silently drop every location_tags and URL-slug country — the very
+    # evidence the scraper does populate.
+    country_sources = {
+        "location_tags": location_tags_text,
+        "title": title,
+        "tz_field": location_field,
+        "url_slug": apply_url,
+        "text": combined,
+    }
     verified_country = {}
     for canonical, one_fact in country_fact.items():
-        if _verify(one_fact, combined):
-            verified_country[canonical] = one_fact
+        source_text = country_sources.get(one_fact.get("field"), combined)
+        if _verify(one_fact, source_text):
+            verified_country[canonical] = with_provenance(one_fact, "gazetteer")
     if verified_country:
         facts["job_country"] = verified_country
-        # Take the first country found
-        first_country = next(iter(verified_country))
+        first_country, first_fact = next(iter(verified_country.items()))
         evidence["job_country"] = first_country
-        # Derive job_city from the matched city span context
-        # (the gazetteer match includes the city; we can try to extract it)
-        evidence["job_city"] = _extract_city(combined, first_country)
+        evidence["job_city"] = first_fact.get("city")
 
     # ── sponsorship ────────────────────────────────────────────────
     sponsor, sponsor_facts = sponsorship_evidence(combined)
@@ -499,7 +661,8 @@ def extract_matching_evidence(job: dict) -> dict:
             evidence["visa_sponsorship"] = sponsor
 
     # ── seniority ─────────────────────────────────────────────────
-    label, lo, hi, s_facts, not_stated = seniority_evidence(title, description)
+    label, lo, hi, s_facts, not_stated = seniority_evidence(
+        title, description, combined)
     if s_facts:
         facts.update(s_facts)
     if label:
@@ -526,11 +689,22 @@ def extract_matching_evidence(job: dict) -> dict:
     required, preferred, req_facts = requirements_evidence(description)
     if req_facts:
         facts.update(req_facts)
+    req_meta = req_facts.get("requirements", {})
     evidence["requirements"] = {
         "required": required,
         "preferred": preferred,
-        "complete": bool(req_facts.get("requirements", {}).get("complete")),
+        "complete": bool(req_meta.get("complete")),
         "extractor_version": EXTRACTOR_VERSION,
+    }
+    # D2: completeness is a fact about the SOURCE, not about extraction luck.
+    evidence["description_completeness"] = {
+        "description_present": bool(description.strip()),
+        "description_length": len(description),
+        "requirements_section_found": bool(req_meta.get("section_found")),
+        "requirements_count": req_meta.get("count", {}),
+        "extraction_confidence": _extraction_confidence(
+            bool(req_meta.get("section_found")),
+            int(req_meta.get("count", {}).get("required", 0) or 0)),
     }
 
     # ── DROP unverified facts ─────────────────────────────────────
@@ -540,13 +714,18 @@ def extract_matching_evidence(job: dict) -> dict:
     return evidence
 
 
-def _extract_city(text: str, country: str) -> str | None:
-    """Try to extract the city name from text near a country match."""
-    # Map country to its cities in the gazetteer
-    from tools.matching_locations import _CITY_GAZETTEER
-    country_cities = {city for city, ctry in _CITY_GAZETTEER.items() if ctry == country}
-    for city in sorted(country_cities, key=len, reverse=True):
-        pattern = r"\b" + re.escape(city) + r"\b"
-        if re.search(pattern, text, re.I):
-            return city
-    return None
+def _extraction_confidence(section_found: bool, required_count: int) -> str:
+    """Categorical, not a fake probability.
+
+    - requirements_section: a requirements/qualifications heading was located
+      and produced at least one required technology;
+    - modality_only: technologies were found only through requirement wording,
+      with no section heading;
+    - none: no required technology was extracted at all.
+    """
+    if section_found and required_count:
+        return "requirements_section"
+    if required_count:
+        return "modality_only"
+    return "none"
+
