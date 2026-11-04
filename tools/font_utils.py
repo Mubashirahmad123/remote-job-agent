@@ -58,7 +58,7 @@ def _find_arial_paths():
 _TYPOGRAPHIC_MAP = {
     "\u00a0": " ",    # no-break space
     "\u2010": "-",    # hyphen
-    "\u2011": "-",    # non-breaking hyphen (e.g. +91‑9622907883)
+    "\u2011": "-",    # non-breaking hyphen (e.g. +91‑0000000000)
     "\u2012": "-",
     "\u2013": "-",    # en dash
     "\u2014": "-",    # em dash

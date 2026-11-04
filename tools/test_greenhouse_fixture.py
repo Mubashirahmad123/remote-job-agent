@@ -21,8 +21,8 @@ def test_greenhouse_attachments():
     
     user_profile = {
         "name": "Mubashir Nazir",
-        "email": "mubashirahmad0305@gmail.com",
-        "phone": "+91-9622907883",
+        "email": "test@example.com",
+        "phone": "+91-0000000000",
         "linkedin": "https://linkedin.com/in/mubashir-ahmad-13027523b",
         "portfolio": "https://mubashir-portfolio1-gebqzzptl-mubashirs-projects-a83d22b0.vercel.app/",
         "github": "https://github.com/Mubashirahmad123"
