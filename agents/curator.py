@@ -320,6 +320,25 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     if own_tracker:
         tracker = YieldTracker()
     tracker.stage("curated_in", count_by_source(raw_jobs))
+    # One health line so runs can never be mistaken for shadow-enabled
+    # when MATCHING_SHADOW_PROFILE was unset (the 2026-10-30 failure mode).
+    from tools.matching_shadow import log_shadow_config
+    log_shadow_config()
+    # Phase 1 per-job ledger: dedup/rejection/low-match drops each get one
+    # append-only row under the scrape's run id (when it exists) so the
+    # funnel reconciles end to end and the 110-style low matches become
+    # queryable with their reason.
+    from tools.pipeline_ledger import PipelineLedger
+    # Run id resolution order: shared tracker (same process) -> the id
+    # stamped on the jobs by scrape_all (separate processes, the CLI path)
+    # -> a fresh id (curate called on jobs from somewhere else).
+    _run_id = getattr(tracker, "run_id", None)
+    if not _run_id:
+        for job in raw_jobs:
+            if isinstance(job, dict) and job.get("ledger_run_id"):
+                _run_id = job["ledger_run_id"]
+                break
+    ledger = PipelineLedger(run_id=_run_id)
     print(f"\n{'='*60}")
     print(f"🔍 CURATING {len(raw_jobs)} RAW JOBS")
     print(f"{'='*60}")
@@ -375,7 +394,9 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     unique_jobs = []
     duplicates = 0
     missing_url = 0
-    
+    url_dropped = []
+    missing_url_jobs = []
+
     for job in raw_jobs:
         url = (job.get("apply_url") or "").split("?")[0].strip()
         if not url:
@@ -383,13 +404,17 @@ def curate(raw_jobs: list, tracker=None) -> dict:
             # trace — the run's own math (155 - 15 = 140 expected, 136
             # counted) proved 4 jobs vanished silently. Counted now.
             missing_url += 1
+            missing_url_jobs.append(job)
             continue
         if url in seen_urls:
             duplicates += 1
+            url_dropped.append(job)
             continue
         seen_urls.add(url)
         unique_jobs.append(job)
-    
+    ledger.record_jobs(missing_url_jobs, "dedup_missing_url", reason_code="no_apply_url")
+    ledger.record_jobs(url_dropped, "dedup_url_dup", reason_code="apply_url_seen")
+
     print(f"   Original: {len(raw_jobs)} | Duplicates: {duplicates} | Missing URL: {missing_url} | Unique: {len(unique_jobs)}")
 
     # ── Step 2b: Cross-board (title+company) deduplication ──
@@ -404,14 +429,17 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     seen_title_company = set()
     cross_board_dupes = 0
     still_unique = []
+    cross_board_dropped = []
     for job in unique_jobs:
         key = title_company_key(job)
         if key and key in seen_title_company:
             cross_board_dupes += 1
+            cross_board_dropped.append(job)
             continue
         if key:
             seen_title_company.add(key)
         still_unique.append(job)
+    ledger.record_jobs(cross_board_dropped, "dedup_cross_board", reason_code="title_company_dup")
     unique_jobs = still_unique
     print(f"   Cross-board duplicates: {cross_board_dupes} | Remaining: {len(unique_jobs)}")
 
@@ -424,14 +452,17 @@ def curate(raw_jobs: list, tracker=None) -> dict:
     seen_hashes = load_seen_hashes()
     before_fp = len(unique_jobs)
     still_new = []
+    fp_dropped = []
     for job in unique_jobs:
         fp = job.get("job_fingerprint") or job_fingerprint(job)
         if fp in seen_hashes or fp in existing_fingerprints:
+            fp_dropped.append(job)
             continue
         job["job_fingerprint"] = fp
         still_new.append(job)
     unique_jobs = still_new
     fp_duplicates = before_fp - len(unique_jobs)
+    ledger.record_jobs(fp_dropped, "dedup_fingerprint", reason_code="seen_fingerprint")
     print(f"   Fingerprint duplicates: {fp_duplicates} | Remaining: {len(unique_jobs)}")
     tracker.stage("post_dedup", count_by_source(unique_jobs))
 
@@ -446,10 +477,15 @@ def curate(raw_jobs: list, tracker=None) -> dict:
 
     # ── Country / Location filter ──
     print("\n🌍 Country filter...")
-    before_country = len(unique_jobs)
-    unique_jobs = [job for job in unique_jobs if is_allowed_location(job)]
-    country_filtered = before_country - len(unique_jobs)
-    print(f"   Filtered by country: {country_filtered} | Remaining: {len(unique_jobs)}")
+    country_kept, country_dropped = [], []
+    for job in unique_jobs:
+        (country_kept if is_allowed_location(job) else country_dropped).append(job)
+    country_blocked = len(country_dropped)
+    unique_jobs = country_kept
+    # A job dropped here reached no other terminal stage: record it, or the
+    # funnel never sums back to fetched.
+    ledger.record_jobs(country_dropped, "country_drop", reason_code="is_allowed_location False")
+    print(f"   Filtered by country: {country_blocked} | Remaining: {len(unique_jobs)}")
     tracker.stage("post_country", count_by_source(unique_jobs))
 
     if not unique_jobs:
@@ -503,6 +539,9 @@ def curate(raw_jobs: list, tracker=None) -> dict:
             key = reject_reason.split(":")[0] if ":" in reject_reason else "other"
             rejected_reasons[key] = rejected_reasons.get(key, 0) + 1
             print(f"   ❌ REJECTED: {job.get('job_title', '')[:50]} — {reject_reason[:60]}")
+            ledger.record_jobs(
+                [job], "legacy_rejected",
+                reason_code=f"{key}: {reject_reason[:160]}")
             continue
         
         # === CV SCORING (uses cv_matcher.py) ===
@@ -597,9 +636,15 @@ def curate(raw_jobs: list, tracker=None) -> dict:
             # bare numbers. Printing it makes a scoring-input problem
             # visible in the run log itself.
             print(f"   ⚠️ LOW MATCH ({base_score:.0f}{freshness:+d}): {job.get('job_title', '')[:50]} — {match_reason}")
+            ledger.record_jobs(
+                [job], "legacy_low_match", reason_code=match_reason[:200],
+                score_of=lambda j: (j.get("match_score", 0), j.get("score_breakdown")))
             continue
 
         print(f"   ✅ MATCH ({base_score:.0f}{freshness:+d}): {job.get('job_title', '')[:50]}")
+        ledger.record_jobs(
+            [job], "legacy_passed", reason_code=match_reason[:200],
+            score_of=lambda j: (j.get("match_score", 0), j.get("score_breakdown")))
         scored_jobs.append(job)
     
     print(f"\n📊 Scoring results:")
@@ -609,6 +654,23 @@ def curate(raw_jobs: list, tracker=None) -> dict:
         print(f"\n🚫 Rejection breakdown:")
         for reason, count in sorted(rejected_reasons.items(), key=lambda x: -x[1])[:5]:
             print(f"   {reason}: {count}")
+
+    # Phase 1: the per-run funnel must sum exactly to the fetched total.
+    try:
+        report = ledger.reconcile()
+        label = "OK" if report["complete"] else "INCOMPLETE"
+        stage_summary = " | ".join(f"{stage}:{count}"
+                                   for stage, count in sorted(report["stages"].items()))
+        print(f"\n📒 Funnel reconciliation [{label}]: raw_fetched="
+              f"{report['raw_fetched']} terminal_sum={report['terminal_sum']}")
+        print(f"   {stage_summary}")
+        if not report["complete"]:
+            if report["missing_terminal"]:
+                print(f"   ⚠️ {len(report['missing_terminal'])} job(s) with no terminal row")
+            if report["duplicated_terminal"]:
+                print(f"   ⚠️ {len(report['duplicated_terminal'])} job(s) with 2+ terminal rows")
+    except Exception as exc:
+        print(f"   ⚠️ Ledger reconciliation failed ({type(exc).__name__}); findings unchanged")
 
     if not scored_jobs:
         return {

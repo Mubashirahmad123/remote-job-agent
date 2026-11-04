@@ -196,3 +196,14 @@ requirements.lock.txt; coverage is a separate QA-only tool, not a runtime pin.
 Next: confirm personal policy inputs without building the deferred Profile UI;
 implement evidence extraction and essential-gap semantics; safe enrichment;
 shadow integration, review storage and real evaluation before live cutover.
+
+## Policy decisions recorded after this QA pass
+
+Historical statements above are left as written; these decisions supersede the
+seniority behaviour they predate.
+
+| Date | Decision | Record |
+| --- | --- | --- |
+| 2026-11-02 | `senior` is REVIEW, not a hard rejection. Only a stated year range whose gap exceeds `seniority_gap_threshold` can FAIL a senior role. `lead`/`principal`/`staff`/`director`/`executive` still FAIL. | `docs/adr/0004-senior-label-is-review-not-rejection.md` |
+| 2026-11-02 | Jobicy `jobGeo` is a region preference, never worker permission; the unreachable branch in `matching_extract.py` is deleted. | `docs/adr/0005-jobicy-jobgeo-is-not-worker-permission.md` |
+| 2026-11-02 | Seniority labels come only from the title or an explicit level statement. Description prose ("you will lead code reviews") is not seniority evidence, and `internal`/`international` are not `intern`. | defect D8, `tools/matching_extract.py` |

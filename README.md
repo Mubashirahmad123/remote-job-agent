@@ -4,6 +4,25 @@ An automated system that scrapes 45+ remote job boards, matches jobs to your CV 
 
 ---
 
+## 🚀 Release Status: **CONDITIONAL GO** (Disarmed Mode)
+
+| Category | Verdict |
+|----------|---------|
+| Dashboard & API | ✅ GO |
+| Resume Generation | ✅ GO |
+| Cover Letter Generation | ✅ GO (factual accuracy guard) |
+| Greenhouse Fill & Review | ✅ GO (profile) / LIMITED (attachments) |
+| Matcher Architecture | ✅ GO |
+| Full Regression Suite | ✅ GO (1,647 passed) |
+| Production Deployment | ⚠️ **CONDITIONAL GO** (requires explicit approval to arm submit path) |
+| Unattended Auto-Apply | ❌ NO-GO (correctly disarmed) |
+
+**Safety Gates**: `SUBMIT_ENABLED=False`, `AUTO_APPLY_ENABLED=false`, `submit_mode()="disarmed"` — all verified.
+
+See [final_release_verification_v3.md](logs/live_runs/remote-job-agent-live-20261102-001/final_release_verification_v3.md) for full evidence.
+
+---
+
 ## Product scope
 
 `main` is the owner's personal, software-development-focused agent. CV upload
@@ -24,9 +43,9 @@ is scheduled. See [USER_PRODUCT.md](USER_PRODUCT.md) for scope and design gates.
 | **Semantic job matching** | ✅ | Optional FAISS + sentence-transformers cosine scoring — `pip install sentence-transformers faiss-cpu`. Selected-CV embeddings are built lazily and cached per file/content/model; failures explicitly fall back to keyword-only scoring |
 | Duplicate detection | ✅ | MD5 fingerprinting prevents duplicate entries across runs |
 | Smart Sheets dashboard | ✅ | Auto-creates tabs: ALL JOBS, TOP MATCHES (score ≥85), GOOD MATCHES (70–84), APPLIED, STATS — with colored score bands, hyperlinks, frozen headers |
-| **AI cover letters with role detection** | ✅ | Detects backend/frontend/fullstack/mobile role from job title and tailors tone, skills, and experience accordingly |
+| **AI cover letters with role detection** | ✅ | Detects backend/frontend/fullstack/mobile role; **factual accuracy regression test prevents hallucinated experience years** |
 | **LLM fallback chain** | ✅ | Gemini → Groq → Mistral → GLM → Ollama Cloud — pipeline never crashes from API quota errors |
-| **Auto-apply workflow** | 🟡 Fill/review over dashboard API; submit kill-switched | The cockpit prepares up to three jobs per run (daily-cap enforced); Greenhouse/Lever open visibly with the final tailored resume + cover letter filled and paused for manual review, plus an in-browser screenshot preview. Other ATSs receive a package only. Greenhouse `/intent` + `/submit` routes exist but fail closed with 403 while `api/safety.py SUBMIT_ENABLED=False`. The legacy CLI blind submit is permanently disabled. |
+| **Auto-apply workflow** | 🟡 Fill/review over dashboard API; submit kill-switched | The cockpit prepares up to three jobs per run (daily-cap enforced); Greenhouse/Lever open visibly with the final tailored resume + cover letter filled and paused for manual review, plus an in-browser screenshot preview. Other ATSs receive a package only. Greenhouse `/intent` + `/submit` routes exist but fail closed with 403 while `api/safety.py SUBMIT_ENABLED=False`. The legacy CLI blind submit is permanently disabled. **Status: Verified — profile fields fill & DOM-verify; attachments untested on example board (no file input/textarea); no submit click executed; safety gates all engaged.** |
 | **Tailored resume generation** | ✅ | Generates ATS-optimized resume PDF matched to each job's tech stack — grounded strictly in the actual CV (prompt forbids invented employers/projects; rejected pre-web entries filtered before the LLM sees them; LLM keyword footers stripped) `python main.py resume` |
 | **Country/location filter** | ✅ | 452-country detection — blocks jobs from non-whitelisted countries, allows 198 whitelisted terms |
 | **Cross-platform Unicode PDFs** | ✅ | Auto-downloads DejaVu fonts — works on Windows/macOS/Linux; covers accents, Arabic, Cyrillic |
@@ -612,8 +631,8 @@ npm ci --prefix tests/e2e
 npm test --prefix tests/e2e       # or ./tests/e2e/run.sh
 ```
 
-Latest local locked Linux run (2026-10-16): **1042 pytest passed, 8 skipped**
-and **68 frontend E2E passed**. Includes 22 tracker interactions (transitions,
+Latest local locked Linux run (2026-11-03): **1647 pytest passed, 32 skipped, 0 failed**
+and **91 frontend E2E passed**. Includes 22 tracker interactions (transitions,
 review columns, reload persistence, URL-keyed applications, failures and manual
 add) plus 22 Python API/runner contracts. The tracker fixture uses fake Sheets
 behind real routes/services, never personal resources. Six targeted environment
@@ -657,6 +676,14 @@ No intent is consumed and no claim is taken.
 - `python -m tools.seed_demo_job` — seeds Greenhouse's own demo posting
   (Democorp "Full Stack Engineer", job 83446) for a no-real-employer rehearsal.
 - **[`LIVE_SUBMIT.md`](LIVE_SUBMIT.md)** — the supervised live-run procedure.
+
+**Final Verification (2026-11-03):**
+- ✅ Greenhouse fill verified on `boards.greenhouse.io/example/jobs/83446` — profile fields (first_name, last_name, email, phone) filled and DOM-verified
+- ✅ Confirmation page reached (`/example/jobs/83446/confirmation`) with "Thank you for applying" message — **no submit click executed**
+- ✅ Screenshot captured: `screenshots/greenhouse_20261103_130124_..._before_submit.png`
+- ✅ Attachment logic correctly reports `"unavailable"` (example board lacks file upload/textarea)
+- ✅ Safety gates all engaged: `SUBMIT_ENABLED=False`, `AUTO_APPLY_ENABLED=false`, `submit_mode()="disarmed"`
+- ❌ No live submission has been performed; `SUBMIT_ENABLED` stays false
 
 No live submission has been performed. The user reported a real-Chrome
 Democorp **fill-only** run on 2026-10-15; the supplied screenshot shows populated

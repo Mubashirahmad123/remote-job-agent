@@ -7,7 +7,9 @@ in phase-1 style are NOT loaded here — refresh on empty cache is safe).
 import sys
 import os
 import threading
+import tempfile
 import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -196,18 +198,20 @@ class TestSummarizeBoards:
         boards = {
             "A": {"status": "ok", "fetched": 10},
             "B": {"status": "error", "fetched": 0},
-            "C": {"status": "empty", "fetched": 0},
-            "D": {"status": "skipped-js", "fetched": 0},
-            "E": {"status": "ok", "fetched": "7"},
-            "F": "garbage",
+            "C": {"status": "empty_confirmed", "fetched": 0},
+            "D": {"status": "skipped_js", "fetched": 0},
+            "E": {"status": "parse_zero", "fetched": 0},
+            "F": {"status": "ok", "fetched": "7"},
+            "G": "garbage",
         }
         s = runs._summarize_boards(boards, 45)
         assert s == {
             "boards_total": 45,
-            "boards_done": 5,
+            "boards_done": 6,
             "boards_ok": 2,
             "boards_failed": 1,
             "boards_empty": 2,
+            "boards_skipped": 1,
             "fetched": 17,
         }
 
@@ -226,7 +230,7 @@ def test_progress_counts_optional_tracker_passes_in_both_plan_and_final(monkeypa
         "JobSpy", "PlaywrightStealth", "Crawl4AI-JustRemote",
     }
     assert runs._board_total() == 5
-    statuses = ["ok", "empty", "skipped-disabled", "error", "ok"]
+    statuses = ["ok", "empty_confirmed", "skipped_disabled", "error", "ok"]
     names = ["BoardA", "BoardB", *scrapper.SYNTHETIC_TRACKER_BOARDS]
     tracker = YieldTracker()
 
@@ -246,7 +250,9 @@ def test_progress_counts_optional_tracker_passes_in_both_plan_and_final(monkeypa
     monkeypatch.setattr(runs, "_write_curated_cache", lambda jobs, top: None)
     final = runs._run_simple_pipeline(lambda *args: None, tracker)
     assert final["boards_total"] == final["boards_done"] == 5
-    assert (final["boards_ok"], final["boards_failed"], final["boards_empty"]) == (2, 1, 2)
+    assert (final["boards_ok"], final["boards_failed"],
+            final["boards_empty"]) == (2, 1, 1)
+    assert final["boards_skipped"] == 1
     assert final["fetched"] == 2
 
 
@@ -287,12 +293,15 @@ def test_real_scrape_orchestrator_emits_only_the_planned_tracker_rows(monkeypatc
     from tools.yield_tracker import YieldTracker
 
     configured = {'One': {'url': 'https://one.invalid'}, 'Two': {'url': 'https://two.invalid'}}
+    monkeypatch.setenv('PIPELINE_LEDGER_DB', str(Path(tempfile.mkdtemp()) / 'ledger.db'))
     monkeypatch.setattr(scrapper, 'MASTER_BOARDS', configured)
     monkeypatch.setattr(scrapper, 'JS_RENDERED_BOARDS', set())
     monkeypatch.setattr(scrapper, 'time', SimpleNamespace(sleep=lambda seconds: None))
     monkeypatch.setattr(scrapper, '_load_board_health', lambda: {})
     monkeypatch.setattr(scrapper, '_board_breaker_check', lambda *args: False)
-    monkeypatch.setattr(scrapper, 'fetch_jobs_from_board', lambda *args: [])
+    # status_out: scrape_all (Phase 1 board taxonomy) passes a dict stub so
+    # fetch outcome is classified; fakes accept and ignore it.
+    monkeypatch.setattr(scrapper, 'fetch_jobs_from_board', lambda *args, **kwargs: [])
     monkeypatch.setenv('ENABLE_JOBSPY', 'false')
     monkeypatch.setitem(sys.modules, 'tools.playwright_scraper',
                         SimpleNamespace(scrape_stealth_boards=lambda debug=False: []))

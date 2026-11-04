@@ -24,6 +24,36 @@ try:
 except ImportError:
     feedparser = None
 
+# ---- Detail page cache for truncated summaries ----
+try:
+    from tools.detail_cache import DetailCache
+    _detail_cache = DetailCache()
+    print("detail cache is available")
+except ImportError:
+    _detail_cache = None
+
+
+def _enrich_with_detail_cache(jobs, board_name):
+    """For jobs with a short summary (< 300 chars), fetch the detail page
+    through the cache and set job['description'] to the full text."""
+    if _detail_cache is None:
+        return jobs
+    enriched = 0
+    for job in jobs:
+        summary = job.get("summary") or ""
+        apply_url = job.get("apply_url") or ""
+        if not summary or len(summary) >= 300:
+            continue
+        if not apply_url:
+            continue
+        result = _detail_cache.get(apply_url)
+        if result and result.get("status") == 200 and result.get("content"):
+            job["description"] = result["content"][:20000]
+            enriched += 1
+    if enriched:
+        print(f"  {board_name}: enriched {enriched} jobs with detail cache")
+    return jobs
+
 
 # =============================================================================
 # RSS PARSER
@@ -151,6 +181,25 @@ _CARD_DESC_SELECTORS = [
 ]
 
 
+# Cap for stored full descriptions (chars). Full text is kept for the
+# evidence extractor; the Sheet still receives the short summary.
+FULL_DESCRIPTION_CAP = 20000
+
+
+def _full_description(text) -> str:
+    """Cleaned, capped FULL job description for the evidence layer.
+
+    Phase 2 (2026-10-31): boards that ship the whole posting (Arbeitnow
+    verified live: 7.2 KB description, Remotive, RemoteOK, Himalayas,
+    Jobicy, TheMuse, WorkingNomads, Adzuna) had it truncated to 200 chars
+    at ingestion, so no amount of extraction could recover the text. The
+    Sheet keeps the short summary; this full text feeds the extractor.
+    """
+    if not text:
+        return ""
+    return clean_html(str(text))[:FULL_DESCRIPTION_CAP]
+
+
 def _card_description(element, title="", company="", limit=300):
     """Best available description text from a job card.
 
@@ -227,11 +276,15 @@ def top_techs(text, limit=5):
 
 
 def clean_text(element):
-    """Clean text from HTML element or string"""
+    """Clean text from HTML element or string.
+
+    Uses a space separator so adjacent HTML elements don't concatenate
+    (e.g. "DisclosedBangaloreRequired" -> "Disclosed Bangalore Required").
+    """
     if element is None:
         return ""
     if hasattr(element, "get_text"):
-        return element.get_text(strip=True)
+        return element.get_text(" ", strip=True)
     return str(element).strip()
 
 
@@ -513,6 +566,9 @@ SENIORITY_FILTER = re.compile(r"""(?ix)
     \b(
         senior | sr\.? | lead | principal | staff | architect |
         director | manager | vp | head\ of | cto | ceo
+        # German architect / lead equivalents
+        architekt | leiter | gesch\u00e4ftsf\u00fchrer | projektleiter |
+        teamleiter | abteilungsleiter | oberarchitekt | hauptarchitekt
     )\b
 """)
 
@@ -566,9 +622,9 @@ ALLOWED_COUNTRY_TERMS = [
     "australia", "sydney", "melbourne", "brisbane", "perth", "adelaide",
     "new zealand", "nz", "auckland", "wellington", "christchurch",
     "singapore",
-    "usa", "united states", "america", "american",
+    "america", "american",
     "new york", "nyc", "san francisco", "bay area", "silicon valley",
-    "los angeles", "la", "chicago", "seattle", "austin", "boston",
+    "los angeles", "chicago", "seattle", "austin", "boston",
     "denver", "atlanta", "miami", "dallas", "houston", "phoenix",
     "philadelphia", "portland", "san diego", "washington dc",
     "canada", "toronto", "vancouver", "montreal", "ottawa", "calgary",
@@ -759,11 +815,16 @@ def is_allowed_location(job: dict) -> bool:
 
 
 def extract_location_tags(job):
-    """Extract location tags from job text for logging/sorting."""
+    """Extract location tags from job text for logging/sorting.
+
+    Word-boundary matching so short terms (e.g. "la", "uk") do not match
+    inside unrelated words ("lala", "lucky").
+    """
     text = f"{job.get('timezone','')} {job.get('summary','')} {job.get('job_title','')}".lower()
     found = []
     for term in ALLOWED_COUNTRY_TERMS:
-        if term.lower() in text:
+        pattern = r'\b' + re.escape(term.lower()) + r'\b'
+        if re.search(pattern, text):
             found.append(term)
     seen = set()
     unique = []
@@ -870,7 +931,8 @@ BOT_PROTECTED_BOARDS = {"FlexJobs", "EU Remote Jobs", "TrueUp", "RemoteRocketshi
 JS_RENDERED_BOARDS = {"YCombinator", "Wellfound", "NoDesk", "GulfTalent", "NoFluffJobs", "JustJoinIt"}
 
 
-def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, board_name=""):
+def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, board_name="",
+                     outcome_out=None):
     """
     Fetch URL with retry logic, random delays, and bot protection bypass.
 
@@ -878,11 +940,21 @@ def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, board_name=""
     be a `verify_ssl` argument plus two ways for it to be turned off (a
     per-board allow-list, and an automatic downgrade on the first TLS error);
     see the SSLError handler below for why both are gone.
+
+    `outcome_out` (optional dict) receives the last failure mode — "timeout",
+    "ssl", "http_<code>", "connection_error", "error" — so callers can
+    distinguish retry-exhaustion causes instead of reporting everything as
+    empty. Success leaves any prior content untouched (callers pass a dict
+    per fetch).
     """
     is_bot_protected = board_name in BOT_PROTECTED_BOARDS
 
     # Longer delays for bot-protected sites
     base_delay = random.uniform(3, 6) if is_bot_protected else random.uniform(1, 3)
+
+    def _outcome(mode):
+        if outcome_out is not None:
+            outcome_out["last"] = mode
 
     for attempt in range(max_retries):
         try:
@@ -912,6 +984,7 @@ def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, board_name=""
             # Handle 405 Method Not Allowed
             if response.status_code == 405:
                 print(f"  405 Method Not Allowed - site may require POST or different headers")
+                _outcome("http_405")
                 return None
 
             response.raise_for_status()
@@ -941,6 +1014,7 @@ def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, board_name=""
                 f"REQUESTS_CA_BUNDLE at a bundle containing the missing "
                 f"intermediate (that still verifies) or drop the board."
             )
+            _outcome("ssl")
             return None
 
         except requests.exceptions.Timeout:
@@ -948,11 +1022,13 @@ def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, board_name=""
             if attempt < max_retries - 1:
                 time.sleep(random.uniform(2, 5))
                 continue
+            _outcome("timeout")
             return None
 
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code if e.response else "unknown"
             print(f"  HTTP {status} on attempt {attempt + 1}")
+            _outcome(f"http_{status}")
             if status in (404, 410):
                 return None  # Permanent failure, don't retry
             if attempt < max_retries - 1:
@@ -965,6 +1041,7 @@ def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, board_name=""
             if attempt < max_retries - 1:
                 time.sleep(random.uniform(3, 7))
                 continue
+            _outcome("connection_error")
             return None
 
         except Exception as e:
@@ -972,9 +1049,30 @@ def fetch_with_retry(url, headers=None, timeout=30, max_retries=3, board_name=""
             if attempt < max_retries - 1:
                 time.sleep(random.uniform(1, 3))
                 continue
+            _outcome("error")
             return None
 
     return None
+
+
+# =============================================================================
+# OUTCOME -> BOARD STATUS (Phase 1 taxonomy)
+# =============================================================================
+
+def _fetch_outcome_status(last_outcome: str | None) -> str:
+    """Map fetch_with_retry exhaustion to a Phase-1 board status.
+
+    None outcome with an expiry means the fetch never produced a body:
+    timeout is distinguished, 403/405 (bot walls) are blocked, and anything
+    else is an honest fetch_failed — none of them is 'empty'.
+    """
+    if last_outcome == "timeout":
+        return "timeout"
+    if last_outcome in ("http_403", "http_405"):
+        return "blocked"
+    if last_outcome is None:
+        return "fetch_failed"
+    return "fetch_failed"
 
 
 # =============================================================================
@@ -1020,6 +1118,7 @@ def parse_json_remotive(board, data, debug=False):
             "timezone": j.get("candidate_required_location", "Worldwide"),
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("publication_date")),
             "source": board
         })
@@ -1067,6 +1166,7 @@ def parse_json_remoteok(board, data, debug=False):
             "timezone": j.get("location", "") or "Worldwide",
             "apply_url": j.get("url", "") or j.get("apply_url", "") or "",
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("date") or j.get("epoch"), board),
             "source": board
         })
@@ -1121,6 +1221,7 @@ def parse_json_arbeitnow(board, data, debug=False):
             "timezone": j.get("location", "Worldwide"),
             "apply_url": j.get("url", ""),
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("created_at")),
             "source": board
         })
@@ -1178,6 +1279,7 @@ def parse_json_himalayas(board, data, debug=False):
             "timezone": loc_text,
             "apply_url": j.get("applicationLink", "") or "",
             "summary": clean_html(description)[:300],
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("pubDate"), board),
             "source": board
         })
@@ -1211,6 +1313,7 @@ def parse_json_jobicy(board, data, debug=False):
             "timezone": j.get("jobGeo", "") or "Remote",
             "apply_url": j.get("url", "") or "",
             "summary": clean_html(description)[:300],
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("pubDate"), board),
             "source": board
         })
@@ -1241,6 +1344,7 @@ def parse_json_themuse(board, data, debug=False):
             "timezone": ", ".join(locations) or "Remote",
             "apply_url": j.get("refs", {}).get("landing_page", "") if isinstance(j.get("refs"), dict) else "",
             "summary": clean_html(contents)[:300],
+            "description": _full_description(contents),
             "posted_date_iso": normalize_date(j.get("publication_date"), board),
             "source": board
         })
@@ -1272,6 +1376,7 @@ def parse_json_adzuna(board, data, debug=False):
             "timezone": j.get("location", {}).get("display_name", "Remote") if isinstance(j.get("location"), dict) else "Remote",
             "apply_url": j.get("redirect_url", "") or "",
             "summary": clean_html(description)[:300],
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("created"), board),
             "source": board
         })
@@ -1288,7 +1393,11 @@ def parse_json_workingnomads(board, data, debug=False):
         return results
 
     for j in data:
-        title = j.get("position", "") or ""
+        # WorkingNomads API may return title in different fields depending on
+        # the API version. Try multiple field names to avoid empty titles.
+        title = (j.get("position") or j.get("job_title") or j.get("title") or
+                 j.get("position_title") or j.get("name") or j.get("role") or
+                 j.get("jobTitle") or j.get("jobTitleRaw") or j.get("headline") or "")
         description = j.get("description", "") or ""
         tags = j.get("tags") or []
         if isinstance(tags, str):
@@ -1310,6 +1419,7 @@ def parse_json_workingnomads(board, data, debug=False):
             "timezone": "Remote",
             "apply_url": j.get("url", "") or "",
             "summary": clean_html(description)[:200] + "..." if len(clean_html(description)) > 200 else clean_html(description),
+            "description": _full_description(description),
             "posted_date_iso": normalize_date(j.get("pub_date"), board),
             "source": board
         })
@@ -2198,7 +2308,23 @@ def parse_html_justjoinit(html, board="JustJoinIt", base_url="https://justjoin.i
 # MAIN FETCH LOGIC
 # =============================================================================
 
-def fetch_jobs_from_board(name, info, debug=False):
+def fetch_jobs_from_board(name, info, debug=False, status_out=None):
+    """Fetch+parse one board. `status_out` (optional dict) receives a coarse
+    outcome so callers can report boards by the Phase-1 taxonomy instead of
+    collapsing timeout / blocked / parse-zero and honest empties into
+    'empty': ok | empty_confirmed | parse_zero | timeout | blocked |
+    fetch_failed | error."""
+
+    def _status(status):
+        if status_out is not None:
+            status_out["status"] = status
+
+    def _finish(jobs):
+        """Classify a completed parse for status_out; body was fetched."""
+        _status("empty_confirmed" if typ in ("api", "rss") else "parse_zero"
+                if not jobs else "ok")
+        return jobs
+
     url = info['url']
     typ = info['type']
 
@@ -2210,48 +2336,53 @@ def fetch_jobs_from_board(name, info, debug=False):
                 app_key = os.getenv("ADZUNA_APP_KEY")
                 if not app_id or not app_key:
                     print("  Missing ADZUNA_APP_ID or ADZUNA_APP_KEY, skipping Adzuna")
+                    _status("skipped_disabled")
                     return []
                 url = (
                     f"{url}?app_id={app_id}&app_key={app_key}"
                     "&what=developer+remote&results_per_page=50&content-type=application/json"
                 )
-            response = fetch_with_retry(url, timeout=30, board_name=name)
+            outcome = {}
+            response = fetch_with_retry(url, timeout=30, board_name=name, outcome_out=outcome)
             if response is None:
+                _status(_fetch_outcome_status(outcome.get("last")))
                 return []
             data = response.json()
 
             if name == "Remotive":
-                return parse_json_remotive(name, data, debug)
+                return _finish(parse_json_remotive(name, data, debug))
             elif name == "RemoteOKAPI":
-                return parse_json_remoteok(name, data, debug)
+                return _finish(parse_json_remoteok(name, data, debug))
             elif name == "RemoteOK":
-                return parse_json_remoteok(name, data, debug)
+                return _finish(parse_json_remoteok(name, data, debug))
             elif name == "Arbeitnow":
-                return parse_json_arbeitnow(name, data, debug)
+                return _finish(parse_json_arbeitnow(name, data, debug))
             elif name == "WorkingNomads":
-                return parse_json_workingnomads(name, data, debug)
+                return _finish(parse_json_workingnomads(name, data, debug))
             elif name == "Himalayas":
-                return parse_json_himalayas(name, data, debug)
+                return _finish(parse_json_himalayas(name, data, debug))
             elif name == "Jobicy":
-                return parse_json_jobicy(name, data, debug)
+                return _finish(parse_json_jobicy(name, data, debug))
             elif name == "TheMuse":
-                return parse_json_themuse(name, data, debug)
+                return _finish(parse_json_themuse(name, data, debug))
             elif name == "Adzuna":
-                return parse_json_adzuna(name, data, debug)
+                return _finish(parse_json_adzuna(name, data, debug))
             elif name in ["Remote4me", "Remojobs-Frontend", "Remojobs-Backend", "Remojobs-Fullstack"]:
-                return parse_json_remotive(name, data, debug)
+                return _finish(parse_json_remotive(name, data, debug))
             else:
                 print(f"  No specific parser for {name}, skipping")
+                _status("skipped_disabled")
                 return []
 
         elif typ == "rss":
             print(f"Fetching (RSS): {name}")
             if name == "WeWorkRemotely":
-                return fetch_weworkremotely_rss(url)
+                return _finish(fetch_weworkremotely_rss(url))
             elif name == "RemoteTech":
-                return fetch_weworkremotely_rss(url)
+                return _finish(fetch_weworkremotely_rss(url))
             else:
                 print(f"  No RSS parser for {name}")
+                _status("skipped_disabled")
                 return []
 
         elif typ == "html":
@@ -2259,9 +2390,11 @@ def fetch_jobs_from_board(name, info, debug=False):
             if name == "AuthenticJobs":
                 rss = fetch_authentic_jobs_rss()
                 if rss:
-                    return rss
-            response = fetch_with_retry(url, timeout=40, board_name=name)
+                    return _finish(rss)
+            outcome = {}
+            response = fetch_with_retry(url, timeout=40, board_name=name, outcome_out=outcome)
             if response is None:
+                _status(_fetch_outcome_status(outcome.get("last")))
                 return []
             html = response.text
             print(f"  HTML length: {len(html)}")
@@ -2269,17 +2402,17 @@ def fetch_jobs_from_board(name, info, debug=False):
             base_url = f"https://{url.split('/')[2]}"
 
             if name == "WeWorkRemotely":
-                return parse_html_weworkremotely(html)
+                return _finish(parse_html_weworkremotely(html))
             elif name == "Wellfound":
-                return parse_html_wellfound(html)
+                return _finish(parse_html_wellfound(html))
             elif name == "NoDesk":
-                return parse_html_nodesk(html)
+                return _finish(parse_html_nodesk(html))
             elif name == "Himalayas":
-                return parse_html_himalayas(html)
+                return _finish(parse_html_himalayas(html))
             elif name == "RemoteTech" or name == "GoRemote":
-                return parse_html_generic(html, name, base_url)
+                return _finish(parse_html_generic(html, name, base_url))
             elif name == "Arc":
-                return parse_html_arc(html, base_url, name)
+                return _finish(parse_html_arc(html, base_url, name))
             elif name == "Lemon":
                 # Role pages each hold a handful of teasers; combine a few.
                 combined, seen_urls = [], set()
@@ -2297,23 +2430,27 @@ def fetch_jobs_from_board(name, info, debug=False):
                         continue
                     time.sleep(random.uniform(1, 2))
                 print(f"  {name}: Extracted {len(combined)} jobs from {len(LEMON_ROLE_PAGES)} role pages")
-                return combined
+                return _finish(combined)
             elif name == "JustRemote":
-                return parse_html_justremote(html, base_url, name)
+                return _finish(parse_html_justremote(html, base_url, name))
             elif name == "JustJoinIt":
-                return parse_html_justjoinit(html, name, base_url)
+                return _finish(parse_html_justjoinit(html, name, base_url))
             elif name == "YCombinator":
-                return parse_html_ycombinator(html, base_url, name)
+                return _finish(parse_html_ycombinator(html, base_url, name))
             else:
-                return parse_html_generic(html, name, base_url)
+                jobs = parse_html_generic(html, name, base_url)
+                jobs = _enrich_with_detail_cache(jobs, name)
+                return _finish(jobs)
         else:
             print(f"  Unknown type for {name}")
+            _status("skipped_disabled")
             return []
 
     except Exception as e:
         print(f"  {name} scrape error: {e}")
         import traceback
         traceback.print_exc()
+        _status("timeout" if "timeout" in str(e).lower() else "error")
         return []
 
 
@@ -2417,7 +2554,8 @@ def _run_optional_scraper(label, scrape_func, jobs, working_scrapers, failed_scr
             print(f"  {label} timed out after {budget:.0f}s — skipping, run continues")
             failed_scrapers.append(label)
             if tracker:
-                tracker.scrape(label, "error", 0)
+                # Phase 1 taxonomy: a timed-out board never was empty.
+                tracker.scrape(label, "timeout", 0)
                 try:
                     tracker.boards[label]["error"] = f"timeout after {budget:.0f}s"
                 except Exception:
@@ -2436,7 +2574,9 @@ def _run_optional_scraper(label, scrape_func, jobs, working_scrapers, failed_scr
             print(f"  No jobs found from {label}")
             failed_scrapers.append(label)
             if tracker:
-                tracker.scrape(label, "empty", 0)
+                # Phase 1 taxonomy: browser-rendered page fetched, parser
+                # found nothing — not a legitimated empty list.
+                tracker.scrape(label, "parse_zero", 0)
     except Exception as e:
         print(f"{label} completely failed: {e}")
         import traceback
@@ -2535,6 +2675,27 @@ def scrape_all(debug=False, tracker=None):
     if own_tracker:
         tracker = YieldTracker()
 
+    # Phase 1: every run gets an append-only per-job funnel ledger; the
+    # run id travels on the tracker so curate() records its stages on
+    # the same run instead of inventing a second one.
+    from tools.pipeline_ledger import PipelineLedger, consecutive_bad_boards
+    tracker.run_id = PipelineLedger.new_run_id()
+    ledger = PipelineLedger(run_id=tracker.run_id)
+
+        # One Event per real outcome, one terminal row per job. Skipped
+    # boards keep their skip cause; a board that fetched a body but
+    # parsed zero is parse_zero, never 'empty'.
+    def _board_outcome(name, status, count, tracker_status=None, error=None):
+        tracker.scrape(
+            name, tracker_status or status, count,
+        )
+        if error is not None:
+            try:
+                tracker.boards[name]["error"] = str(error)[:200]
+            except Exception:
+                pass
+        ledger.record_board(name, status, count)
+
     jobs = []
     working_scrapers = []
     failed_scrapers = []
@@ -2565,7 +2726,7 @@ def scrape_all(debug=False, tracker=None):
             first = fetched_urls[board_url]
             print(f"\n--- Processing {name} ---")
             print(f"  Skipped: same URL already fetched as '{first}' this run")
-            tracker.scrape(name, "skipped-duplicate", 0)
+            _board_outcome(name, "skipped_duplicate", 0)
             continue
         if board_url:
             fetched_urls[board_url] = name
@@ -2574,15 +2735,16 @@ def scrape_all(debug=False, tracker=None):
             # here would only burn a 2-4s sleep for a guaranteed-empty result.
             print(f"\n--- Processing {name} ---")
             print(f"  Skipped in requests loop (covered by PlaywrightStealth pass)")
-            tracker.scrape(name, "skipped-js", 0)
+            _board_outcome(name, "skipped_js", 0)
             continue
         print(f"\n--- Processing {name} ---")
         if _board_breaker_check(name, board_health):
             failed_scrapers.append(name)
-            tracker.scrape(name, "skipped-breaker", 0)
+            _board_outcome(name, "skipped_breaker", 0)
             continue
         try:
-            jobs_from_board = fetch_jobs_from_board(name, info, debug)
+            board_status = {}
+            jobs_from_board = fetch_jobs_from_board(name, info, debug, status_out=board_status)
             count = len(jobs_from_board)
 
             if count > 0:
@@ -2590,11 +2752,11 @@ def scrape_all(debug=False, tracker=None):
                 working_scrapers.append(name)
                 jobs.extend(jobs_from_board)
                 _board_breaker_record(name, board_health, success=True)
-                tracker.scrape(name, "ok", count)
+                _board_outcome(name, "ok", count)
             else:
                 print(f"  No jobs found from {name}")
                 failed_scrapers.append(name)
-                tracker.scrape(name, "empty", 0)
+                _board_outcome(name, board_status.get("status", "error"), 0)
 
         except Exception as e:
             _board_breaker_record(name, board_health, success=False)
@@ -2602,7 +2764,8 @@ def scrape_all(debug=False, tracker=None):
             import traceback
             traceback.print_exc()
             failed_scrapers.append(name)
-            tracker.scrape(name, "error", 0)
+            _board_outcome(name, "timeout" if "timeout" in str(e).lower() else "error",
+                           0, error=e)
 
         time.sleep(random.uniform(2, 4))
 
@@ -2614,7 +2777,7 @@ def scrape_all(debug=False, tracker=None):
         print("\n--- Processing JobSpy ---")
         print("  Skipped (set ENABLE_JOBSPY=true to opt in — native crash risk)")
         failed_scrapers.append(JOBSPY_TRACKER)
-        tracker.scrape(JOBSPY_TRACKER, "skipped-disabled", 0)
+        _board_outcome(JOBSPY_TRACKER, "skipped_disabled", 0)
     else:
         print("\n--- Processing JobSpy ---")
         try:
@@ -2628,19 +2791,19 @@ def scrape_all(debug=False, tracker=None):
                 print(f"Parsed {len(scraped)} jobs from JobSpy")
                 jobs.extend(scraped)
                 working_scrapers.append(JOBSPY_TRACKER)
-                tracker.scrape(JOBSPY_TRACKER, "ok", len(scraped))
+                _board_outcome(JOBSPY_TRACKER, "ok", len(scraped))
             else:
                 print("  No jobs found from JobSpy")
                 failed_scrapers.append(JOBSPY_TRACKER)
-                tracker.scrape(JOBSPY_TRACKER, "empty", 0)
+                _board_outcome(JOBSPY_TRACKER, "empty_confirmed", 0)
+        except TimeoutError as e:
+            print(f"JobSpy timed out (run continues): {e}")
+            failed_scrapers.append(JOBSPY_TRACKER)
+            _board_outcome(JOBSPY_TRACKER, "timeout", 0, error=e)
         except Exception as e:
             print(f"JobSpy failed (run continues): {e}")
             failed_scrapers.append(JOBSPY_TRACKER)
-            try:
-                tracker.scrape(JOBSPY_TRACKER, "error", 0)
-                tracker.boards[JOBSPY_TRACKER]["error"] = str(e)[:200]
-            except Exception:
-                pass
+            _board_outcome(JOBSPY_TRACKER, "error", 0, error=e)
 
     try:
         from tools.playwright_scraper import scrape_stealth_boards
@@ -2655,7 +2818,7 @@ def scrape_all(debug=False, tracker=None):
         print(f"Playwright stealth setup failed: {e}")
         print(f"  WARNING: JS boards {sorted(JS_RENDERED_BOARDS)} uncovered this run (Playwright unavailable).")
         failed_scrapers.append(PLAYWRIGHT_TRACKER)
-        tracker.scrape(PLAYWRIGHT_TRACKER, "error", 0)
+        _board_outcome(PLAYWRIGHT_TRACKER, "error", 0, error=e)
 
     try:
         from tools.crawl4ai_scraper import scrape_justremote_with_crawl4ai
@@ -2663,7 +2826,7 @@ def scrape_all(debug=False, tracker=None):
     except Exception as e:
         print(f"Crawl4AI setup failed: {e}")
         failed_scrapers.append(CRAWL4AI_TRACKER)
-        tracker.scrape(CRAWL4AI_TRACKER, "error", 0)
+        _board_outcome(CRAWL4AI_TRACKER, "error", 0, error=e)
 
     # §6 (AUDIT 2026-10-18): the only LLM-consuming scrape path is
     # Crawl4AI-JustRemote (markdown extraction via the fallback chain).
@@ -2686,15 +2849,50 @@ def scrape_all(debug=False, tracker=None):
     except Exception:
         pass
 
+    # Optional scrapers (Playwright/Crawl4AI) record their outcomes only in
+    # the tracker; mirror them into the ledger so one run's board table is
+    # complete. Legacy hyphenated tracker statuses map to the taxonomy.
+    for _name, _entry in tracker.snapshot().items():
+        _status = (_entry.get("status") or "").strip()
+        if not _status or _status == "running":
+            continue
+        if _name in ledger.board_status_for_run(tracker.run_id):
+            continue
+        _taxonomy = _status.replace("-", "_")
+        if _taxonomy == "empty":  # legacy "empty" was always ambiguous; here it
+            _taxonomy = "parse_zero"  # only occurs for optional scrapers' zero
+        try:
+            ledger.record_board(_name, _taxonomy, _entry.get("fetched", 0))
+        except ValueError as exc:
+            print(f"  ⚠️ Board status {_status!r} for {_name} outside taxonomy: {exc}")
+
     total_before_filter = len(jobs)
-    jobs = [job for job in jobs if is_valid_dev_job(job)]
+    ledger.record_jobs(jobs, "raw_fetched")
+    # Stamp every job with the run id: scrape and curate can run in
+    # separate processes (main.py pipes scraped_jobs.json through a file),
+    # so the curator needs the run id ON the job to land its stages in the
+    # same ledger run.
+    for job in jobs:
+        job["ledger_run_id"] = tracker.run_id
+
+    # Partition once; the dropped halves are recorded per-job so false
+    # rejections upstream of the curator become queryable.
+    dev_kept, dev_dropped = [], []
+    for job in jobs:
+        (dev_kept if is_valid_dev_job(job) else dev_dropped).append(job)
+    jobs = dev_kept
+    dev_dropped_count = len(dev_dropped)
+    ledger.record_jobs(dev_dropped, "dev_filter_drop", reason_code="is_valid_dev_job False")
     tracker.stage("dev_filter", count_by_source(jobs))
 
     # === COUNTRY FILTER ===
-    country_before = len(jobs)
-    jobs = [job for job in jobs if is_allowed_location(job)]
-    country_blocked = country_before - len(jobs)
+    country_kept, country_dropped = [], []
+    for job in jobs:
+        (country_kept if is_allowed_location(job) else country_dropped).append(job)
+    jobs = country_kept
+    country_blocked = len(country_dropped)
     print(f"Country filter: blocked {country_blocked} jobs | remaining: {len(jobs)}")
+    ledger.record_jobs(country_dropped, "country_drop", reason_code="is_allowed_location False")
     tracker.stage("country", count_by_source(jobs))
 
     # === DATE FILTER (opt-in — B8, AUDIT 2026-10-18) ===
@@ -2709,11 +2907,16 @@ def scrape_all(debug=False, tracker=None):
     except ValueError:
         max_age_days = 0
     if max_age_days > 0:
-        age_before = len(jobs)
-        jobs = [job for job in jobs
-                if (age := days_ago(job.get("posted_date_iso"))) is None
-                or age <= max_age_days]
-        print(f"Date filter (>{max_age_days}d old): dropped {age_before - len(jobs)} jobs | remaining: {len(jobs)}")
+        age_kept, age_dropped = [], []
+        for job in jobs:
+            age = days_ago(job.get("posted_date_iso"))
+            if age is None or age <= max_age_days:
+                age_kept.append(job)
+            else:
+                age_dropped.append(job)
+        print(f"Date filter (>{max_age_days}d old): dropped {len(age_dropped)} jobs | remaining: {len(age_kept)}")
+        ledger.record_jobs(age_dropped, "date_drop", reason_code="older_than_max_age")
+        jobs = age_kept
         tracker.stage("date", count_by_source(jobs))
 
     # Add location tags for all jobs
@@ -2724,6 +2927,25 @@ def scrape_all(debug=False, tracker=None):
     print(f"Working scrapers ({len(working_scrapers)}): {working_scrapers}")
     print(f"Failed scrapers ({len(failed_scrapers)}): {failed_scrapers}")
     print(f"Total jobs scraped: {len(jobs)}")
+    print(f"Funnel: {total_before_filter} fetched -> dev filter dropped "
+          f"{dev_dropped_count} -> country filter dropped {country_blocked} "
+          f"-> {len(jobs)} to curate")
+
+    # Phase 1: board split by taxonomy + visible health flag. Skipped
+    # boards are never counted as empty.
+    _run_boards = ledger.board_status_for_run(tracker.run_id)
+    if _run_boards:
+        _by_status = {}
+        for name, entry in _run_boards.items():
+            _by_status.setdefault(entry["status"], []).append(name)
+        print("Board split (Phase 1 taxonomy):")
+        for status in sorted(_by_status):
+            names = ", ".join(sorted(_by_status[status]))
+            print(f"  {status}: {len(_by_status[status])} ({names})")
+        flagged = consecutive_bad_boards(ledger.board_history())
+        if flagged:
+            print("  WARNING: zero-or-failure on >=3 consecutive runs - "
+                  + ", ".join(f"{b} (x{s})" for b, s in sorted(flagged.items())))
 
     if own_tracker:
         tracker.save()

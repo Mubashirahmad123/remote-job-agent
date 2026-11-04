@@ -9,9 +9,10 @@ import math
 import re
 from typing import Literal
 
-from tools.matching_policy import CandidatePolicy, JobEvidence, EligibilityResult, evaluate_eligibility
+from tools.matching_policy import (CandidatePolicy, Decision, EligibilityResult,
+                                   JobEvidence, evaluate_eligibility)
 
-SCORER_VERSION = "requirements-v2"
+SCORER_VERSION = "requirements-v3"
 ALIASES = {
     "nodejs": "node", "node.js": "node", "reactjs": "react", "react.js": "react",
     "nextjs": "next", "next.js": "next", "postgres": "postgresql",
@@ -28,15 +29,25 @@ def normalize_skill(skill: str) -> str:
 
 @dataclass(frozen=True)
 class Requirement:
-    """One requirement; alternatives mean OR, separate requirements mean AND."""
+    """One requirement; alternatives mean OR, separate requirements mean AND.
+
+    Phase 3 adds `type`: only "technology" requirements count towards
+    coverage. Practices ("agile", "scrum") and soft skills are recorded as
+    evidence but never create a coverage gap and never trigger the
+    essential-gap rejection — a missing "git" is not a reason to reject a
+    suitable job.
+    """
     alternatives: frozenset[str]
     evidence: str
     weight: float = 1.0
     essential: bool = False
+    type: Literal["technology", "practice", "soft"] = "technology"
 
     def __post_init__(self):
         if type(self.essential) is not bool:
             raise ValueError("essential must be boolean")
+        if self.type not in {"technology", "practice", "soft"}:
+            raise ValueError("type must be technology, practice or soft")
         normalized = frozenset(normalize_skill(s) for s in self.alternatives)
         if not normalized or "" in normalized or not self.evidence.strip():
             raise ValueError("Requirements need nonempty alternatives and supporting evidence")
@@ -83,13 +94,22 @@ class Coverage:
 
 def requirement_coverage(requirements: tuple[Requirement, ...] | None,
                          skills: frozenset[str]) -> Coverage:
+    """Technology coverage only.
+
+    Practices and soft skills are evidence, not fit: they are excluded from
+    the totals, so they can neither inflate the score nor create a gap that
+    would push a job into review/rejection.
+    """
     normalized_skills = frozenset(normalize_skill(s) for s in skills)
     if not requirements:
+        return Coverage(None, 0, 0, (), ())
+    technology = tuple(r for r in requirements if r.type == "technology")
+    if not technology:
         return Coverage(None, 0, 0, (), ())
     # Duplicate extracted groups cannot inflate coverage; retain the first
     # evidence/weight deterministically. Extractors must resolve disagreements.
     unique = {}
-    for r in requirements:
+    for r in technology:
         previous = unique.get(r.alternatives)
         if previous is None or (r.essential and not previous.essential):
             unique[r.alternatives] = r
@@ -103,7 +123,7 @@ def requirement_coverage(requirements: tuple[Requirement, ...] | None,
 
 @dataclass(frozen=True)
 class MatchResult:
-    decision: Literal["eligible", "review", "rejected"]
+    decision: Decision
     eligibility: EligibilityResult
     required: Coverage
     preferred: Coverage
@@ -129,13 +149,36 @@ def score_match(job: JobEvidence, profile: MatchProfile,
     essential_gaps = tuple(r for r in required.gaps if r.essential)
     if essential_gaps and requirements.complete:
         rejected = True
-    elif not rejected and any(not (r.alternatives & profile.learnable_skills) for r in required.gaps):
-        reasons.append("required_skill_gaps")
+    elif not rejected and required.gaps:
+        # Any required gap (learnable or not) prevents eligible/likely_fit.
+        # Learnable gaps are a separate signal; non-learnable are harder.
+        learnable_gap_count = sum(1 for r in required.gaps
+                                  if r.alternatives & profile.learnable_skills)
+        non_learnable_gap_count = len(required.gaps) - learnable_gap_count
+        if non_learnable_gap_count:
+            reasons.append("required_skill_gaps")
+        else:
+            reasons.append("partial_required_coverage")
     if essential_gaps:
         reasons.append("essential_skill_mismatch" if requirements.complete else "essential_requirements_unverified")
     if not rejected and required.score == 0:
         reasons.append("no_required_skill_overlap")
-    decision = "rejected" if rejected else "review" if reasons else "eligible"
+
+    # LIKELY_FIT: eligibility says likely_fit AND requirements pass
+    # (all essential met, coverage > 0, no required gaps). Never eligible/auto-eligible.
+    if eligibility.decision == "likely_fit":
+        reqs_pass = (requirements.required is not None
+                     and required.score is not None
+                     and required.score > 0
+                     and not essential_gaps
+                     and not required.gaps)
+        if reqs_pass:
+            decision: Decision = "likely_fit"
+        else:
+            decision = "review"
+    else:
+        decision = ("rejected" if rejected else "review" if reasons else "eligible")
+
     return MatchResult(decision, eligibility, required, preferred, completeness,
                        profile.version, requirements.extractor_version,
                        review_reasons=tuple(reasons))

@@ -135,9 +135,11 @@ class RateLimiter:
                 # value inside [1, window]; the fraction-of-a-second remainder
                 # still rounds up to a usable 1. Same pattern as fill_claims
                 # and apply_claims.
-                retry_after = max(1, math.ceil(history[0] + self.window - now))
+                # min(..., self.window): floating-point epsilon can push the
+                # ceil result to window+1 (e.g., 600.0000001 -> 601); clamp it.
+                retry_after = int(max(1, min(self.window, math.ceil(history[0] + self.window - now))))
                 self._hits[key] = history
-                return Decision(False, 0, max(1, retry_after))
+                return Decision(False, 0, retry_after)
             history.append(now)
             self._hits[key] = history
             return Decision(True, self.limit - len(history), 0)

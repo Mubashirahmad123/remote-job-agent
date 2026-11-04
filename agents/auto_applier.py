@@ -741,7 +741,7 @@ def _fill_greenhouse_form(page, job_url: str, resume_path: Optional[str],
             if seen == expected:
                 return True
             # Phone widgets (intl-tel-input) reformat as you type
-            # ("+919622907883" -> "+91 96229 07883"); compare digits.
+            # ("+910000000000" -> "+91 00000 00000"); compare digits.
             if field_name == "phone":
                 import re as _re
 

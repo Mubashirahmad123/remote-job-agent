@@ -103,7 +103,7 @@ class MatchingScoreTests(unittest.TestCase):
         payload = json.loads(json.dumps(asdict(result), default=lambda value: sorted(value)))
         self.assertEqual(payload["profile_version"], "profile-test-v1")
         self.assertEqual(payload["extractor_version"], "manual-v1")
-        self.assertEqual(payload["scorer_version"], "requirements-v2")
+        self.assertEqual(payload["scorer_version"], "requirements-v3")
         self.assertTrue(payload["required"]["hits"][0]["evidence"])
 
 

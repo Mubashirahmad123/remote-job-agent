@@ -1,0 +1,77 @@
+- generic [ref=f1e2]:
+  - complementary [ref=f1e3]:
+    - button "Collapse sidebar" [expanded] [ref=f1e4] [cursor=pointer]:
+      - generic [ref=f1e8]: JOB AGENT PRO v3.3
+    - navigation [ref=f1e11]:
+      - button "Command Deck" [ref=f1e12] [cursor=pointer]:
+        - generic [ref=f1e19]: —
+      - button "Scrape Monitor" [ref=f1e20] [cursor=pointer]:
+        - generic "Scrape status" [ref=f1e24]
+      - button "Curated Jobs" [ref=f1e25] [cursor=pointer]:
+        - generic [ref=f1e29]: — Hot
+      - button "CV & Resume Studio" [ref=f1e30] [cursor=pointer]
+      - button "Auto-Apply Cockpit" [ref=f1e35] [cursor=pointer]:
+        - generic "Safety Gate Active" [ref=f1e39]
+      - button "Pipeline Tracker" [ref=f1e40] [cursor=pointer]
+    - generic "Live scrape-run status (GET /api/scrape)" [ref=f1e45]:
+      - generic [ref=f1e46]: Scraper 45+ Active
+      - generic [ref=f1e49]: "Next run: Mon 09:00 UTC"
+      - generic [ref=f1e52]:
+        - text: "Daily Apply Cap:"
+        - strong [ref=f1e53]: 0 / 5
+  - main [ref=f1e54]:
+    - generic [ref=f1e55]:
+      - heading "Command Deck" [level=1] [ref=f1e58]
+      - generic [ref=f1e59]:
+        - button "Sync Sheets" [ref=f1e60] [cursor=pointer]
+        - button "Scrape Now" [ref=f1e64] [cursor=pointer]
+        - button "Toggle dark or light mode" [ref=f1e68] [cursor=pointer]
+        - button "Sign out" [ref=f1e71] [cursor=pointer]
+    - generic [ref=f1e76]:
+      - generic [ref=f1e77]:
+        - generic [ref=f1e78]:
+          - generic [ref=f1e79]:
+            - generic [ref=f1e80]: Jobs scraped
+            - generic [ref=f1e81]: 45 boards
+          - generic [ref=f1e82]:
+            - generic [ref=f1e83]: 1,248
+            - generic [ref=f1e84]: +48 today
+          - generic [ref=f1e85]: Rejection engine filtered out 68% irrelevant / senior roles
+        - generic [ref=f1e86]:
+          - generic [ref=f1e87]:
+            - generic [ref=f1e88]: ATS matches ≥85%
+            - generic [ref=f1e89]: Hot picks
+          - generic [ref=f1e90]:
+            - generic [ref=f1e91]: "42"
+            - generic [ref=f1e92]: Ready for instant apply
+          - generic [ref=f1e93]: CV Matcher keyword score + semantic FAISS similarity
+        - generic [ref=f1e94]:
+          - generic [ref=f1e95]:
+            - generic [ref=f1e96]: Daily apply cap
+            - generic [ref=f1e97]: Safety cap
+          - generic [ref=f1e98]:
+            - generic [ref=f1e99]: 0 / 5
+            - generic [ref=f1e100]: "Remaining: 5 slots"
+          - generic [ref=f1e101]: Prevents rate-limiting & protects candidate reputation
+        - generic [ref=f1e102]:
+          - generic [ref=f1e103]: Pipeline
+          - generic [ref=f1e105]:
+            - generic [ref=f1e106]: —
+            - generic [ref=f1e107]: Interviews Scheduled
+          - generic [ref=f1e108]: Waiting for tracker data…
+      - generic [ref=f1e109]:
+        - generic [ref=f1e111]:
+          - generic [ref=f1e112]:
+            - heading "Live Scraper Engine Health" [level=3] [ref=f1e113]
+            - generic [ref=f1e114]: Monitoring 45+ remote job portals with Playwright Stealth & Crawl4AI
+          - generic [ref=f1e115]: Online
+        - generic [ref=f1e119]:
+          - heading "High-Yield Skill Demand" [level=3] [ref=f1e120]
+          - generic [ref=f1e121]: Based on current active listings
+  - complementary [ref=f1e122]:
+    - generic [ref=f1e123]:
+      - button "Close Drawer [ESC]" [ref=f1e124] [cursor=pointer]
+      - generic [ref=f1e128]:
+        - button "Tailor target" [ref=f1e129] [cursor=pointer]
+        - link "Apply on Site" [ref=f1e130] [cursor=pointer]:
+          - /url: "#"

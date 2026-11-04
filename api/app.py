@@ -51,6 +51,11 @@ import warnings
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from dotenv import load_dotenv
+# Load .env BEFORE any MATCHING_* or other env read so the server process
+# sees the same configuration as the CLI pipeline.
+load_dotenv()
+
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response
@@ -323,6 +328,10 @@ async def _lifespan(app: FastAPI):
     print(f"[api] submit mode: {mode}", flush=True)
     if mode == "armed":
         warnings.warn("LIVE SUBMISSION IS ARMED: the submit route may send applications.", stacklevel=2)
+
+    # Shadow matching configuration (Phase 4 observability).
+    from tools.matching_shadow import log_shadow_config
+    log_shadow_config()
 
     try:
         is_open = open_access()

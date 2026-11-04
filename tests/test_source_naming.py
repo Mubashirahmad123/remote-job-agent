@@ -171,12 +171,14 @@ class TestFetchDeduplication:
         dupes = {u: n for u, n in by_url.items() if len(n) > 1 and u}
         assert dupes, "fixture assumption: duplicate URLs exist in the config"
 
-        # The loop must contain the skip, keyed on URL.
+        # The loop must contain the skip, keyed on URL. Phase 1 board
+        # taxonomy (2026-10-31) renamed the tracker status to underscore
+        # form so skips never count as empty board outcomes.
         import inspect
 
         src = inspect.getsource(sc.scrape_all)
         assert "fetched_urls" in src
-        assert "skipped-duplicate" in src
+        assert "skipped_duplicate" in src
 
     def test_board_entries_are_retained_for_history(self):
         import agents.scrapper as sc

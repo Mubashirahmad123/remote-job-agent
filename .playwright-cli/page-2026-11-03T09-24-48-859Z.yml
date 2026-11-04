@@ -1,0 +1,15 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]: JOB AGENT
+    - heading "Sign in" [level=1] [ref=e9]
+    - paragraph [ref=e10]: Use the username and password created on this server.
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - generic [ref=e13]: Username
+        - textbox "Username" [ref=e14]: admin
+      - generic [ref=e15]:
+        - generic [ref=e16]: Password
+        - textbox "Password" [active] [ref=e17]
+      - alert [ref=e18]: Invalid username or password.
+      - button "Sign in" [ref=e19] [cursor=pointer]
+    - paragraph [ref=e24]: Sessions last 7 days. Sign out from the dashboard header to end yours early.

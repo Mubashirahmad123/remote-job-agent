@@ -402,8 +402,9 @@ def generate_cover_letter(job_title, company, job_description, applicant_name="M
         # Build personalized skills section
         skills_section = _build_skill_section(cv_profile, tech_stack, role_category)
         
-        # Build experience highlight
+        # Build experience highlight with factual experience data
         experience_section = ""
+        actual_years = 0
         if cv_profile and cv_profile.get("experience"):
             # Find most relevant experience
             experiences = cv_profile.get("experience", [])
@@ -412,6 +413,32 @@ def generate_cover_letter(job_title, company, job_description, applicant_name="M
                 exp_title = top_exp.get("title", "Developer")
                 exp_company = top_exp.get("company", "Previous Company")
                 experience_section = f"Most recently, I worked as {exp_title} at {exp_company}."
+            # Calculate actual years from CV for factual accuracy
+            from tools.cv_parser import parse_cv
+            import re
+            # Calculate from experience durations
+            intervals = []
+            for exp in cv_profile.get("experience", []):
+                duration = exp.get("duration", "")
+                match = re.search(r'([A-Za-z]+)\.\s*(\d{4})\s*[–-]\s*([A-Za-z]+)\.\s*(\d{4})', duration)
+                if match:
+                    start_month, start_year, end_month, end_year = match.groups()
+                    month_idx = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].index(start_month[:3])
+                    start = int(start_year) + (month_idx / 12)
+                    month_idx = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].index(end_month[:3])
+                    end = int(end_year) + (month_idx / 12)
+                    intervals.append((start, end))
+            # Merge overlapping
+            intervals.sort()
+            merged = []
+            for start, end in intervals:
+                if merged and start <= merged[-1][1]:
+                    merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+                else:
+                    merged.append((start, end))
+            actual_years = sum(end - start for start, end in merged)
+        else:
+            actual_years = cv_profile.get("years_experience", 0) if cv_profile else 0
 
         prompt = f"""Write a concise, enthusiastic cover letter (150-200 words) for a {role_noun} position.
 
@@ -423,6 +450,8 @@ JOB DESCRIPTION: {job_description[:500]}
 {skills_section}
 {experience_section}
 
+FACTUAL CONSTRAINT: Your actual total professional experience is {actual_years:.1f} years. Do NOT claim more experience than this. Do NOT invent years of experience.
+
 REQUIREMENTS:
 - Open with specific interest in THIS company and THIS role
 - Mention 2-3 relevant technologies from the job description that I have experience with
@@ -431,6 +460,7 @@ REQUIREMENTS:
 - Sign as {applicant_name}
 - Do NOT use generic phrases like "I am writing to express my interest"
 - Do NOT mention technologies not relevant to this specific role
+- Do NOT claim more years of experience than {actual_years:.1f}
 
 Return ONLY the cover letter text, no explanations.""" 
 

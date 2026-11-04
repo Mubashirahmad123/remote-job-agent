@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greenhouse Test Form</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; font-weight: 500; }
+        input, textarea, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; box-sizing: border-box; }
+        .row { display: flex; gap: 15px; }
+        .row > .form-group { flex: 1; }
+        button[type="submit"] { background: #007bff; color: white; padding: 12px 24px; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+        button[type="submit"]:hover { background: #0056b3; }
+        .confirmation { display: none; padding: 20px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; margin-top: 20px; }
+        .confirmation.show { display: block; }
+        .file-input-wrapper { position: relative; }
+        .file-input-wrapper input[type="file"] { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+        .file-input-label { display: inline-block; background: #f8f9fa; border: 1px solid #ccc; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+        .file-name { margin-left: 10px; color: #666; }
+        .success-chip { display: inline-block; background: #28a745; color: white; padding: 4px 12px; border-radius: 16px; font-size: 12px; margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Greenhouse Application Form (Test Fixture)</h1>
+    
+    <form id="application-form">
+        <h2>Personal Information</h2>
+        <div class="row">
+            <div class="form-group">
+                <label for="first_name">First Name *</label>
+                <input type="text" id="first_name" name="first_name" required>
+            </div>
+            <div class="form-group">
+                <label for="last_name">Last Name *</label>
+                <input type="text" id="last_name" name="last_name" required>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="email">Email *</label>
+            <input type="email" id="email" name="email" required>
+        </div>
+        <div class="form-group">
+            <label for="phone">Phone</label>
+            <input type="tel" id="phone" name="phone">
+        </div>
+        <div class="form-group">
+            <label for="linkedin">LinkedIn</label>
+            <input type="url" id="linkedin" name="linkedin" placeholder="https://linkedin.com/in/...">
+        </div>
+        <div class="form-group">
+            <label for="portfolio">Portfolio / Website</label>
+            <input type="url" id="portfolio" name="portfolio" placeholder="https://github.com/...">
+        </div>
+
+        <h2>Application Materials</h2>
+        <div class="form-group">
+            <label>Resume *</label>
+            <div class="file-input-wrapper">
+                <input type="file" id="resume" name="resume" accept=".pdf,.doc,.docx" required>
+                <span class="file-input-label">Choose Resume File</span>
+                <span class="file-name" id="resume-name">No file chosen</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="cover_letter">Cover Letter *</label>
+            <textarea id="cover_letter" name="cover_letter" rows="6" required placeholder="Paste your cover letter here..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="consent" name="consent" required>
+                I consent to the processing of my personal data for this application.
+            </label>
+        </div>
+
+        <button type="submit" id="submit-btn">Submit Application</button>
+    </form>
+
+    <div id="confirmation" class="confirmation">
+        <h2>Thank you for applying.</h2>
+        <p>Your application has been received. If there is a fit, someone will be getting back to you.</p>
+    </div>
+
+    <script>
+        const resumeInput = document.getElementById('resume');
+        const resumeName = document.getElementById('resume-name');
+        
+        resumeInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                resumeName.textContent = this.files[0].name;
+            } else {
+                resumeName.textContent = 'No file chosen';
+            }
+        });
+
+        document.getElementById('application-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Simulate form submission - show confirmation page
+            const form = document.getElementById('application-form');
+            const confirmation = document.getElementById('confirmation');
+            
+            form.style.display = 'none';
+            confirmation.classList.add('show');
+            
+            // Update URL to simulate confirmation page
+            window.history.pushState({}, '', '/confirmation');
+        });
+    </script>
+</body>
+</html>

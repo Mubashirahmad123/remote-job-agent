@@ -45,11 +45,13 @@ class RuntimeTests(unittest.TestCase):
         job = replace(self.job, work_mode='onsite', job_country='AE')
         self.assertEqual(evaluate_eligibility(job, replace(self.policy, sponsorship_required=False)).decision, 'eligible')
 
-    def test_learnable_gap_lowers_fit_but_not_eligibility(self):
+    def test_learnable_gap_creates_partial_required_coverage(self):
+        """A learnable required gap -> partial_required_coverage -> review (D11)."""
         requirements = replace(self.requirements, required=self.requirements.required +
                                 (Requirement(frozenset({'django'}), 'Django required'),))
         result = score_match(self.job, self.profile, requirements)
-        self.assertEqual(result.decision, 'eligible')
+        self.assertEqual(result.decision, 'review')
+        self.assertIn('partial_required_coverage', result.review_reasons)
         self.assertEqual(result.required.score, 50)
         self.assertEqual(len(result.required.gaps), 1)
 

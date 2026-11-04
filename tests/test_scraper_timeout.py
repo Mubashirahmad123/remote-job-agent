@@ -80,7 +80,10 @@ class TestRunOptionalScraper:
         assert jobs == []  # late result discarded, never merged
         assert working == []
         assert failed == ["Hung"]
-        assert tracker.boards["Hung"]["status"] == "error"
+        # Phase 1 taxonomy: a hung board never produced a body — that is a
+        # timeout, and calling it a generic 'error' hid the cause. The
+        # detail (budget seconds) stays in the error field.
+        assert tracker.boards["Hung"]["status"] == "timeout"
         assert "timeout" in str(tracker.boards["Hung"].get("error", ""))
 
     def test_running_state_visible_mid_board(self):

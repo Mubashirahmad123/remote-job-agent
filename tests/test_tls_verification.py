@@ -232,7 +232,14 @@ def test_a_successful_fetch_passes_no_verification_override(monkeypatch, no_slee
 def test_fetch_with_retry_signature_has_no_verification_switch():
     params = list(inspect.signature(scrapper.fetch_with_retry).parameters)
     assert "verify_ssl" not in params, params
-    assert params == ["url", "headers", "timeout", "max_retries", "board_name"], (
+    # outcome_out (2026-10-31, Phase 1 board taxonomy) is a read-only dict
+    # into which fetch_with_retry reports WHY a fetch exhausted retries
+    # (timeout / http_<code> / ssl). It touches transport configuration not
+    # at all; the signature guard exists to catch any verification switch,
+    # so only verify_ssl is forbidden — the full list is asserted to keep
+    # additions conscious.
+    assert params == ["url", "headers", "timeout", "max_retries", "board_name",
+                      "outcome_out"], (
         f"signature changed to {params}; if a verification parameter was added "
         "back, this test is the reason it should not have been"
     )
