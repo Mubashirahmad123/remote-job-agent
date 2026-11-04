@@ -4,8 +4,10 @@
 import sys
 sys.path.insert(0, r'C:\Users\Mubashir1\remote-job-agent')
 
+import os
 import re
 import json
+import pytest
 from agents.gemini_tools import generate_cover_letter
 from tools.cv_parser import parse_cv
 
@@ -57,6 +59,7 @@ def extract_years_claims(text: str) -> list[float]:
     return claims
 
 
+@pytest.mark.skipif(not os.path.exists("my_cv.pdf"), reason="my_cv.pdf not present in CI")
 def test_cover_letter_experience_accuracy():
     """Test that cover letter doesn't invent experience years."""
     # Load actual CV profile
