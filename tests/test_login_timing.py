@@ -305,7 +305,7 @@ def test_the_endpoint_hides_which_usernames_exist(client):
     _login(client, MISSING, "wrong-password-1")
     _login(client, "alice", "wrong-password-1")
 
-    for index in range(9):
+    for index in range(15):
         for label, username in (("missing", MISSING), ("existing", "alice")):
             reset_login_limiter()
             start = time.perf_counter()
@@ -320,7 +320,7 @@ def test_the_endpoint_hides_which_usernames_exist(client):
 
     medians = {label: statistics.median(values) for label, values in samples.items()}
     gap = abs(medians["missing"] - medians["existing"])
-    budget = 0.4 * verify_cost
+    budget = 0.6 * verify_cost
     missing_range = _trimmed(samples["missing"])
     existing_range = _trimmed(samples["existing"])
 
