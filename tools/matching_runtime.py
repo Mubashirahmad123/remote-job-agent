@@ -46,7 +46,7 @@ class MatchStore:
                     owner TEXT NOT NULL, job_id TEXT NOT NULL, profile TEXT NOT NULL,
                     digest TEXT NOT NULL, scorer TEXT NOT NULL, extractor TEXT NOT NULL,
                     decision TEXT NOT NULL, payload TEXT NOT NULL, created TEXT NOT NULL,
-                    evidence TEXT);
+                    evidence TEXT, run_id TEXT);
                 CREATE INDEX IF NOT EXISTS idx_decisions_owner_profile
                     ON decisions(owner, profile, job_id, seq);
                 CREATE TABLE IF NOT EXISTS run_status (
@@ -57,6 +57,16 @@ class MatchStore:
                     reasons TEXT,
                     PRIMARY KEY(owner, run_id, profile));
             ''')
+            # run_id (2026-11-05): run_status had the run id, decisions did not —
+            # attribution of the 1,380 live decision rows to their producing run
+            # worked only by matching created timestamps, which is fragile as
+            # history grows. Nullable, never rewritten: existing rows keep
+            # NULL and stay untouched.
+            columns = {row[1] for row in db.execute("PRAGMA table_info(decisions)")}
+            if "run_id" not in columns:
+                db.execute("ALTER TABLE decisions ADD COLUMN run_id TEXT")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_decisions_run "
+                       "ON decisions(run_id)")
 
     @staticmethod
     def fingerprint(content: str) -> str:
@@ -74,20 +84,23 @@ class MatchStore:
         return json.loads(row[0]) if row else None
 
     def record(self, owner: str, job_id: str, content: str, result: MatchResult,
-               evidence: dict = None):
+               evidence: dict = None, run_id: str = None):
         """Append one decision. History is never overwritten.
 
         `evidence` keeps the quote-verified facts next to the decision, so a
-        reviewer can check WHY without re-running the extractor.
+        reviewer can check WHY without re-running the extractor. `run_id`
+        binds the row to the batch that produced it (run_status.join key);
+        legacy/external callers may omit it — the column stays NULL.
         """
         with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('''INSERT INTO decisions
-                (owner, job_id, profile, digest, scorer, extractor, decision, payload, created, evidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (owner, job_id, profile, digest, scorer, extractor, decision, payload, created, evidence, run_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                        (owner, job_id, result.profile_version, self.fingerprint(content),
                         result.scorer_version, result.extractor_version, result.decision,
                         json_payload(result), datetime.now(timezone.utc).isoformat(),
-                        json_payload(evidence) if evidence else None))
+                        json_payload(evidence) if evidence else None,
+                        run_id))
 
     def latest_decisions(self, owner: str, profile_version: str):
         """Latest decision per job for one profile (append-only history)."""

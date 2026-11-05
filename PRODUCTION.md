@@ -155,6 +155,7 @@ Oracle Cloud Always Free VM + free DuckDNS hostname + `setup-vm.sh` bootstrap
 | `TIER_BATCH_MAX` | `75` | Auto-apply tier bound (`agents/auto_applier.py`): score ≤ this → batch tier, up to `TIER_DREAM_THRESHOLD` → mid tier |
 | `TIER_DREAM_THRESHOLD` | `90` | Score ≥ this → dream tier — manual review only (dashboard apply returns 422) |
 | `GLM_BASE_URL` | `https://open.bigmodel.cn/api/paas/v4` | Zhipu GLM endpoint base for LLM fallback rung 3 (`tools/glm_client.py`). Override only behind a proxy or for a regional endpoint. GLM is called over plain HTTP like the Groq/Mistral rungs — **there is no `zhipuai` SDK dependency**, and re-adding one breaks the build (see `requirements.txt`) |
+| `GLM_MODEL` | `glm-4.5-flash` | Zhipu GLM model for fallback rung 3 (free tier). `glm-4` was decommissioned at bigmodel.cn (error 1211 "model does not exist"); a retired `GLM_MODEL` env value resolves to this safe default via `tools/glm_client.resolve_model()` instead of dead-legging the chain |
 
 ---
 

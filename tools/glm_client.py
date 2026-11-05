@@ -47,6 +47,38 @@ except ImportError:  # pragma: no cover - requests is a hard dependency
 GLM_BASE_URL = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 CHAT_COMPLETIONS_PATH = "/chat/completions"
 
+# 2026-11-05: Zhipu decommissioned the bare `glm-4` model ID — every request
+# now fails with error 1211 "模型不存在，请检查模型代码" (model does not exist),
+# which knocked this leg of the fallback chain dead while the key and request
+# shape were fine. `glm-4.5-flash` is the current FREE-tier OpenAI-compatible
+# model, which suits this chain's role as fallback #4; callers override via
+# GLM_MODEL when they want glm-4.6/4.7/5.x. One constant so the next model
+# retirement is a one-line fix, not a grep-and-hope.
+_SAFE_DEFAULT_MODEL = "glm-4.5-flash"
+
+# Model IDs known to be retired at bigmodel.cn. An explicit operator override
+# naming a dead ID is a config error, and honouring it dead-legs the chain
+# (every call raises, the run falls through to Ollama). dotenv cannot save a
+# running process here either: load_dotenv() never overrides an already-set
+# env var, so a stale shell/container keeps serving GLM_MODEL=glm-4 even after
+# .env is fixed. Explicit + wrong loses to the safe default.
+_RETIRED_MODELS = frozenset({"glm-4"})
+
+_env_model = os.getenv("GLM_MODEL", "").strip()
+DEFAULT_MODEL = _SAFE_DEFAULT_MODEL if _env_model in _RETIRED_MODELS or not _env_model else _env_model
+
+
+def resolve_model(env_value: str | None) -> str:
+    """Env value or default, refusing retired model IDs.
+
+    Call sites read GLM_MODEL independently of this module's import-time
+    constant, so the retirement guard must be shared: a process that kept
+    exporting GLM_MODEL=glm-4 (dotenv never overrides an existing env var)
+    must not dead-leg the fallback chain.
+    """
+    value = (env_value or "").strip()
+    return _SAFE_DEFAULT_MODEL if value in _RETIRED_MODELS or not value else value
+
 # Mirrors zhipuai/core/_jwt_token.py: the token lives 30 s longer than the
 # SDK's 3-minute cache, and both fields are milliseconds since the epoch.
 _CACHE_TTL_SECONDS = 3 * 60
@@ -141,7 +173,19 @@ def call_glm(prompt: str, api_key: str, model: str, timeout: int = 120) -> str:
         },
         timeout=timeout,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except Exception as exc:
+        # Reproduce Zhipu's error body (e.g. 1211 model-not-exist) in the
+        # message. A bare "400 Client Error" made this 4xx undiagnosable: the
+        # actual cause ("模型不存在") lived in the hidden response text.
+        body = ""
+        try:
+            body = resp.text[:500] or ""
+        except Exception:
+            pass
+        detail = f"{body} ({exc})".strip() or repr(exc)
+        raise Exception(f"GLM HTTP {resp.status_code}: {detail}") from exc
     data = resp.json()
     try:
         content = data["choices"][0]["message"]["content"]

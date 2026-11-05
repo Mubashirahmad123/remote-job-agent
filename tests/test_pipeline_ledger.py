@@ -9,8 +9,10 @@ import pytest
 from tools.pipeline_ledger import (
     TERMINAL_STAGES,
     PipelineLedger,
+    _ledger_job_uid,
     consecutive_bad_boards,
 )
+from tools.deduplicator import job_fingerprint
 
 
 def _job(n, source="Arbeitnow", **kwargs):
@@ -156,6 +158,76 @@ class TestReconciliation:
         assert report["raw_fetched"] == 2
         assert report["terminal_sum"] == 1
         assert report["complete"] is False
+
+    def test_board_listing_one_posting_twice_is_fully_accounted(self, tmp_path):
+        """Live false positive (run d54028d99a0a, 2026-11-05): a board listed
+        one posting twice, so two raw rows share one job_uid. One copy was
+        dropped at URL dedup (dedup_url_dup runs per fetched ROW), the other
+        scored — terminal_rows == raw_rows, i.e. fully accounted — yet the
+        uid was flagged '2+ terminal rows'. Per-row attribution means the
+        run is complete; only terminal > raw is a defect."""
+        ledger = PipelineLedger(tmp_path / "ledger.db", run_id="run-uid3")
+        job = _job(7, source="JustRemote")
+        ledger.record_jobs([job, dict(job)], "raw_fetched")
+        # copy 2 dropped by URL dedup; copy 1 scored by legacy
+        ledger.record_jobs([job], "dedup_url_dup", reason_code="apply_url_seen")
+        ledger.record_jobs([job], "legacy_passed", reason_code="match")
+        report = ledger.reconcile("run-uid3")
+        assert report["raw_fetched"] == 2
+        assert report["terminal_sum"] == 2
+        assert report["duplicated_terminal"] == []
+        assert report["missing_terminal"] == []
+        assert report["split_terminal"] == []
+        assert report["complete"] is True
+
+    def test_three_copies_two_dedup_drops_one_legacy_still_complete(self, tmp_path):
+        """Run d54028d99a0a uid af56d639 shape: 3 raw copies of one posting,
+        two dropped at URL dedup, one scored low — 3 raw rows, 3 terminal
+        rows, nothing missing, nothing over-attributed."""
+        ledger = PipelineLedger(tmp_path / "ledger.db", run_id="run-uid4")
+        job = _job(8, source="JustRemote")
+        ledger.record_jobs([job, dict(job), dict(job)], "raw_fetched")
+        ledger.record_jobs([job, job], "dedup_url_dup", reason_code="apply_url_seen")
+        ledger.record_jobs([job], "legacy_low_match", reason_code="below_min")
+        report = ledger.reconcile("run-uid4")
+        assert report["raw_fetched"] == 3
+        assert report["terminal_sum"] == 3
+        assert report["duplicated_terminal"] == []
+        assert report["missing_terminal"] == []
+        assert report["complete"] is True
+
+    def test_split_verdict_across_copies_reported_not_hidden(self, tmp_path):
+        """Run d54028d99a0a uid 9340a873 shape: two copies of one posting,
+        one dropped by the country filter, the other scored — the duplicate
+        rows carried contradictory location data. Not an accounting error
+        (terminal == raw, complete stays True) but it must stay visible."""
+        ledger = PipelineLedger(tmp_path / "ledger.db", run_id="run-uid5")
+        job = _job(10, source="JustRemote")
+        ledger.record_jobs([job, dict(job)], "raw_fetched")
+        ledger.record_jobs([job], "country_drop", reason_code="is_allowed_location False")
+        ledger.record_jobs([job], "legacy_low_match", reason_code="below_min")
+        report = ledger.reconcile("run-uid5")
+        assert report["raw_fetched"] == 2
+        assert report["terminal_sum"] == 2
+        assert report["duplicated_terminal"] == []
+        assert report["missing_terminal"] == []
+        assert report["split_terminal"] == [
+            _ledger_job_uid(job, job_fingerprint(job))]
+        # split verdicts are informational, not fatal
+        assert report["complete"] is True
+
+    def test_split_requires_both_a_filter_drop_and_a_legacy_outcome(self, tmp_path):
+        """A dedup-stage drop plus a legacy outcome is normal per-copy
+        routing (a dropped copy never reaches scoring), not a verdict
+        disagreement — it must not be reported as a split."""
+        ledger = PipelineLedger(tmp_path / "ledger.db", run_id="run-uid6")
+        job = _job(11)
+        ledger.record_jobs([job, dict(job)], "raw_fetched")
+        ledger.record_jobs([job], "dedup_fingerprint", reason_code="seen_fingerprint")
+        ledger.record_jobs([job], "legacy_rejected", reason_code="essential_skill_mismatch")
+        report = ledger.reconcile("run-uid6")
+        assert report["split_terminal"] == []
+        assert report["complete"] is True
 
 
 class TestBoardTaxonomy:

@@ -104,7 +104,8 @@ def _job_requirements(extracted: dict):
                                  extracted.get('extractor_version', 'unextracted-v1'))
 
 
-def _evaluate_job(job: dict, profile: MatchProfile, store: MatchStore, owner: str):
+def _evaluate_job(job: dict, profile: MatchProfile, store: MatchStore, owner: str,
+                  run_id: str = None):
     """Evaluate ONE job. Raises on malformed input; the caller isolates it."""
     job_id = job.get('job_fingerprint')
     if not job_id:
@@ -126,7 +127,7 @@ def _evaluate_job(job: dict, profile: MatchProfile, store: MatchStore, owner: st
     # Include all relevant facts, not just the text, in decision provenance.
     content = json.dumps({'title': source.title, 'description': description, 'evidence': evidence},
                          sort_keys=True)
-    store.record(owner, job_id, content, result, evidence)
+    store.record(owner, job_id, content, result, evidence, run_id=run_id)
     if extracted:
         store.cache_extraction(owner, content, requirements.extractor_version, extracted)
     return result
@@ -152,7 +153,7 @@ def shadow_batch(jobs: list[dict], profile: MatchProfile, store: MatchStore, own
         job = dict(job) if isinstance(job, dict) else job
         job_id = job.get('job_fingerprint') if isinstance(job, dict) else None
         try:
-            result = _evaluate_job(job, profile, store, owner)
+            result = _evaluate_job(job, profile, store, owner, run_id=run_id)
         except Exception as exc:
             error_type = "extractor_error" if "extract" in type(exc).__name__.lower() else "evaluation_error"
             failures.append({"job_id": job_id,

@@ -8,6 +8,7 @@ only — no Sheets, no LLMs, no browsers, no network.
 
 import importlib.util
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -328,6 +329,12 @@ class _Throttled(Exception):
         self.status = status
 
 
+@pytest.fixture(autouse=True)
+def _fresh_quota_gate(monkeypatch):
+    """The quota gate is process-wide state; no test inherits another's burn."""
+    monkeypatch.setattr(sheet_writer, "_quota_gate_until", 0.0)
+
+
 @pytest.fixture
 def no_sleep(monkeypatch):
     sleeps = []
@@ -385,6 +392,150 @@ def test_backoff_does_not_retry_other_errors(no_sleep):
         sheet_writer._sheets_backoff(broken)
     assert calls["n"] == 1
     assert no_sleep == []
+
+
+def test_exhausted_throttle_arms_the_minute_gate(no_sleep):
+    """2026-11-05 live 429: `Write requests per minute per user`. When all
+    retries give up on a throttled call, the module must remember the
+    per-minute window is burned, not just lose the error."""
+    def always_429():
+        raise _Throttled(429)
+
+    with pytest.raises(_Throttled):
+        sheet_writer._sheets_backoff(always_429)
+    assert 0 < sheet_writer._quota_time_left() < sheet_writer.QUOTA_GATE_SECONDS + 1
+
+
+def test_gate_active_call_fast_fails_without_retry_spam(no_sleep):
+    """While the gate is armed, further calls must not stack 3 retries and
+    ~7s of sleeps onto an already-rejecting quota window: one attempt,
+    immediate raise."""
+    def always_429():
+        raise _Throttled(429)
+
+    with pytest.raises(_Throttled):
+        sheet_writer._sheets_backoff(always_429)  # arms the gate
+    before = len(no_sleep)
+    calls = {"n": 0}
+
+    def counting_429():
+        calls["n"] += 1
+        raise _Throttled(429)
+
+    with pytest.raises(_Throttled):
+        sheet_writer._sheets_backoff(counting_429)
+    assert calls["n"] == 1          # one attempt, then fast-fail
+    assert len(no_sleep) == before  # no additional backoff sleeps
+
+
+class _ThrottledWorksheet:
+    """Fake worksheet that 429s every write, so formatting cannot finish."""
+
+    def __init__(self, values):
+        self.values = values
+        self.id = 1
+        self.format_calls = []
+        self.freeze_calls = 0
+        self.spreadsheet = None
+        self._writing = self._always_throttle
+
+    def get_all_values(self):
+        return list(self.values)
+
+    def col_values(self, idx):
+        return [""] * (len(self.values) - 1)
+
+    def _always_throttle(self):
+        raise _Throttled(429)
+
+    def freeze(self, rows=1):
+        self._writing()
+        self.freeze_calls += 1
+
+    def format(self, rng, style):
+        self._writing()
+        self.format_calls.append(rng)
+
+
+def test_cleanup_rewrites_route_through_backoff(monkeypatch):
+    """Bug 5 gap: remove_old_jobs_from_sheet issued worksheet.clear() and
+    append_rows() raw — two unprotected write calls per worksheet, right
+    where a run's quota budget is already thin."""
+    routed = []
+    real_backoff = sheet_writer._sheets_backoff
+
+    def spying_backoff(fn, *a, **kw):
+        routed.append(getattr(fn, "__name__", str(fn)))
+        return real_backoff(fn, *a, **kw)
+
+    monkeypatch.setattr(sheet_writer, "_sheets_backoff", spying_backoff)
+
+    fresh = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+    old = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+
+    class _CleanupFake:
+        def __init__(self, data):
+            self._data = data
+            self.cleared = False
+            self.appended = None
+
+        def get_all_values(self):
+            return self._data
+
+        def clear(self):
+            self.cleared = True
+
+        def append_rows(self, kept):
+            self.appended = kept
+
+    ws = _CleanupFake([
+        ["posted_date_iso", "job_title"],
+        [fresh, "fresh job"],
+        [old, "ancient job"],
+    ])
+    sheet_writer.remove_old_jobs_from_sheet(ws, days=30)
+
+    assert ws.cleared
+    assert ws.appended == [["posted_date_iso", "job_title"], [fresh, "fresh job"]]
+    assert routed == ["clear", "append_rows"]
+
+
+def test_formatting_defers_to_quota_reset_once(no_sleep, monkeypatch):
+    """The run burned the whole per-minute write window mid-formatting:
+    wait to the reset ONCE, retry that sheet, and do NOT wait again for
+    the remaining sheets (a scheduler run must not stall for cosmetics)."""
+    monkeypatch.setattr(sheet_writer, "_quota_gate_until", 0.0)
+    sheet_writer._note_quota_burn()  # simulate the burned window
+
+    fmt_attempts = []
+
+    def failing_fmt(ws):
+        fmt_attempts.append(ws)
+        raise _Throttled(429)
+
+    monkeypatch.setattr(sheet_writer, "_format_single_worksheet", failing_fmt)
+
+    from gspread.exceptions import WorksheetNotFound
+    sheet = SimpleNamespace(worksheet=lambda _n: (_ for _ in ()).throw(WorksheetNotFound("no legacy tab")))
+
+    sheet_writer.format_dashboard_worksheets(
+        {"ALL JOBS": "ws-all", "TOP MATCHES": "ws-top", "GOOD MATCHES": "ws-good"},
+        sheet,
+    )
+
+    long_waits = [s for s in no_sleep if 60 < s <= sheet_writer.QUOTA_GATE_SECONDS]
+    assert len(long_waits) == 1, f"exactly one defer-to-idle wait, got {long_waits}"
+    assert len(fmt_attempts) == 4  # first sheet retried after the wait
+
+
+def test_successful_formatting_never_touches_the_gate(no_sleep):
+    """Happy-path formatting must stay sleep-free and leave the quota
+    gate untouched — the deferral only exists for real exhaustion."""
+    ws = _ThrottledWorksheet([])
+    ws._writing = lambda: None  # all writes succeed
+    sheet_writer._format_single_worksheet(ws)
+    assert no_sleep == []
+    assert sheet_writer._quota_time_left() == 0.0
 
 
 # =============================================================================

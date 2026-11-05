@@ -1,7 +1,9 @@
 """Offline runtime regressions, using temporary databases and synthetic labels."""
+from contextlib import closing
 from dataclasses import replace
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 
@@ -102,6 +104,77 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(store.review_queue('alice', 'p2'), [])
             store.record('alice', 'j1', 'new content', self.result)
             self.assertEqual(store.review_queue('alice', 'p1'), [])
+
+    def test_record_persists_the_run_id_that_bound_the_batch(self):
+        """2026-11-05: decisions rows bound to their producing run only via
+        created-timestamp matching against run_status — fragile as history
+        grows. Every record can now carry its batch's run id directly."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = MatchStore(Path(tmp) / 'matches.db')
+            review = score_match(self.job, self.profile, RequirementsEvidence())
+            store.record('alice', 'j1', 'content', review, run_id='rais-9f22c0')
+            store.start_run('alice', 'rais-9f22c0', 'p1')
+            store.finish_run('alice', 'rais-9f22c0', 'p1', 1, 0)
+            with closing(sqlite3.connect(store.path)) as db:
+                row = db.execute(
+                    "SELECT run_id FROM decisions WHERE job_id='j1'").fetchone()
+                self.assertEqual(row[0], 'rais-9f22c0')
+                # Exact join key to the run_status row that owns the batch.
+                run = db.execute(
+                    "SELECT run_id FROM run_status WHERE run_id='rais-9f22c0'").fetchone()
+                self.assertEqual(run[0], row[0])
+
+    def test_record_without_run_id_keeps_the_column_null(self):
+        """Legacy/external callers omit run_id: nullable column, no breakage."""
+        with tempfile.TemporaryDirectory() as tmp:
+            store = MatchStore(Path(tmp) / 'matches.db')
+            review = score_match(self.job, self.profile, RequirementsEvidence())
+            store.record('alice', 'j1', 'content', review)
+            with closing(sqlite3.connect(store.path)) as db:
+                row = db.execute(
+                    "SELECT run_id FROM decisions WHERE job_id='j1'").fetchone()
+            self.assertIsNone(row[0])
+
+    def test_run_id_column_added_to_a_pre_existing_ledger_keeping_history(self):
+        """The live shadow DB (1,380 rows) predates run_id. Opening it with
+        the current MatchStore must add the nullable column and touch
+        nothing else — append-only history never gets rewritten."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'legacy.db'
+            with closing(sqlite3.connect(path)) as db, db:
+                db.executescript('''
+                    CREATE TABLE decisions (
+                        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                        owner TEXT NOT NULL, job_id TEXT NOT NULL, profile TEXT NOT NULL,
+                        digest TEXT NOT NULL, scorer TEXT NOT NULL, extractor TEXT NOT NULL,
+                        decision TEXT NOT NULL, payload TEXT NOT NULL, created TEXT NOT NULL,
+                        evidence TEXT);
+                    CREATE INDEX IF NOT EXISTS idx_decisions_owner_profile
+                        ON decisions(owner, profile, job_id, seq);
+                    CREATE TABLE extraction (
+                        owner TEXT, digest TEXT, version TEXT, payload TEXT NOT NULL,
+                        PRIMARY KEY(owner, digest, version));
+                    CREATE TABLE run_status (
+                        owner TEXT NOT NULL, run_id TEXT NOT NULL, profile TEXT NOT NULL,
+                        started TEXT NOT NULL, finished TEXT,
+                        processed INTEGER NOT NULL DEFAULT 0,
+                        failed INTEGER NOT NULL DEFAULT 0,
+                        reasons TEXT,
+                        PRIMARY KEY(owner, run_id, profile));
+                ''')
+                db.execute('''INSERT INTO decisions
+                    (owner, job_id, profile, digest, scorer, extractor,
+                     decision, payload, created)
+                    VALUES ('alice','old-job','p1','d','s','e','review','{}','t')''')
+
+            MatchStore(path)  # opens = applies the additive migration
+            with closing(sqlite3.connect(path)) as db:
+                columns = {row[1] for row in db.execute("PRAGMA table_info(decisions)")}
+                legacy = db.execute(
+                    "SELECT COUNT(*), SUM(run_id IS NULL) FROM decisions").fetchone()
+            self.assertIn('run_id', columns)
+            self.assertEqual(legacy[0], 1)   # row preserved
+            self.assertEqual(legacy[1], 1)   # nullable, history stays NULL
 
     def test_evaluation_excludes_unknown_labels(self):
         report = evaluate_labels({'a': 'apply', 'b': 'skip', 'c': 'uncertain'}, {'b'}, {'a', 'c', 'd'})
