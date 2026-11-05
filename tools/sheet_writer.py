@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import random
+import threading
 from pathlib import Path
 
 # Ensure project root is on sys.path so that 'tools' package is importable
@@ -155,8 +156,11 @@ def remove_old_jobs_from_sheet(worksheet, days=30):
             continue
 
     if removed > 0:
-        worksheet.clear()
-        worksheet.append_rows(kept)
+        # Bug 5: a cleanup rewrite is two write calls per worksheet — with
+        # 4+ worksheets per run this alone can end a fresh quota window, so
+        # the calls belong inside the throttled seam like every other write.
+        _sheets_backoff(worksheet.clear)
+        _sheets_backoff(worksheet.append_rows, kept)
         print(f"[CLEANUP] Removed {removed} jobs older than {days} days")
 
 def test_environment():
@@ -219,12 +223,47 @@ def get_sheet():
 # there was no backoff anywhere.
 SHEETS_MAX_RETRIES = 3
 
+# Bug 5 follow-up (2026-11-05): the observed 429 body named the PER-MINUTE
+# window ("Write requests per minute per user"). Exponential 1/2/4s backoff
+# cannot recover from a window that is exhausted whole — but the window is
+# only 60s long. When retries give up on a throttled call, remember that the
+# write quota is burned until the next wall-clock minute + margin: other
+# callers fast-fail instead of retry-spamming an already-rejecting API, and
+# the formatting phase (the one consumer this is worth waiting for) defers
+# to the reset exactly once per run.
+QUOTA_GATE_SECONDS = 61
+_quota_gate_lock = threading.Lock()
+_quota_gate_until = 0.0
+
+
+def _note_quota_burn():
+    """Record that this run exhausted the per-minute write quota."""
+    global _quota_gate_until
+    with _quota_gate_lock:
+        _quota_gate_until = max(_quota_gate_until, time.time() + QUOTA_GATE_SECONDS)
+
+
+def _quota_time_left() -> float:
+    """Seconds until the gate expires, 0.0 when the quota is usable."""
+    with _quota_gate_lock:
+        return max(0.0, _quota_gate_until - time.time())
+
+
+def _clear_quota_gate():
+    """Reopen writes after a successful wait out of the quota window."""
+    global _quota_gate_until
+    with _quota_gate_lock:
+        _quota_gate_until = 0.0
+
 
 def _sheets_backoff(fn, *args, **kwargs):
     """Call a gspread method with exponential backoff on 429/5xx (Bug 5).
 
     Retries three times with 1/2/4s + jitter; anything non-throttled is
-    re-raised immediately, and a final throttled failure re-raises too.
+    re-raised immediately, and a final throttled failure re-raises too
+    (after arming the quota gate). While the gate is active every call
+    fast-fails without touching the API: the window is known-burned and
+    per-caller retries would only stack 7s of sleeps onto the same 429.
     """
     for attempt in range(SHEETS_MAX_RETRIES):
         try:
@@ -237,7 +276,12 @@ def _sheets_backoff(fn, *args, **kwargs):
                 or "429" in str(e)
                 or "Quota exceeded" in str(e)
             )
-            if not throttled or attempt == SHEETS_MAX_RETRIES - 1:
+            if not throttled:
+                raise
+            if _quota_time_left() > 0:
+                raise  # window already known-burned; retries are futile
+            if attempt == SHEETS_MAX_RETRIES - 1:
+                _note_quota_burn()
                 raise
             delay = (2 ** attempt) + random.uniform(0, 0.5)
             print(f"   ⚠️ Sheets API throttled ({e}); "
@@ -791,21 +835,66 @@ def test_duplicate_detection():
 # ─── Sheet Formatting ──────────────────────────────────────────────────────────
 
 def format_dashboard_worksheets(worksheets, sheet):
-    """Apply professional formatting to all dashboard worksheets."""
+    """Apply professional formatting to all dashboard worksheets.
+
+    Bug 5 follow-up (2026-11-05): formatting is the heaviest cosmetic
+    writer (dozens of ws.format calls per tab) and one 429 used to abort
+    the remaining sheets silently. Now: every write goes through
+    _sheets_backoff, each sheet fails in isolation, and — the
+    defer-to-idle half of the fix — when the run has actually burned the
+    per-minute write quota, formatting waits out the gate (<=61s) ONCE
+    per run and retries that sheet. After that, remaining failures stay
+    non-fatal with an explicit count; cosmetics are never worth stalling
+    a scheduler run for.
+    """
+    deferred = False
     for ws_name in (ALL_JOBS_SHEET, TOP_MATCHES_SHEET, GOOD_MATCHES_SHEET):
         ws = worksheets.get(ws_name)
         if ws:
-            _format_single_worksheet(ws)
+            deferred = _format_worksheet_resilient(ws, ws_name, deferred)
 
     try:
         legacy_ws = sheet.worksheet(LEGACY_SHEET)
-        _format_single_worksheet(legacy_ws)
+        _format_worksheet_resilient(legacy_ws, LEGACY_SHEET, deferred)
     except gspread.exceptions.WorksheetNotFound:
         pass
 
 
+def _format_worksheet_resilient(ws, name, already_deferred):
+    """Format one sheet, deferred to the quota reset at most once per run.
+
+    Returns the updated already_deferred flag so the caller keeps the
+    single-wait budget across worksheets.
+    """
+    try:
+        _format_single_worksheet(ws)
+        return already_deferred
+    except Exception as e:
+        pause = _quota_time_left()
+        if pause > 0 and not already_deferred:
+            # Defer-to-idle: the quota window is burned whole; sleep to it
+            # once, then give formatting one fresh shot.
+            print(f"   ⏳ {name}: Sheets write quota exhausted; deferring "
+                  f"formatting to the reset (~{pause:.0f}s)")
+            time.sleep(pause)
+            _clear_quota_gate()
+            try:
+                _format_single_worksheet(ws)
+                print(f"✅ {name} formatted after quota reset")
+            except Exception as retry_exc:
+                print(f"⚠️ Formatting {name} failed after quota wait "
+                      f"(non-fatal): {retry_exc}")
+            return True
+        print(f"⚠️ Formatting {name} failed (non-fatal): {e}")
+        return already_deferred
+
+
 def _format_single_worksheet(ws):
-    """Apply formatting: frozen header, column widths, score colors, hyperlinks."""
+    """Apply formatting: frozen header, column widths, score colors, hyperlinks.
+
+    Every mutation routes through _sheets_backoff: formatting fires dozens
+    of write calls, and a 429 from one step must not abort the whole sheet.
+    """
     data = ws.get_all_values()
     if not data or len(data) < 1:
         return
@@ -814,13 +903,13 @@ def _format_single_worksheet(ws):
     num_cols = len(header)
     num_rows = len(data)
 
-    ws.freeze(rows=1)
+    _sheets_backoff(ws.freeze, rows=1)
 
     col_names = {name.lower(): i for i, name in enumerate(header)}
     end_col = chr(ord("A") + num_cols - 1)
 
     # 1. Style header row
-    ws.format(f"A1:{end_col}1", {
+    _sheets_backoff(ws.format, f"A1:{end_col}1", {
         "backgroundColor": {"red": 0.12, "green": 0.16, "blue": 0.22},
         "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}, "fontSize": 11},
         "horizontalAlignment": "CENTER",
@@ -831,7 +920,7 @@ def _format_single_worksheet(ws):
         return
 
     # 2. Style body — font, vertical alignment
-    ws.format(f"A2:{end_col}{num_rows}", {
+    _sheets_backoff(ws.format, f"A2:{end_col}{num_rows}", {
         "textFormat": {"fontSize": 10},
         "verticalAlignment": "TOP",
     })
@@ -841,13 +930,14 @@ def _format_single_worksheet(ws):
         idx = col_names.get(col_name)
         if idx is not None:
             col_letter = chr(ord("A") + idx)
-            ws.format(f"{col_letter}2:{col_letter}{num_rows}", {"wrapStrategy": "WRAP"})
+            _sheets_backoff(ws.format, f"{col_letter}2:{col_letter}{num_rows}",
+                            {"wrapStrategy": "WRAP"})
 
     # 4. Style apply_url as a clickable link (keep original URL, just format as link)
     url_idx = col_names.get("apply_url")
     if url_idx is not None:
         url_letter = chr(ord("A") + url_idx)
-        ws.format(f"{url_letter}2:{url_letter}{num_rows}", {
+        _sheets_backoff(ws.format, f"{url_letter}2:{url_letter}{num_rows}", {
             "textFormat": {
                 "foregroundColor": {"red": 0.15, "green": 0.39, "blue": 0.92},
                 "fontSize": 10,
@@ -902,10 +992,10 @@ def _format_single_worksheet(ws):
 
             for start_row, end_row in ranges:
                 rng = f"A{start_row}:{end_col}{end_row}"
-                ws.format(rng, {"backgroundColor": bg})
+                _sheets_backoff(ws.format, rng, {"backgroundColor": bg})
             # Bold + centre the score cell for each band row
             for row_num in rows:
-                ws.format(f"{score_letter}{row_num}", {
+                _sheets_backoff(ws.format, f"{score_letter}{row_num}", {
                     "textFormat": {"bold": True},
                     "horizontalAlignment": "CENTER",
                     "verticalAlignment": "MIDDLE",
@@ -936,7 +1026,7 @@ def _format_single_worksheet(ws):
                 }
             })
     if requests:
-        ws.spreadsheet.batch_update({"requests": requests})
+        _sheets_backoff(ws.spreadsheet.batch_update, {"requests": requests})
 
 
 def run_cleanup(days=30):

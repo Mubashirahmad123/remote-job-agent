@@ -1,5 +1,53 @@
 # CHANGELOG.md
 
+## 2026-11-05 — live ops triage: model retirement, funnel reconcile, Sheets quota, shadow run-id and provenance cleanup
+
+- **GLM dead leg fixed (live-verified).** Every GLM fallback call returned
+  HTTP 400 with error 1211 "模型不存在" — Zhipu decommissioned the `glm-4`
+  model ID; key and request shape were fine. Default model is now
+  `glm-4.5-flash` (free tier) in `tools/glm_client.py`, `resolve_model()`
+  refuses retired IDs (a stale `GLM_MODEL=glm-4` in process env no longer
+  dead-legs the chain), and HTTP error bodies now surface in exceptions so
+  the next provider-side change is diagnosable from the log. Chain leg
+  verified live: `_call_glm` → 200 "ok".
+- **Funnel reconciliation is now per-row.** The "4 job(s) with 2+ terminal
+  rows" warnings were false positives — duplicate copies of one posting
+  legitimately produce one terminal verdict per fetched row (verified in
+  run `d54028d99a0a`: every flagged uid had terminal_rows == raw_rows).
+  `reconcile()` now compares terminal rows per uid against raw rows per
+  uid; genuinely disagreeing copies (e.g. contradictory location data
+  between duplicates) surface as a new non-fatal `split_terminal` report
+  instead of masquerading as an accounting bug.
+- **Sheets 429 hardening.** Cleanup rewrites and every formatting write now
+  go through the throttled seam; when a run burns the per-minute write
+  window whole, formatting defers to the quota reset once per run (≤61s)
+  and then stays non-fatal. A mid-run 429 no longer silently skips the
+  remaining worksheets.
+- **Shadow decisions carry their run id.** `decisions` gains nullable
+  `run_id` + index; `shadow_batch` binds every decision to its batch.
+  Live `data/matching_shadow.db` migrated additively via MatchStore
+  (1,380 rows preserved, all legacy rows NULL), then purged of 440
+  provably-synthetic stub-leak rows (job_id literally 'backend'/'frontend';
+  row count now 940; evidence export `shadow_stub_leak_purged_rows.json`,
+  physical backup `matching_shadow_backup_pre_purge_20261105.db`). The
+  triage doc's "20 rows kept" section is superseded by the executed purge.
+- **Pipeline ledger test isolation** (sibling of the shadow leak):
+  `PIPELINE_LEDGER_DB` now pinned into tmp by conftest for every test.
+  Root-caused the 05:58 UTC half-run `8ee3d614ae4d` (one `legacy_passed
+  "Matched: python"` row for a `test_multi_cv_semantic` fixture job with
+  no source/company — pytest, not production). A standalone `curate()`
+  call (no tracker run id, unstamped jobs) now records `raw_fetched` for
+  its input, so curated half-runs reconcile instead of carrying terminal
+  rows under a raw-fetched-less run. The live ledger was then purged of
+  the accumulated 520 provably-synthetic fixture-fingerprint rows
+  (4,803 → 4,283 stage_events; `job_texts`/`board_runs` untouched;
+  evidence `pipeline_ledger_stub_purged_rows.json`, backup
+  `pipeline_ledger_backup_prepurge_20261105.db`, record
+  `pipeline_ledger_stub_purge.md`).
+- Tripwire tests added for both DBs; suite green after every fix
+  (final counts in TESTER.md history; last full run 1,679 passed / 32
+  skipped / 0 failed).
+
 ## 2026-10-31 — fix pyasn1 security findings
 
 - Raise the bounded pyasn1 floor to 0.6.5 and regenerate the universal lock;

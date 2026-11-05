@@ -96,6 +96,55 @@ def _isolate_submit_artifacts(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_shadow_db(tmp_path, monkeypatch):
+    """Point the matching shadow at temp storage, and keep it OFF by default.
+
+    `agents/curator.py` calls `load_dotenv()` at import, so a developer's
+    `.env` containing `MATCHING_SHADOW_PROFILE=data/matching_profile.json`
+    leaks into pytest. Any test that runs `curator.curate()` (the scraper
+    path calls `run_optional_shadow` inside it) then evaluates its FIXTURE
+    jobs through the real shadow — e.g. test_multi_cv_semantic's
+    `job_fingerprint: "backend"`/"frontend"` jobs — and appends synthetic
+    decisions to the live `data/matching_shadow.db`.
+
+    Discovered 2026-11-04: 20 decisions owned by `personal` with
+    job_id literally `backend`/`frontend` were test records from exactly
+    this leak (they even reached `rejected essential_skill_mismatch`).
+
+    Two layers, matching the `_isolate_auth_db` pattern:
+
+    * `MATCHING_SHADOW_PROFILE` is deleted, so the shadow is off for every
+      test unless that test explicitly opts in via `monkeypatch.setenv`.
+    * `MATCHING_SHADOW_DB` is pinned into `tmp_path` as a fallback, so an
+      opt-in test that forgets to give the store its own path (or calls
+      `run_optional_shadow`, which defaults to the repo DB) can only ever
+      write to a temp file pytest deletes at teardown.
+
+    `run_optional_shadow` reads the env on every call (per-path resolution,
+    not import time), so per-test env is effective for both.
+    """
+    monkeypatch.delenv("MATCHING_SHADOW_PROFILE", raising=False)
+    monkeypatch.setenv("MATCHING_SHADOW_DB", str(tmp_path / "shadow_test.db"))
+
+
+@pytest.fixture(autouse=True)
+def _isolate_pipeline_ledger(tmp_path, monkeypatch):
+    """Point the pipeline funnel ledger at temp storage for every test.
+
+    Discovered 2026-11-05: the sibling leak of `_isolate_shadow_db` —
+    `agents/curator.py` and `agents/scrapper.py` default the ledger to the
+    repo's gitignored `data/pipeline_ledger.db`, and tests call curate()
+    with a bare SimpleNamespace tracker (no run id) and jobs without
+    `ledger_run_id`. curate() minted a FRESH run id under which its
+    legacy stages appended to the LIVE ledger — the 05:58 UTC 2026-11-05
+    run `8ee3d614ae4d` held exactly one `legacy_passed "Matched: python"`
+    row for a fixture job ("Python Backend Developer", no source/company)
+    and zero raw_fetched rows.
+    """
+    monkeypatch.setenv("PIPELINE_LEDGER_DB", str(tmp_path / "ledger_test.db"))
+
+
+@pytest.fixture(autouse=True)
 def _reset_rate_limiter():
     """Clear the login AND action rate-limit buckets before and after every test.
 

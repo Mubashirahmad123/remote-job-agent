@@ -12,6 +12,8 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 from tools.font_utils import UnicodePDF
+from tools.glm_client import DEFAULT_MODEL as _GLM_DEFAULT_MODEL
+from tools.glm_client import resolve_model as _resolve_glm_model
 
 load_dotenv()
 
@@ -21,7 +23,8 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GLM_API_KEY = os.getenv("GLM_API_KEY", "")
-GLM_MODEL = os.getenv("GLM_MODEL", "glm-4")
+# Default + retired-model guard live in tools/glm_client.
+GLM_MODEL = _resolve_glm_model(os.getenv("GLM_MODEL")) or _GLM_DEFAULT_MODEL
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-medium-latest")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")

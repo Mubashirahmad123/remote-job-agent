@@ -59,6 +59,11 @@ TERMINAL_STAGES = (
     "legacy_rejected", "legacy_low_match", "legacy_passed",
 )
 
+# Stage groups used to detect classification disagreements between duplicate
+# copies of one posting (split_terminal).
+_FILTER_DROPS = frozenset({"dev_filter_drop", "country_drop", "date_drop"})
+_LEGACY_OUTCOMES = frozenset({"legacy_rejected", "legacy_low_match", "legacy_passed"})
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -285,9 +290,20 @@ class PipelineLedger:
         """Stage counts for one run plus terminal-sum reconciliation.
 
         Identity is the per-INSTANCE job_uid (fingerprint alone is not
-        unique across boards). A run is complete when every fetched
-        instance has exactly one terminal row; instances with two terminal
-        rows are reported, never hidden.
+        unique across boards). A run is complete when every fetched ROW
+        has exactly one terminal row: per uid, terminal rows must equal
+        raw rows. (2026-11-05: the first version flagged any uid with 2+
+        terminal rows, but a board legitimately lists the same posting
+        twice — the live run d54028d99a0a produced 4 such uids, each with
+        terminal_rows == raw_rows, i.e. fully accounted duplicates that
+        were reported as failures. Grouping dedup/drop copies is wrong;
+        only terminal > raw is an accounting defect.)
+
+        A uid whose copies took mutually exclusive verdicts — one copy
+        dropped by a filter, another scored by legacy — is NOT an
+        accounting error, but it means the duplicate rows of that posting
+        carried contradictory filter inputs (e.g. different location
+        text). It is surfaced in split_terminal, never hidden.
         """
         run_id = run_id or self.run_id
         with self._connect() as db:
@@ -297,30 +313,51 @@ class PipelineLedger:
             raw_rows, = db.execute(
                 '''SELECT COUNT(*) FROM stage_events
                    WHERE run_id=? AND stage='raw_fetched' ''', (run_id,)).fetchone()
-            raw_ids = {row[0] for row in db.execute(
-                '''SELECT DISTINCT job_uid FROM stage_events
-                   WHERE run_id=? AND stage='raw_fetched' AND job_uid IS NOT NULL''',
-                (run_id,)).fetchall()}
-            terminals = db.execute(
-                '''SELECT job_uid, COUNT(*) c, MIN(stage) s
-                   FROM stage_events WHERE run_id=? AND stage IN
-                   ({marks}) GROUP BY job_uid'''.format(
+            raw_counts = dict(db.execute(
+                '''SELECT job_uid, COUNT(*) FROM stage_events
+                   WHERE run_id=? AND stage='raw_fetched' AND job_uid IS NOT NULL
+                   GROUP BY job_uid''',
+                (run_id,)).fetchall())
+            term_rows = db.execute(
+                '''SELECT job_uid, stage FROM stage_events WHERE run_id=? AND
+                   stage IN ({marks})'''.format(
                        marks=",".join("?" * len(TERMINAL_STAGES))),
                 (run_id, *TERMINAL_STAGES)).fetchall()
-        terminal_by_id = {row[0]: (row[2], row[1]) for row in terminals if row[0]}
-        duplicated = sorted(k for k, v in terminal_by_id.items() if v[1] > 1)
-        missing = sorted(raw_ids - set(terminal_by_id))
+        raw_by_uid = {uid: n for uid, n in raw_counts.items() if uid}
+        terminal_by_uid: dict = {}
+        stage_sets: dict = {}
+        for uid, stage in term_rows:
+            if not uid:
+                continue
+            terminal_by_uid[uid] = terminal_by_uid.get(uid, 0) + 1
+            stage_sets.setdefault(uid, set()).add(stage)
+        # terminal rows exceeding the fetched rows for that uid: the funnel
+        # produced a verdict for a row it never fetched.
+        duplicated = sorted(
+            uid for uid, count in terminal_by_uid.items()
+            if count > raw_by_uid.get(uid, 0))
+        # fetched rows with no terminal verdict left to bind to.
+        missing = sorted(
+            uid for uid, count in raw_by_uid.items()
+            if terminal_by_uid.get(uid, 0) < count)
+        # Copies of one posting disagreeing on a filter/scoring verdict.
+        split_terminal = sorted(
+            uid for uid, used in stage_sets.items()
+            if terminal_by_uid[uid] <= raw_by_uid.get(uid, 0)
+            and len(used) > 1
+            and (used & _FILTER_DROPS) and (used & _LEGACY_OUTCOMES))
         terminal_sum = sum(stages.get(s, 0) for s in TERMINAL_STAGES)
         return {
             "run_id": self.run_id or run_id,
             "stages": stages,
             "raw_fetched": raw_rows,
-            "raw_instances": len(raw_ids),
+            "raw_instances": len(raw_by_uid),
             "terminal_sum": terminal_sum,
             "complete": (not missing and not duplicated
                          and raw_rows == terminal_sum),
             "missing_terminal": missing,
             "duplicated_terminal": duplicated,
+            "split_terminal": split_terminal,
         }
 
     def board_status_for_run(self, run_id: str = None) -> dict:

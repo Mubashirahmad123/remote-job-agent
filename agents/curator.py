@@ -354,6 +354,19 @@ def curate(raw_jobs: list, tracker=None) -> dict:
             "top_jobs": []
         }
 
+    # Phase 1 funnel entry (2026-11-05): when neither the tracker nor the
+    # jobs carry a scrape run id, curate() IS the entry point of this
+    # ledger run — no scrape recorded raw_fetched for it. Recording the
+    # input here keeps the run reconcilable; without it every standalone
+    # invocation (main.py's process_jobs_tool on a hand-rolled file,
+    # the pre-fix pytest leak) wrote terminal rows under a run with zero
+    # raw rows (live half-run 8ee3d614ae4d, 2026-11-05 05:58 UTC).
+    if not getattr(tracker, "run_id", None) and not any(
+            isinstance(job, dict) and job.get("ledger_run_id") for job in raw_jobs):
+        ledger.record_jobs(raw_jobs, "raw_fetched")
+        print(f"   📒 Ledger: standalone curation; recorded {len(raw_jobs)} "
+              f"raw_fetched row(s) under run {ledger.run_id}")
+
     # ── Step 0: Cleanup old jobs ──
     print(f"\n🧹 Running cleanup (>{CLEANUP_DAYS} days)...")
     cleanup_sheet(CLEANUP_DAYS)
@@ -669,6 +682,13 @@ def curate(raw_jobs: list, tracker=None) -> dict:
                 print(f"   ⚠️ {len(report['missing_terminal'])} job(s) with no terminal row")
             if report["duplicated_terminal"]:
                 print(f"   ⚠️ {len(report['duplicated_terminal'])} job(s) with 2+ terminal rows")
+            if report.get("split_terminal"):
+                # Copies of one posting disagreeing on a verdict (e.g. one
+                # copy location-dropped, another scored): contradictory
+                # filter inputs between duplicate rows. Informational — the
+                # per-row funnel still sums exactly.
+                print(f"   ℹ️ {len(report['split_terminal'])} posting(s) with split "
+                      "verdicts across duplicate copies (contradictory filter inputs)")
     except Exception as exc:
         print(f"   ⚠️ Ledger reconciliation failed ({type(exc).__name__}); findings unchanged")
 

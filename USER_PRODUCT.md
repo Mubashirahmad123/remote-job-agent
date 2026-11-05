@@ -9,11 +9,13 @@ intentional dev-role filters, personal CV configuration, Sheets workflow, and
 operator-supplied environment configuration. Do not merge CV upload or the
 profession-agnostic/user-isolation redesign into `main` as part of this plan.
 
-The intended future product branch is **`user`**. It is a future destination,
-not a branch created or switched to by this documentation change. Implementation
-requires a separately scoped and approved effort in a session that supports that
-branch. No automatic merge back to `main` is planned; any reusable fixes would
-need separate review.
+The intended future product branch is **`user`**, created from
+**`feat/matching-evidence`** when implementation is separately approved. That
+branch is the product baseline because it contains both the production legacy
+matcher and the shadow matcher, their comparison/evidence facilities, and the
+accepted shadow-profile wiring decision. It is not a branch created or switched
+to by this documentation change. No automatic merge back to `main` is planned;
+any reusable fixes would need separate review.
 
 CV upload is deferred together with this product, rather than delivered as an
 isolated Phase 2.1a feature in the personal agent. An upload endpoint alone could
@@ -22,7 +24,119 @@ must not be evaluated with the owner's dev-only rules or use the owner's data
 and credentials. Existing on-disk CV/profile editing and multi-CV functionality
 on `main` stay unchanged.
 
-## 2. Scope that must be designed together
+## 2. Confirmed architecture decisions
+
+These decisions make the future product implementation-ready while preserving
+the current documentation-only status.
+
+### Product, tenancy, and persistence
+
+- **Deployment:** v1 is a shared OCI-hosted SaaS for individual users. Each
+  user owns one private workspace; organizations, memberships, invitations,
+  native clients, and public API clients are deferred.
+- **Canonical storage:** PostgreSQL is the source of truth for users, sessions,
+  profile/CV versions, scraper configuration, runs, jobs, matches/evidence,
+  dashboard aggregates, tracker state, materials, quotas, and audit events.
+  Google Sheets is an optional user-owned export, never a storage fallback.
+- **Tenant boundary:** every user-owned row has immutable `workspace_id`. The
+  server derives it exclusively from the authenticated session; a request body,
+  route parameter, header, worker message, or browser state can never select
+  the effective workspace.
+- **Enforcement:** repositories scope every query by `workspace_id`; PostgreSQL
+  Row-Level Security is deny-by-default on every tenant table; the runtime DB
+  role cannot bypass RLS; migrations use a separate privileged role. Pooled
+  connections must set workspace context transaction-locally and clear it on
+  release.
+- **Files and caches:** private OCI Object Storage keeps CVs and generated
+  artifacts under workspace-prefixed keys. Database metadata owns authorization;
+  downloads are authenticated application streams, never durable public URLs.
+  Caches, deduplication, queues, screenshots, activity, and quotas are all
+  workspace-scoped.
+- **No personal fallback:** SQLite state, local files, owner Sheets, owner CVs,
+  personal caches, owner credentials, and `main` artifacts are unavailable to
+  the user product.
+
+### Authentication and browser security
+
+- **Web authentication:** retain opaque, random server-side sessions rather
+  than browser JWT access/refresh tokens. The browser receives only an
+  `HttpOnly`, `Secure`, `SameSite=Lax` session cookie; PostgreSQL retains only
+  its hash.
+- **Session lifecycle:** rotate the session at login; enforce absolute and idle
+  expiry; revoke it on logout, password reset, credential-compromise response,
+  and account deletion; let users review/revoke their active sessions.
+- **Account lifecycle:** email/password signup requires verification before
+  expensive or provider-using actions. Password-reset and verification tokens
+  are single-use, hashed, expiring server-side records. OCI Email Delivery is
+  the email transport.
+- **Request defenses:** cookie-authenticated mutations require CSRF validation.
+  CORS uses an explicit allowlist and never permits arbitrary credentialed
+  origins. Rate limits cover signup, login, verification resend, reset, upload,
+  scraping, matching, and generation, with independent IP, account, and
+  workspace budgets. API errors never enumerate accounts or disclose secrets.
+- **Deferred JWT use:** JWT/OAuth access and refresh tokens are reserved for a
+  future native/mobile or third-party API client; they are not stored in browser
+  local/session storage for v1.
+
+### User settings and secret custody
+
+- User API keys for supported LLM providers and optional Sheets credentials are
+  write-only OCI Vault secrets. PostgreSQL stores only a workspace-scoped Vault
+  reference, provider/integration type, masked configured state, validation
+  time, and audit metadata.
+- A secret is never returned by an API, rendered in HTML, placed in browser
+  storage, included in logs/traces/exports/error details, or copied into a job
+  payload. Replacement creates a new Vault version; revocation prevents queued
+  and retried work from using it.
+- The Settings UI separates safe preferences from integrations and secrets. It
+  provides configured/not-configured state, validate, replace, revoke, and
+  provider-specific actionable errors without exposing values.
+- Per-workspace provider routing, concurrency, daily scrape limits, and
+  LLM/material-generation budgets prevent one user from spending another
+  user's resources.
+
+### Matching-evidence product contract
+
+- Preserve the legacy matcher and the shadow matcher from
+  `feat/matching-evidence`; user-facing evaluations label each result and never
+  silently replace one with the other. Comparison evidence remains available
+  for product evaluation, but the legacy matcher is not treated as ground truth.
+- Replace global developer/country/seniority filters with a versioned,
+  profession-aware profile. V1 supports software/IT, marketing, and sales;
+  other professions are explicitly unsupported until fixture-backed validation
+  is approved.
+- A match records immutable profile version, CV version, extractor version,
+  scorer/matcher version, job observation version, eligibility result, fit
+  result, evidence completeness, explanations, and explicitly labelled
+  legacy/shadow decisions.
+- Eligibility is always `pass`, `fail`, or `unknown`. Work rights, remote
+  country permission, relocation/sponsorship, seniority, and missing evidence
+  that cannot be established become `unknown` and a visible review outcome,
+  never a hidden rejection or assumed pass.
+- Updating a profile creates a new version. Historical evaluations are never
+  rewritten; affected results become visibly stale and rematch only after an
+  explicit user action.
+
+### Product experience and mobile boundary
+
+- Onboarding proceeds: verified account, Profile policy, CV upload/parse,
+  provider setup, optional Sheets export, then first scrape. Each stage exposes
+  loading, validation, partial failure, retry, and completion truthfully.
+- The web dashboard adds Profile and Settings beside jobs, tracker, materials,
+  and runs. It uses evidence-led language rather than developer-only labels;
+  users can see active CV, profile completeness, configuration readiness,
+  match reasons, unknown/review states, and deletion/export controls.
+- The app is responsive and keyboard-accessible. Forms expose labels, errors,
+  focus, and recovery; inputs remain usable at mobile text sizes; touch feedback
+  is capability-based; safe areas and dynamic viewport behavior are tested on
+  real hardware. A native app is out of scope, but API contracts remain
+  extensible for it.
+- The visual system extends the existing dashboard tokens/components rather
+  than adding a UI framework. It prioritizes compact work surfaces, clear
+  hierarchy, visible state changes, accessible contrast, and honest empty/error
+  states over decorative dashboard patterns.
+
+## 3. Scope that must be designed together
 
 ### Backend and matching
 
@@ -140,12 +254,12 @@ role families must not become universal product rules.
 - Support resume/cover-letter review, relevant gap feedback, accessible forms
   and responsive layouts without implying that generation means submission.
 
-## 3. Proposed delivery order — not a schedule
+## 4. Proposed delivery order — not a schedule
 
-1. Agree deployment model, supported initial professions, data ownership and
-   provider/Sheets configuration policy. Write the architecture decisions and
-   threat model; do not promise every profession on day one.
-2. Build/test ownership-aware persistence and credential/configuration boundaries.
+1. Record the confirmed decisions as ADRs and write the OCI threat model,
+   migration/restore procedure, retention policy, and deletion workflow.
+2. Build/test PostgreSQL ownership, RLS, session/CSRF, Vault, and Object Storage
+   boundaries before any user-facing matching flow.
 3. Generalize matching, filtering and materials generation with representative
    profession fixtures, including regression coverage for software development.
 4. Implement onboarding, protected PDF/DOCX upload, active-profile selection and
@@ -153,10 +267,10 @@ role families must not become universal product rules.
 5. Validate isolation, secret handling, quotas, deletion/retention and deployment
    before opening the product to other users.
 
-These are dependency-ordered workstreams, not a commitment to a database vendor,
-endpoint contract, hosting service or release date.
+These are dependency-ordered workstreams, not a release date. OCI PostgreSQL,
+Object Storage, Vault, and Email Delivery are the v1 infrastructure target.
 
-## 4. Release gates
+## 5. Release gates
 
 - [ ] Product/deployment model and first supported professions approved.
 - [ ] Every user uses their own configured resources; absent/invalid credentials
@@ -171,8 +285,24 @@ endpoint contract, hosting service or release date.
       documented and tested for the chosen deployment model.
 - [ ] Main's existing submit kill-switch and human-review requirements remain
       intact; this redesign does not authorize auto-submit or captcha evasion.
+- [ ] Two-workspace API, RLS, worker, cache, queue, and Object Storage tests
+      prove no cross-workspace resource can be read, changed, searched,
+      downloaded, deduplicated, claimed, or charged.
+- [ ] Missing workspace context fails closed; pooled PostgreSQL connections
+      cannot retain a prior request's RLS context; the application role cannot
+      bypass RLS.
+- [ ] Auth tests prove verification/reset expiry and single use, hashed session
+      storage, cookie flags, rotation/revocation, CSRF rejection, CORS denial,
+      and rate-limit recovery.
+- [ ] Vault, API, browser, export, queue, audit, and log checks prove user
+      secrets never leave write-only custody; revocation blocks queued retries.
+- [ ] Every matching result retains profile/CV/extractor/scorer provenance and
+      explicit legacy/shadow labels; unknown eligibility remains reviewable.
+- [ ] End-to-end tests cover signup through verified onboarding, provider setup,
+      scoped scrape, matching evidence, dashboard, and material review for two
+      concurrent users, including mobile and keyboard recovery states.
 
-## 5. What happens now
+## 6. What happens now
 
 Documentation only. No upload endpoint, DB migration, credential collection,
 branch creation or generalized matching implementation is authorized by this

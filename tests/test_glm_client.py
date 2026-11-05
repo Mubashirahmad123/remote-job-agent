@@ -351,6 +351,91 @@ class TestCallGlm:
             assert SDK_KEY not in str(exc)
             assert SDK_KEY.split(".")[1] not in str(exc)
 
+    def test_http_errors_surface_the_provider_error_body(self, fake_requests):
+        # Regression (2026-11-05): the model-migrations at bigmodel.cn answered
+        # `400 {"error":{"code":"1211", "message":"模型不存在..."}}` and the
+        # exception said only "400 Client Error: Bad Request" — the one piece
+        # of text that named the cause was swallowed. The body must ride along.
+        response = _FakeResponse({}, status=400, raise_exc=Exception("400 Client Error"))
+        response.text = "1211 模型不存在，请检查模型代码。"
+        fake_requests(response)
+        with pytest.raises(Exception, match="模型不存在") as exc_info:
+            glm_client.call_glm("hi", api_key=SDK_KEY, model="definitely-gone")
+        assert str(response.status_code) in str(exc_info.value)
+
+    def test_http_error_body_is_optional(self, fake_requests):
+        # _FakeResponse has no .text; a body-less error must still raise with
+        # the underlying message, not an AttributeError about text parsing.
+        fake_requests(_FakeResponse({}, status=500, raise_exc=Exception("500 Server Error")))
+        with pytest.raises(Exception, match="500 Server Error"):
+            glm_client.call_glm("hi", api_key=SDK_KEY, model="glm-4")
+
+
+class TestDefaultModelCurrency:
+    """glm-4 was retired at bigmodel.cn (error 1211, live-verified 2026-11-05).
+
+    DEFAULT_MODEL must never fall back to a dead model ID: the fallback chain
+    treats a raised exception as "rung broken", so a decommissioned default
+    silently removes this leg from every run.
+    """
+
+    # Currently advertised IDs (litellm/official docs as of 2026-11); a 1211
+    # regression trips the first assertion, not the allowlist.
+    DEAD = {"glm-4", "glm-4v", "glm-3-turbo"}
+    LIVE_PREFIXES = ("glm-4.5", "glm-4.6", "glm-4.7", "glm-5")
+
+    def test_default_model_is_not_a_retired_id(self):
+        assert glm_client.DEFAULT_MODEL not in self.DEAD, (
+            f"DEFAULT_MODEL={glm_client.DEFAULT_MODEL!r} is decommissioned at "
+            "bigmodel.cn (error 1211 model-does-not-exist); pick a live model"
+        )
+
+    def test_default_model_matches_a_currently_advertised_id(self):
+        assert glm_client.DEFAULT_MODEL.startswith(self.LIVE_PREFIXES), (
+            f"DEFAULT_MODEL={glm_client.DEFAULT_MODEL!r} is not in the "
+            f"known-live family {self.LIVE_PREFIXES}"
+        )
+
+    def test_a_retired_env_override_is_refused_in_favour_of_the_safe_default(self, monkeypatch):
+        """Regression for the exact live failure: session shell keeps exporting
+        GLM_MODEL=glm-4 and dotenv never overrides process env, so the operator
+        must not be able to dead-leg the chain with a known-dead model name.
+        """
+        import importlib
+
+        monkeypatch.setenv("GLM_MODEL", "glm-4")
+        try:
+            importlib.reload(glm_client)
+            assert glm_client.DEFAULT_MODEL == "glm-4.5-flash"
+        finally:
+            importlib.reload(glm_client)  # back to suite-default resolution
+
+    def test_a_live_env_override_is_honoured(self, monkeypatch):
+        import importlib
+
+        monkeypatch.setenv("GLM_MODEL", "glm-4.6")
+        try:
+            importlib.reload(glm_client)
+            assert glm_client.DEFAULT_MODEL == "glm-4.6"
+        finally:
+            importlib.reload(glm_client)  # back to suite-default resolution
+
+    def test_resolve_model_refuses_retired_and_defaults_when_blank(self):
+        assert glm_client.resolve_model("glm-4") == "glm-4.5-flash"
+        assert glm_client.resolve_model(None) == "glm-4.5-flash"
+        assert glm_client.resolve_model("") == "glm-4.5-flash"
+        assert glm_client.resolve_model("  glm-4.6 ") == "glm-4.6"
+
+    @pytest.mark.parametrize("module_path", ["agents/gemini_tools", "tools/cv_parser", "tools/resume_generator"])
+    def test_chain_call_sites_defer_to_the_shared_default(self, module_path):
+        # The three chain call sites must default via glm_client.DEFAULT_MODEL
+        # (source text check: tests run without importing the heavy modules).
+        src = (REPO_ROOT / f"{module_path}.py").read_text(encoding="utf-8")
+        assert "DEFAULT_MODEL" in src or "glm-4.5-flash" in src, (
+            f"{module_path} no longer references the shared GLM default; "
+            "the next model retirement will dead-leg it again"
+        )
+
 
 # ---------------------------------------------------------------------------
 # 5. The three consumers use the HTTP client and never import the SDK
